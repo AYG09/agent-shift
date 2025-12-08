@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,21 +15,21 @@ interface ApiKeySettingsProps {
 
 export function useApiKey() {
     const [apiKey, setApiKey] = useState<string | null>(null);
-    const [isLoaded, setIsLoaded] = useState(false);
+    const [isLoaded, setIsLoaded] = useState(() => typeof window !== 'undefined');
 
-    useEffect(() => {
-        // 클라이언트에서만 실행
-        if (typeof window !== 'undefined') {
-            const stored = localStorage.getItem(API_KEY_STORAGE_KEY);
-            setApiKey(stored);
-            setIsLoaded(true);
-        }
-    }, []);
+    const loadApiKey = () => {
+        if (typeof window === 'undefined') return null;
+        const stored = localStorage.getItem(API_KEY_STORAGE_KEY);
+        setApiKey(stored ?? null);
+        setIsLoaded(true);
+        return stored;
+    };
 
     const saveApiKey = (key: string) => {
         if (typeof window !== 'undefined') {
             localStorage.setItem(API_KEY_STORAGE_KEY, key);
             setApiKey(key);
+            setIsLoaded(true);
         }
     };
 
@@ -37,23 +37,29 @@ export function useApiKey() {
         if (typeof window !== 'undefined') {
             localStorage.removeItem(API_KEY_STORAGE_KEY);
             setApiKey(null);
+            setIsLoaded(true);
         }
     };
 
-    return { apiKey, isLoaded, saveApiKey, clearApiKey };
+    return { apiKey, isLoaded, loadApiKey, saveApiKey, clearApiKey };
 }
 
 export default function ApiKeySettings({ trigger }: ApiKeySettingsProps) {
-    const { apiKey, saveApiKey, clearApiKey } = useApiKey();
+    const { apiKey, loadApiKey, saveApiKey, clearApiKey } = useApiKey();
     const [inputKey, setInputKey] = useState('');
     const [open, setOpen] = useState(false);
     const [showKey, setShowKey] = useState(false);
 
-    useEffect(() => {
-        if (apiKey) {
-            setInputKey(apiKey);
+    const handleOpenChange = (nextOpen: boolean) => {
+        setOpen(nextOpen);
+        if (nextOpen) {
+            const stored = loadApiKey();
+            setInputKey(stored ?? apiKey ?? '');
+            return;
         }
-    }, [apiKey, open]);
+        setInputKey('');
+        setShowKey(false);
+    };
 
     const handleSave = () => {
         if (inputKey.trim()) {
@@ -73,7 +79,7 @@ export default function ApiKeySettings({ trigger }: ApiKeySettingsProps) {
     };
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
                 {trigger || (
                     <Button variant="outline" size="sm" className="border-slate-700 text-slate-400 hover:text-white">

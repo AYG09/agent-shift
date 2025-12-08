@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ReactFlow,
     Background,
@@ -59,21 +59,45 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
 
     const target = viewMode === 'tobe' ? 'tobe' : 'asis';
 
-    // 현재 표시할 노드/엣지
-    const currentNodes = viewMode === 'tobe'
-        ? storeToBeNodes.map(n => ({ id: n.id, type: n.type, position: n.position, data: { label: n.label, description: n.description, stressLevel: n.stressLevel, collaborationType: n.collaborationType, agentDescription: n.agentDescription, metrics: n.metrics } }))
-        : storeAsIsNodes.map(n => ({ id: n.id, type: n.type, position: n.position, data: { label: n.label, description: n.description, stressLevel: n.stressLevel, metrics: n.metrics } }));
+    // 현재 표시할 노드/엣지 (메모이제이션으로 동일 데이터 반복 렌더 시 리렌더 루프 방지)
+    const currentNodes = useMemo(() => {
+        if (viewMode === 'tobe') {
+            return storeToBeNodes.map((n) => ({
+                id: n.id,
+                type: n.type,
+                position: n.position,
+                data: {
+                    label: n.label,
+                    description: n.description,
+                    stressLevel: n.stressLevel,
+                    collaborationType: n.collaborationType,
+                    agentDescription: n.agentDescription,
+                    metrics: n.metrics,
+                },
+            }));
+        }
 
-    const currentEdges = viewMode === 'tobe'
-        ? storeToBeEdges.map(e => ({ id: e.id, source: e.source, target: e.target }))
-        : storeAsIsEdges.map(e => ({ id: e.id, source: e.source, target: e.target }));
+        return storeAsIsNodes.map((n) => ({
+            id: n.id,
+            type: n.type,
+            position: n.position,
+            data: { label: n.label, description: n.description, stressLevel: n.stressLevel, metrics: n.metrics },
+        }));
+    }, [viewMode, storeAsIsNodes, storeToBeNodes]);
+
+    const currentEdges = useMemo(() => {
+        if (viewMode === 'tobe') {
+            return storeToBeEdges.map((e) => ({ id: e.id, source: e.source, target: e.target }));
+        }
+        return storeAsIsEdges.map((e) => ({ id: e.id, source: e.source, target: e.target }));
+    }, [viewMode, storeAsIsEdges, storeToBeEdges]);
 
     const storeNodes = viewMode === 'tobe' ? storeToBeNodes : storeAsIsNodes;
     const storeEdges = viewMode === 'tobe' ? storeToBeEdges : storeAsIsEdges;
 
-    const placeholderNodes: Node[] = [
+    const placeholderNodes: Node[] = useMemo(() => ([
         { id: 'placeholder', type: 'process', position: { x: 250, y: 100 }, data: { label: '✨ AI 플로우 생성을 클릭하세요', stressLevel: 'low' } }
-    ];
+    ]), []);
 
     const displayNodes = currentNodes.length > 0 ? currentNodes : placeholderNodes;
     const displayEdges = currentNodes.length > 0 ? currentEdges : [];
@@ -86,7 +110,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
         const newEdges = currentNodes.length > 0 ? currentEdges : [];
         setNodes(newNodes as Node[]);
         setEdges(newEdges as Edge[]);
-    }, [viewMode, storeAsIsNodes, storeToBeNodes, storeAsIsEdges, storeToBeEdges]);
+    }, [currentNodes, currentEdges, placeholderNodes, setNodes, setEdges]);
 
     const onConnect = useCallback(
         (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
@@ -315,7 +339,6 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
                 className="pro-canvas"
                 defaultEdgeOptions={{
                     style: { stroke: '#71717A', strokeWidth: 1.5 },
-                    type: 'bezier',
                     markerEnd: { type: 'arrowclosed', color: '#71717A', width: 16, height: 16 },
                     animated: false,
                 }}

@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
-// 노드 메트릭 스키마
+// 노드 메트릭 스키마 - 정수만 허용하여 부동소수점 오버플로우 방지
 export const NodeMetricsSchema = z.object({
-    timeMinutes: z.number().optional(),     // 소요 시간 (분) - 정수 권장
-    costKRW: z.number().optional(),         // 비용 (원) - 정수 권장
-    peopleCount: z.number().optional(),     // 관련 인원 - 정수 권장
-    errorRate: z.number().optional(),       // 오류율 (%)
+    timeMinutes: z.number().int().optional(),     // 소요 시간 (분) - 정수
+    costKRW: z.number().int().optional(),         // 비용 (원) - 정수
+    peopleCount: z.number().int().optional(),     // 관련 인원 - 정수
+    errorRate: z.number().int().optional(),       // 오류율 (%) - 정수
 });
 
 // 노드 스키마

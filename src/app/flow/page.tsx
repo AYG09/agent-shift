@@ -87,30 +87,10 @@ export default function FlowPage() {
     // Drilldown state
     const [drilldownNode, setDrilldownNode] = useState<{ id: string; label: string; description?: string; type: string } | null>(null);
     const [drilldownResult, setDrilldownResult] = useState<{ subSteps: Array<{ id: string; label: string; description: string; duration?: string; tools?: string[]; aiPotential?: string }>; summary: string } | null>(null);
-    const [drilldownFlowType, setDrilldownFlowType] = useState<'as-is' | 'to-be'>('as-is');
+    const drilldownFlowType: 'as-is' | 'to-be' = viewMode === 'tobe' ? 'to-be' : 'as-is';
 
     // ReactFlow 형식으로 변환
-    const convertToReactFlowNodes = (nodes: { id: string; label: string; description?: string; type: string; stressLevel?: string; collaborationType?: string; position: { x: number; y: number } }[]): Node[] => {
-        return nodes.map(node => ({
-            id: node.id,
-            type: node.type,
-            position: node.position,
-            data: {
-                label: node.label,
-                description: node.description,
-                stressLevel: node.stressLevel,
-                collaborationType: node.collaborationType,
-            },
-        }));
-    };
-
-    const convertToReactFlowEdges = (edges: { id: string; source: string; target: string }[]): Edge[] => {
-        return edges.map(edge => ({
-            id: edge.id,
-            source: edge.source,
-            target: edge.target,
-        }));
-    };
+    // Note: ReactFlow conversion helpers removed (unused)
 
     const handleStart = () => {
         const finalIndustry = industry === 'other' ? customIndustry : industries.find(i => i.value === industry)?.label || industry;
@@ -254,7 +234,7 @@ export default function FlowPage() {
     // Context Form
     if (step === 'context') {
         return (
-            <div className="min-h-screen pro-canvas relative text-[#18181B] p-8">
+            <div className="min-h-screen overflow-y-auto pro-canvas relative text-[#18181B] p-8">
                 <div className="max-w-2xl mx-auto">
                     <Link href="/" className="text-[#71717A] hover:text-[#18181B] mb-8 inline-block">← 홈으로</Link>
 

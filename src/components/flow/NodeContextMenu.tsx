@@ -5,7 +5,6 @@ import { useEffect, useRef } from 'react';
 interface ContextMenuProps {
     x: number;
     y: number;
-    nodeId: string;
     nodeLabel: string;
     onClose: () => void;
     onEdit: () => void;
@@ -18,7 +17,6 @@ interface ContextMenuProps {
 export default function NodeContextMenu({
     x,
     y,
-    nodeId,
     nodeLabel,
     onClose,
     onEdit,

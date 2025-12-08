@@ -42,7 +42,7 @@ type AgentNodeData = {
 // ============================================
 // 공통 스타일
 // ============================================
-const nodeBaseStyle = "flow-node relative text-white font-medium transition-all duration-200";
+const nodeBaseStyle = "flow-node relative font-medium transition-all duration-200";
 
 const formatNumber = (num: number): string => {
     if (num >= 10000) return `${(num / 10000).toFixed(1)}만`;
@@ -59,14 +59,14 @@ export const TerminalNode = memo(({ data, selected }: NodeProps<Node<TerminalNod
     return (
         <div
             className={`${nodeBaseStyle} flow-terminal px-8 py-4 min-w-[140px] text-center
-                ${selected ? 'ring-2 ring-white/50 ring-offset-2 ring-offset-slate-900' : ''}
+                ${selected ? 'ring-2 ring-indigo-400/50 ring-offset-2 ring-offset-white' : ''}
             `}
         >
             {!isStart && <Handle type="target" position={Position.Top} className="!bg-indigo-300" />}
 
             <div className="flex items-center justify-center gap-2">
                 <span className="text-xl">{isStart ? '▶' : '⏹'}</span>
-                <span className="font-semibold text-sm tracking-wide">{data.label}</span>
+                <span className="font-semibold text-sm tracking-wide text-indigo-600">{data.label}</span>
             </div>
 
             {isStart && <Handle type="source" position={Position.Bottom} className="!bg-indigo-300" />}
@@ -81,10 +81,10 @@ TerminalNode.displayName = 'TerminalNode';
 export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeData>>) => {
     const [expanded, setExpanded] = useState(false);
 
-    const stressColors = {
-        low: 'from-blue-500 to-blue-600',
-        medium: 'from-amber-500 to-amber-600',
-        high: 'from-red-500 to-red-600',
+    const stressBorderColors = {
+        low: 'border-blue-400',
+        medium: 'border-amber-400',
+        high: 'border-red-400',
     };
     const stress = data.stressLevel || 'low';
     const metrics = data.metrics;
@@ -92,9 +92,9 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
 
     return (
         <div
-            className={`${nodeBaseStyle} flow-process px-5 py-4 min-w-[180px] bg-gradient-to-br ${stressColors[stress]} cursor-pointer
+            className={`${nodeBaseStyle} flow-process px-5 py-4 min-w-[180px] ${stressBorderColors[stress]} cursor-pointer
                 ${expanded ? 'max-w-[320px]' : 'max-w-[220px]'}
-                ${selected ? 'ring-2 ring-white/50 ring-offset-2 ring-offset-slate-900' : ''}
+                ${selected ? 'ring-2 ring-blue-400/50 ring-offset-2 ring-offset-white' : ''}
             `}
             onClick={(e) => {
                 e.stopPropagation();
@@ -105,9 +105,9 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-sm">{data.label}</span>
+                    <span className="font-semibold text-sm text-slate-800">{data.label}</span>
                     {hasDescription && (
-                        <span className="text-xs text-white/60 transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                        <span className="text-xs text-slate-400 transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
                             ▼
                         </span>
                     )}
@@ -115,20 +115,20 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
 
                 {/* 축소 상태: 미리보기 */}
                 {!expanded && hasDescription && (
-                    <div className="text-xs text-white/70 truncate">
+                    <div className="text-xs text-slate-500 truncate">
                         {data.description?.slice(0, 30)}...
                     </div>
                 )}
 
                 {/* 확장 상태: 전체 설명 */}
                 {expanded && hasDescription && (
-                    <div className="text-xs text-white/90 leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="text-xs text-slate-700 leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200">
                         {data.description}
                     </div>
                 )}
 
                 {metrics && (metrics.timeMinutes || metrics.costKRW || metrics.peopleCount) && (
-                    <div className="flex gap-2 pt-2 border-t border-white/20 text-xs text-white/70">
+                    <div className="flex gap-2 pt-2 border-t border-slate-200 text-xs text-slate-500">
                         {metrics.timeMinutes && <span>⏱️ {metrics.timeMinutes}분</span>}
                         {metrics.costKRW && <span>💰 {formatNumber(metrics.costKRW)}₩</span>}
                         {metrics.peopleCount && <span>👥 {metrics.peopleCount}명</span>}
@@ -139,7 +139,7 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
             {/* Stress indicator */}
             {stress !== 'low' && (
                 <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full 
-                    ${stress === 'high' ? 'bg-red-400 animate-pulse' : 'bg-amber-400'}`}
+                    ${stress === 'high' ? 'bg-red-500 animate-pulse' : 'bg-amber-500'}`}
                 />
             )}
 
@@ -156,14 +156,14 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
     return (
         <div
             className={`${nodeBaseStyle} flow-decision w-[120px] h-[120px] flex items-center justify-center
-                ${selected ? 'ring-2 ring-white/50' : ''}
+                ${selected ? 'ring-2 ring-amber-400/50' : ''}
             `}
         >
-            <Handle type="target" position={Position.Top} className="!bg-purple-300 !top-[10px]" />
+            <Handle type="target" position={Position.Top} className="!bg-amber-300 !top-[10px]" />
 
             <div className="text-center p-2">
                 <span className="text-lg">❓</span>
-                <div className="font-semibold text-xs mt-1">{data.label}</div>
+                <div className="font-semibold text-xs mt-1 text-slate-800">{data.label}</div>
             </div>
 
             <Handle type="source" position={Position.Bottom} id="yes" className="!bg-purple-300 !bottom-[10px]" />
@@ -185,7 +185,7 @@ export const IONode = memo(({ data, selected }: NodeProps<Node<IONodeData>>) => 
         <div
             className={`${nodeBaseStyle} flow-io px-6 py-4 min-w-[160px] cursor-pointer
                 ${expanded ? 'max-w-[280px]' : 'max-w-[200px]'}
-                ${selected ? 'ring-2 ring-white/50 ring-offset-2 ring-offset-slate-900' : ''}
+                ${selected ? 'ring-2 ring-cyan-400/50 ring-offset-2 ring-offset-white' : ''}
             `}
             onClick={(e) => {
                 e.stopPropagation();
@@ -197,20 +197,20 @@ export const IONode = memo(({ data, selected }: NodeProps<Node<IONodeData>>) => 
             <div className="space-y-1">
                 <div className="flex items-center gap-2">
                     <span className="text-lg">{isInput ? '📥' : '📤'}</span>
-                    <span className="font-semibold text-sm">{data.label}</span>
+                    <span className="font-semibold text-sm text-slate-800">{data.label}</span>
                     {hasDescription && (
-                        <span className="text-xs text-white/60 ml-auto transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                        <span className="text-xs text-slate-400 ml-auto transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
                             ▼
                         </span>
                     )}
                 </div>
 
                 {!expanded && hasDescription && (
-                    <div className="text-xs text-white/60 truncate">{data.description?.slice(0, 25)}...</div>
+                    <div className="text-xs text-slate-500 truncate">{data.description?.slice(0, 25)}...</div>
                 )}
 
                 {expanded && hasDescription && (
-                    <div className="text-xs text-white/80 leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="text-xs text-slate-600 leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200">
                         {data.description}
                     </div>
                 )}
@@ -228,10 +228,10 @@ IONode.displayName = 'IONode';
 export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>>) => {
     const [expanded, setExpanded] = useState(false);
 
-    const collabColors = {
-        copilot: 'from-emerald-500 to-teal-600',
-        monitor: 'from-cyan-500 to-blue-600',
-        autonomous: 'from-violet-500 to-purple-600',
+    const collabBorderColors = {
+        copilot: 'border-emerald-400',
+        monitor: 'border-cyan-400',
+        autonomous: 'border-violet-400',
     };
 
     const collabLabels = {
@@ -245,9 +245,9 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
 
     return (
         <div
-            className={`${nodeBaseStyle} flow-agent flex items-center justify-center bg-gradient-to-br ${collabColors[collab]} cursor-pointer
+            className={`${nodeBaseStyle} flow-agent flex items-center justify-center ${collabBorderColors[collab]} cursor-pointer
                 ${expanded ? 'w-[260px] h-auto min-h-[160px]' : 'w-[180px] h-[140px]'}
-                ${selected ? 'ring-2 ring-white/50' : ''}
+                ${selected ? 'ring-2 ring-emerald-400/50' : ''}
             `}
             onClick={(e) => {
                 e.stopPropagation();
@@ -258,13 +258,13 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
 
             <div className="text-center p-4 space-y-2">
                 <span className="text-3xl">🤖</span>
-                <div className="font-semibold text-sm">{data.label}</div>
+                <div className="font-semibold text-sm text-slate-800">{data.label}</div>
                 <div className="flex items-center justify-center gap-2">
-                    <div className="text-xs text-white/80 bg-black/20 px-2 py-1 rounded-full">
+                    <div className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded-full">
                         {collabLabels[collab]}
                     </div>
                     {hasDescription && (
-                        <span className="text-xs text-white/60 transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                        <span className="text-xs text-slate-400 transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
                             ▼
                         </span>
                     )}
@@ -272,14 +272,14 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
 
                 {/* 축소 상태: 미리보기 */}
                 {!expanded && hasDescription && (
-                    <div className="text-xs text-white/60 max-w-[140px] truncate">
+                    <div className="text-xs text-slate-500 max-w-[140px] truncate">
                         {data.agentDescription?.slice(0, 40)}...
                     </div>
                 )}
 
                 {/* 확장 상태: 전체 설명 */}
                 {expanded && hasDescription && (
-                    <div className="text-xs text-white/90 leading-relaxed max-w-[220px] text-left animate-in fade-in slide-in-from-top-1 duration-200 border-t border-white/20 pt-2 mt-2">
+                    <div className="text-xs text-slate-700 leading-relaxed max-w-[220px] text-left animate-in fade-in slide-in-from-top-1 duration-200 border-t border-slate-200 pt-2 mt-2">
                         {data.agentDescription}
                     </div>
                 )}

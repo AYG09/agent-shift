@@ -68,12 +68,12 @@ ${context.painPoints ? `- 주요 고충/문제점: ${context.painPoints}` : ''}
 ## 중요: description 필드 필수 작성
 각 노드의 description 필드에 반드시 구체적인 활동, 소요 시간, 사용 도구를 포함하세요.
 
-## 중요: metrics 필드 필수 작성
-각 process/io 노드에 다음 metrics를 포함하세요:
-- timeMinutes: 예상 소요 시간 (분 단위, 숫자만)
-- costKRW: 예상 비용 (원 단위, 인건비 기준 시급 3만원 계산)
-- peopleCount: 관련 인원 수
-- errorRate: 예상 오류율 (%, 수동 작업 높음, 자동화 낮음)
+## 중요: metrics 필드 필수 작성 (⚠️ 모든 숫자는 소수점 없는 정수만!)
+각 process/io 노드에 다음 metrics를 포함하세요 (반드시 정수로 작성):
+- timeMinutes: 예상 소요 시간 (분 단위, 정수만 예: 30)
+- costKRW: 예상 비용 (원 단위, 정수만 예: 15000)
+- peopleCount: 관련 인원 수 (정수만 예: 2)
+- errorRate: 예상 오류율 (%, 정수만 예: 5)
 
 노드 배치: 모든 노드의 x는 250, y는 0부터 120 간격으로 배치하세요.`;
 }
@@ -135,12 +135,12 @@ ${JSON.stringify(asIsNodes, null, 2)}
 - 사용 AI 기술 (LLM, RPA, 컴퓨터 비전 등)
 - 인간과의 협업 방식
 
-## 중요: metrics 필드 필수 작성
-모든 process/io/agent 노드에 다음 metrics를 포함하세요:
-- timeMinutes: 예상 소요 시간 (분 단위, AI로 단축된 시간 반영)
-- costKRW: 예상 비용 (원 단위, AI 사용으로 절감된 비용 반영)
-- peopleCount: 관련 인원 수 (AI로 대체된 경우 0 또는 감소)
-- errorRate: 예상 오류율 (%, AI 자동화로 낮아짐)
+## 중요: metrics 필드 필수 작성 (⚠️ 모든 숫자는 소수점 없는 정수만!)
+모든 process/io/agent 노드에 다음 metrics를 포함하세요 (반드시 정수로 작성):
+- timeMinutes: 예상 소요 시간 (분 단위, 정수만 예: 10)
+- costKRW: 예상 비용 (원 단위, 정수만 예: 5000)
+- peopleCount: 관련 인원 수 (정수만 예: 1)
+- errorRate: 예상 오류율 (%, 정수만 예: 2)
 
 노드 배치: 모든 노드의 x는 250, y는 0부터 100 간격으로 배치하세요.`;
 }
@@ -202,15 +202,35 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { action, context, asIsNodes, framework, apiKey, node, flowType, scenario } = body;
 
-        // BYOK: 사용자 제공 키 또는 환경 변수 키 사용
+        // BYOK: 사용자 제공 키 또는 환경 변수 키 사용 (개행 문자 방지를 위해 trim)
+        const trimmedApiKey = apiKey?.trim();
+
+        // 디버깅: 환경 변수 상태 확인
+        const rawEnvKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+        console.log('[API Route] Debug - Raw env key exists:', !!rawEnvKey);
+        console.log('[API Route] Debug - Raw env key length:', rawEnvKey?.length);
+        console.log('[API Route] Debug - Raw env key first 10 chars:', rawEnvKey?.substring(0, 10));
+        console.log('[API Route] Debug - Raw env key last 10 chars:', rawEnvKey?.substring(rawEnvKey?.length - 10));
+        console.log('[API Route] Debug - User provided key exists:', !!trimmedApiKey);
+
         let model;
-        if (apiKey) {
+        if (trimmedApiKey) {
             // 사용자가 제공한 API 키로 새 클라이언트 생성
-            const customGoogle = createGoogleGenerativeAI({ apiKey });
+            const customGoogle = createGoogleGenerativeAI({ apiKey: trimmedApiKey });
             model = customGoogle('gemini-2.0-flash');
+            console.log('[API Route] Using user-provided API key');
         } else {
-            // 환경 변수의 기본 키 사용
-            model = google('gemini-2.0-flash');
+            // 환경 변수의 기본 키 사용 (환경 변수도 trim)
+            const envApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
+            console.log('[API Route] Debug - Trimmed env key length:', envApiKey?.length);
+            if (envApiKey) {
+                const customGoogle = createGoogleGenerativeAI({ apiKey: envApiKey });
+                model = customGoogle('gemini-2.0-flash');
+                console.log('[API Route] Using env API key (trimmed)');
+            } else {
+                model = google('gemini-2.0-flash');
+                console.log('[API Route] Using default google() - no API key found!');
+            }
         }
 
         let schema;

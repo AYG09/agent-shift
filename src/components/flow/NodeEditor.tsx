@@ -42,21 +42,27 @@ export default function NodeEditor({
     const [stressLevel, setStressLevel] = useState<NodeData['stressLevel']>('low');
     const [collaborationType, setCollaborationType] = useState<NodeData['collaborationType']>('copilot');
 
+    const resetForm = () => {
+        setLabel('');
+        setDescription('');
+        setType(flowType === 'tobe' ? 'agent' : 'task');
+        setStressLevel('low');
+        setCollaborationType('copilot');
+    };
+
     useEffect(() => {
+        // 초기 로드와 initialData 변화에 따른 단일 동기화 (열림 여부와 무관)
         if (initialData) {
             setLabel(initialData.label || '');
             setDescription(initialData.description || '');
-            setType(initialData.type || 'task');
+            setType(initialData.type || (flowType === 'tobe' ? 'agent' : 'task'));
             setStressLevel(initialData.stressLevel || 'low');
             setCollaborationType(initialData.collaborationType || 'copilot');
         } else {
-            setLabel('');
-            setDescription('');
-            setType(flowType === 'tobe' ? 'agent' : 'task');
-            setStressLevel('low');
-            setCollaborationType('copilot');
+            resetForm();
         }
-    }, [initialData, open, flowType]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialData, flowType]);
 
     const handleSave = () => {
         onSave({

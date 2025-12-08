@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+// Unused UI imports removed to satisfy lint
 
 interface Phase {
     id: string;
