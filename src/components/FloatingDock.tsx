@@ -25,9 +25,10 @@ export default function FloatingDock() {
                         href={item.href}
                         className={`
                             flex flex-col items-center justify-center w-14 h-12 rounded-xl transition-all
-                            ${pathname === item.href
-                                ? 'bg-[#3B82F6] text-white shadow-md'
-                                : 'text-[#71717A] hover:bg-[#F5F6F8] hover:text-[#18181B]'
+                            ${
+                                pathname === item.href
+                                    ? 'bg-[#3B82F6] text-white shadow-md'
+                                    : 'text-[#71717A] hover:bg-[#F5F6F8] hover:text-[#18181B]'
                             }
                         `}
                     >

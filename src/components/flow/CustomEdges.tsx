@@ -42,11 +42,7 @@ export function TokenFlowEdge({
 
             {/* 움직이는 토큰 (파티클) */}
             <circle r="4" fill={tokenColor} filter="drop-shadow(0 0 4px currentColor)">
-                <animateMotion
-                    dur={duration}
-                    repeatCount="indefinite"
-                    path={edgePath}
-                />
+                <animateMotion dur={duration} repeatCount="indefinite" path={edgePath} />
             </circle>
 
             {/* 두 번째 토큰 (딜레이) */}

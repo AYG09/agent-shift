@@ -59,7 +59,7 @@ export default function StrategyPage() {
     // Toggle action completion
     const toggleAction = (phaseId: string, actionIdx: number) => {
         const key = `${phaseId}-${actionIdx}`;
-        setCompletedActions(prev => {
+        setCompletedActions((prev) => {
             const next = new Set(prev);
             if (next.has(key)) {
                 next.delete(key);
@@ -79,18 +79,20 @@ export default function StrategyPage() {
     };
 
     // 표시할 단계 (AI 생성 결과 또는 기본 템플릿)
-    const displayPhases = generatedPhases || (selectedFramework ? frameworkPhases[selectedFramework] : []);
+    const displayPhases =
+        generatedPhases || (selectedFramework ? frameworkPhases[selectedFramework] : []);
 
     return (
         <div className="min-h-screen pro-canvas text-[#18181B] p-8 pb-24">
             <div className="max-w-4xl mx-auto">
-                <Link href="/flow" className="text-[#71717A] hover:text-[#18181B] mb-8 inline-block text-sm">
+                <Link
+                    href="/flow"
+                    className="text-[#71717A] hover:text-[#18181B] mb-8 inline-block text-sm"
+                >
                     ← Flow 캔버스로
                 </Link>
 
-                <h1 className="text-2xl font-semibold text-[#18181B] mb-8">
-                    변화 관리 전략
-                </h1>
+                <h1 className="text-2xl font-semibold text-[#18181B] mb-8">변화 관리 전략</h1>
 
                 {/* Context Info */}
                 {context && (
@@ -111,7 +113,11 @@ export default function StrategyPage() {
                     <Card className="bg-[#FEF3C7] border-[#FCD34D] mb-6">
                         <CardContent className="py-4">
                             <p className="text-[#92400E] text-sm">
-                                ⚠️ 업무 맥락이 설정되지 않았습니다. <Link href="/flow" className="underline">Flow 캔버스</Link>에서 먼저 업무를 입력해주세요.
+                                ⚠️ 업무 맥락이 설정되지 않았습니다.{' '}
+                                <Link href="/flow" className="underline">
+                                    Flow 캔버스
+                                </Link>
+                                에서 먼저 업무를 입력해주세요.
                             </p>
                         </CardContent>
                     </Card>
@@ -121,7 +127,9 @@ export default function StrategyPage() {
                 <Card className="bg-white border-[#E2E4E9] mb-6 shadow-sm">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-base font-medium text-[#18181B]">
-                            <span className="bg-[#3B82F6] text-white text-xs px-2 py-1 rounded">1</span>
+                            <span className="bg-[#3B82F6] text-white text-xs px-2 py-1 rounded">
+                                1
+                            </span>
                             프레임워크 선택
                         </CardTitle>
                     </CardHeader>
@@ -138,9 +146,13 @@ export default function StrategyPage() {
                     <Card className="bg-white border-[#E2E4E9] mb-6 shadow-sm">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-base font-medium text-[#18181B]">
-                                <span className="bg-[#8B5CF6] text-white text-xs px-2 py-1 rounded">2</span>
+                                <span className="bg-[#8B5CF6] text-white text-xs px-2 py-1 rounded">
+                                    2
+                                </span>
                                 실행 로드맵
-                                {generatedPhases && <span className="text-xs text-[#10B981] ml-2">✓ AI 생성됨</span>}
+                                {generatedPhases && (
+                                    <span className="text-xs text-[#10B981] ml-2">✓ AI 생성됨</span>
+                                )}
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
@@ -152,8 +164,14 @@ export default function StrategyPage() {
                                 >
                                     {isLoading ? '분석 중...' : 'AI 맞춤 전략 생성'}
                                 </Button>
-                                {!context && <span className="text-xs text-[#71717A] ml-3">맥락 입력 후 사용 가능</span>}
-                                {error && <span className="text-xs text-[#EF4444] ml-3">{error}</span>}
+                                {!context && (
+                                    <span className="text-xs text-[#71717A] ml-3">
+                                        맥락 입력 후 사용 가능
+                                    </span>
+                                )}
+                                {error && (
+                                    <span className="text-xs text-[#EF4444] ml-3">{error}</span>
+                                )}
                             </div>
 
                             {/* Gantt Chart */}
@@ -173,12 +191,19 @@ export default function StrategyPage() {
                     <Card className="bg-slate-800/50 border-slate-700">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <span className="bg-green-500 text-white text-sm px-2 py-1 rounded">3</span>
+                                <span className="bg-green-500 text-white text-sm px-2 py-1 rounded">
+                                    3
+                                </span>
                                 주요 액션 아이템
                                 <span className="text-xs text-slate-400 ml-auto">
-                                    전체 진행률: {Math.round(
-                                        displayPhases.reduce((acc, p) => acc + getPhaseProgress(p), 0) / displayPhases.length
-                                    )}%
+                                    전체 진행률:{' '}
+                                    {Math.round(
+                                        displayPhases.reduce(
+                                            (acc, p) => acc + getPhaseProgress(p),
+                                            0
+                                        ) / displayPhases.length
+                                    )}
+                                    %
                                 </span>
                             </CardTitle>
                         </CardHeader>
@@ -187,12 +212,22 @@ export default function StrategyPage() {
                                 {displayPhases.map((phase) => {
                                     const progress = getPhaseProgress(phase);
                                     return (
-                                        <div key={phase.id} className="p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+                                        <div
+                                            key={phase.id}
+                                            className="p-4 bg-slate-900/50 rounded-lg border border-slate-700"
+                                        >
                                             {/* Phase Header */}
                                             <div className="flex items-center gap-2 mb-3">
-                                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: phase.color }} />
-                                                <h3 className="font-medium text-white flex-1">{phase.name}</h3>
-                                                <span className="text-xs text-slate-400">{progress}%</span>
+                                                <div
+                                                    className="w-3 h-3 rounded-full"
+                                                    style={{ backgroundColor: phase.color }}
+                                                />
+                                                <h3 className="font-medium text-white flex-1">
+                                                    {phase.name}
+                                                </h3>
+                                                <span className="text-xs text-slate-400">
+                                                    {progress}%
+                                                </span>
                                             </div>
 
                                             {/* Progress Bar */}
@@ -201,7 +236,7 @@ export default function StrategyPage() {
                                                     className="h-full rounded-full transition-all duration-300"
                                                     style={{
                                                         width: `${progress}%`,
-                                                        backgroundColor: phase.color
+                                                        backgroundColor: phase.color,
                                                     }}
                                                 />
                                             </div>
@@ -211,10 +246,12 @@ export default function StrategyPage() {
                                                 <Input
                                                     placeholder="담당자 지정..."
                                                     value={roleAssignments[phase.id] || ''}
-                                                    onChange={(e) => setRoleAssignments(prev => ({
-                                                        ...prev,
-                                                        [phase.id]: e.target.value
-                                                    }))}
+                                                    onChange={(e) =>
+                                                        setRoleAssignments((prev) => ({
+                                                            ...prev,
+                                                            [phase.id]: e.target.value,
+                                                        }))
+                                                    }
                                                     className="bg-slate-800 border-slate-600 text-sm h-8"
                                                 />
                                             </div>
@@ -222,29 +259,48 @@ export default function StrategyPage() {
                                             {/* Action Items with Checkboxes */}
                                             <ul className="space-y-2">
                                                 {phase.actions.map((action, idx) => {
-                                                    const isCompleted = completedActions.has(`${phase.id}-${idx}`);
+                                                    const isCompleted = completedActions.has(
+                                                        `${phase.id}-${idx}`
+                                                    );
                                                     return (
                                                         <li
                                                             key={idx}
                                                             className="flex items-center gap-2 cursor-pointer group"
-                                                            onClick={() => toggleAction(phase.id, idx)}
+                                                            onClick={() =>
+                                                                toggleAction(phase.id, idx)
+                                                            }
                                                         >
-                                                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors
-                                                                ${isCompleted
-                                                                    ? 'bg-green-500 border-green-500'
-                                                                    : 'border-slate-500 group-hover:border-slate-400'
+                                                            <div
+                                                                className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors
+                                                                ${
+                                                                    isCompleted
+                                                                        ? 'bg-green-500 border-green-500'
+                                                                        : 'border-slate-500 group-hover:border-slate-400'
                                                                 }`}
                                                             >
                                                                 {isCompleted && (
-                                                                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                                    <svg
+                                                                        className="w-3 h-3 text-white"
+                                                                        fill="none"
+                                                                        viewBox="0 0 24 24"
+                                                                        stroke="currentColor"
+                                                                    >
+                                                                        <path
+                                                                            strokeLinecap="round"
+                                                                            strokeLinejoin="round"
+                                                                            strokeWidth={3}
+                                                                            d="M5 13l4 4L19 7"
+                                                                        />
                                                                     </svg>
                                                                 )}
                                                             </div>
-                                                            <span className={`text-sm transition-colors ${isCompleted
-                                                                ? 'text-slate-500 line-through'
-                                                                : 'text-slate-300 group-hover:text-white'
-                                                                }`}>
+                                                            <span
+                                                                className={`text-sm transition-colors ${
+                                                                    isCompleted
+                                                                        ? 'text-slate-500 line-through'
+                                                                        : 'text-slate-300 group-hover:text-white'
+                                                                }`}
+                                                            >
                                                                 {action}
                                                             </span>
                                                         </li>

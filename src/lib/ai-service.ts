@@ -63,7 +63,7 @@ export async function generateToBeFlow(
 - 업무명: ${context.task}
 
 ## 현재 As-Is 프로세스
-${asIsNodes.map(n => `- ${n.label}: ${n.description || ''} (스트레스: ${n.stressLevel || 'low'})`).join('\n')}
+${asIsNodes.map((n) => `- ${n.label}: ${n.description || ''} (스트레스: ${n.stressLevel || 'low'})`).join('\n')}
 
 ## 요구사항
 1. 반복적이거나 자동화 가능한 작업은 AI Agent 노드(type='agent')로 대체하세요.
@@ -91,9 +91,9 @@ export async function generateChangeStrategy(
     framework: 'kotter' | 'adkar' | 'lewin'
 ): Promise<ChangeStrategyResponse> {
     const frameworkGuide = {
-        kotter: "Kotter의 8단계 변화 관리 (긴급성 조성 → 추진팀 구성 → 비전 수립 → 비전 전파 → 장애물 제거 → 단기 성과 → 변화 가속 → 문화 정착)",
-        adkar: "ADKAR 모델 (Awareness → Desire → Knowledge → Ability → Reinforcement)",
-        lewin: "Lewin의 3단계 모델 (Unfreeze → Change → Refreeze)"
+        kotter: 'Kotter의 8단계 변화 관리 (긴급성 조성 → 추진팀 구성 → 비전 수립 → 비전 전파 → 장애물 제거 → 단기 성과 → 변화 가속 → 문화 정착)',
+        adkar: 'ADKAR 모델 (Awareness → Desire → Knowledge → Ability → Reinforcement)',
+        lewin: 'Lewin의 3단계 모델 (Unfreeze → Change → Refreeze)',
     };
 
     const prompt = `당신은 변화 관리 전문 컨설턴트입니다.

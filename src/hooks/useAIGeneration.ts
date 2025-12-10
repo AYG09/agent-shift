@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { type AsIsFlowResponse, type ToBeFlowResponse } from '@/lib/ai-schemas';
+import {
+    type AsIsFlowResponse,
+    type ToBeFlowResponse,
+    type ChangeStrategyResponse,
+    type DrilldownResponse,
+    type NodeSplitResponse,
+} from '@/lib/ai-schemas';
+import { generateCacheKey, getCachedData, setCachedData } from '@/lib/cache-utils';
 
 interface WorkContext {
     industry: string;
@@ -29,173 +36,248 @@ export function useAIGeneration() {
         }
     }, []);
 
-    const generateAsIsFlow = useCallback(async (context: WorkContext): Promise<AsIsFlowResponse | null> => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const response = await fetch('/api/ai', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'generateAsIsFlow',
-                    context,
-                    apiKey: apiKey || undefined, // BYOK 키 전송
-                }),
-            });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'AI 생성 실패');
+
+    const generateAsIsFlow = useCallback(
+        async (context: WorkContext): Promise<AsIsFlowResponse | null> => {
+            setIsLoading(true);
+            setError(null);
+
+            try {
+                // 1. Check Cache
+                const cacheKey = await generateCacheKey('generateAsIsFlow', context);
+                const cached = getCachedData<AsIsFlowResponse>(cacheKey);
+                if (cached) {
+                    console.log('⚡ Cache Hit: AsIsFlow');
+                    return cached;
+                }
+
+                // 2. API Call
+                const response = await fetch('/api/ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'generateAsIsFlow',
+                        context,
+                        apiKey: apiKey || undefined,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'AI 생성 실패');
+                }
+
+                const data = await response.json();
+
+                // 3. Save Cache
+                setCachedData(cacheKey, data);
+
+                return data;
+            } catch (err) {
+                const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
+                setError(message);
+                return null;
+            } finally {
+                setIsLoading(false);
             }
+        },
+        [apiKey]
+    );
 
-            return await response.json();
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
-            setError(message);
-            return null;
-        } finally {
-            setIsLoading(false);
-        }
-    }, [apiKey]);
+    const generateToBeFlow = useCallback(
+        async (
+            context: WorkContext,
+            asIsNodes: AsIsFlowResponse['nodes'],
+            scenario: 'conservative' | 'balanced' | 'aggressive' = 'balanced'
+        ): Promise<ToBeFlowResponse | null> => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                // 1. Check Cache
+                const cacheKey = await generateCacheKey('generateToBeFlow', { context, asIsNodes: asIsNodes.map(n => n.id), scenario }); // Optimize key payload
+                const cached = getCachedData<ToBeFlowResponse>(cacheKey);
+                if (cached) {
+                    console.log('⚡ Cache Hit: ToBeFlow');
+                    return cached;
+                }
 
-    const generateToBeFlow = useCallback(async (
-        context: WorkContext,
-        asIsNodes: AsIsFlowResponse['nodes'],
-        scenario: 'conservative' | 'balanced' | 'aggressive' = 'balanced'
-    ): Promise<ToBeFlowResponse | null> => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const response = await fetch('/api/ai', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'generateToBeFlow',
-                    context,
-                    asIsNodes,
-                    scenario,
-                    apiKey: apiKey || undefined,
-                }),
-            });
+                const response = await fetch('/api/ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'generateToBeFlow',
+                        context,
+                        asIsNodes,
+                        scenario,
+                        apiKey: apiKey || undefined,
+                    }),
+                });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'AI 생성 실패');
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'AI 생성 실패');
+                }
+
+                const data = await response.json();
+                setCachedData(cacheKey, data);
+                return data;
+            } catch (err) {
+                const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
+                setError(message);
+                return null;
+            } finally {
+                setIsLoading(false);
             }
+        },
+        [apiKey]
+    );
 
-            return await response.json();
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
-            setError(message);
-            return null;
-        } finally {
-            setIsLoading(false);
-        }
-    }, [apiKey]);
+    const generateChangeStrategy = useCallback(
+        async (context: WorkContext, framework: 'kotter' | 'adkar' | 'lewin') => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const cacheKey = await generateCacheKey('generateChangeStrategy', { context, framework });
+                const cached = getCachedData<ChangeStrategyResponse>(cacheKey);
+                if (cached) {
+                    console.log('⚡ Cache Hit: ChangeStrategy');
+                    return cached;
+                }
 
-    const generateChangeStrategy = useCallback(async (
-        context: WorkContext,
-        framework: 'kotter' | 'adkar' | 'lewin'
-    ) => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const response = await fetch('/api/ai', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'generateChangeStrategy',
-                    context,
-                    framework,
-                    apiKey: apiKey || undefined,
-                }),
-            });
+                const response = await fetch('/api/ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'generateChangeStrategy',
+                        context,
+                        framework,
+                        apiKey: apiKey || undefined,
+                    }),
+                });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'AI 생성 실패');
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'AI 생성 실패');
+                }
+
+                const data = await response.json();
+                setCachedData(cacheKey, data);
+                return data;
+            } catch (err) {
+                const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
+                setError(message);
+                return null;
+            } finally {
+                setIsLoading(false);
             }
+        },
+        [apiKey]
+    );
 
-            return await response.json();
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
-            setError(message);
-            return null;
-        } finally {
-            setIsLoading(false);
-        }
-    }, [apiKey]);
+    const generateDrilldown = useCallback(
+        async (
+            context: { industry: string; role: string; task: string },
+            node: { id: string; label: string; description?: string; type: string },
+            flowType: 'as-is' | 'to-be'
+        ) => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const cacheKey = await generateCacheKey('generateDrilldown', { context, nodeId: node.id, flowType });
+                const cached = getCachedData<DrilldownResponse>(cacheKey);
+                if (cached) {
+                    console.log('⚡ Cache Hit: Drilldown');
+                    return cached;
+                }
 
-    const generateDrilldown = useCallback(async (
-        context: { industry: string; role: string; task: string },
-        node: { id: string; label: string; description?: string; type: string },
-        flowType: 'as-is' | 'to-be'
-    ) => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const response = await fetch('/api/ai', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'generateDrilldown',
-                    context,
-                    node,
-                    flowType,
-                    apiKey: apiKey || undefined,
-                }),
-            });
+                const response = await fetch('/api/ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'generateDrilldown',
+                        context,
+                        node,
+                        flowType,
+                        apiKey: apiKey || undefined,
+                    }),
+                });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'AI 생성 실패');
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'AI 생성 실패');
+                }
+
+                const data = await response.json();
+                setCachedData(cacheKey, data);
+                return data;
+            } catch (err) {
+                const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
+                setError(message);
+                return null;
+            } finally {
+                setIsLoading(false);
             }
-
-            return await response.json();
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
-            setError(message);
-            return null;
-        } finally {
-            setIsLoading(false);
-        }
-    }, [apiKey]);
+        },
+        [apiKey]
+    );
 
     // 노드 분할 (세분화) - 해당 노드를 4~5개 하위 노드로 분할
-    const generateNodeSplit = useCallback(async (
-        context: { industry: string; role: string; task: string },
-        node: { id: string; label: string; description?: string; type: string },
-        flowType: 'asis' | 'tobe'
-    ): Promise<{ nodes: Array<{ id: string; label: string; description?: string; type: string; stressLevel?: string }>; summary: string } | null> => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const response = await fetch('/api/ai', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'generateNodeSplit',
-                    context,
-                    node,
-                    flowType: flowType === 'asis' ? 'as-is' : 'to-be',
-                    apiKey: apiKey || undefined,
-                }),
-            });
+    const generateNodeSplit = useCallback(
+        async (
+            context: { industry: string; role: string; task: string },
+            node: { id: string; label: string; description?: string; type: string },
+            flowType: 'asis' | 'tobe'
+        ): Promise<{
+            nodes: Array<{
+                id: string;
+                label: string;
+                description?: string;
+                type: string;
+                stressLevel?: string;
+            }>;
+            summary: string;
+        } | null> => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const cacheKey = await generateCacheKey('generateNodeSplit', { context, nodeId: node.id, flowType });
+                const cached = getCachedData<NodeSplitResponse>(cacheKey);
+                if (cached) {
+                    console.log('⚡ Cache Hit: NodeSplit');
+                    return cached;
+                }
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'AI 생성 실패');
+                const response = await fetch('/api/ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'generateNodeSplit',
+                        context,
+                        node,
+                        flowType: flowType === 'asis' ? 'as-is' : 'to-be',
+                        apiKey: apiKey || undefined,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'AI 생성 실패');
+                }
+
+                const data = await response.json();
+                setCachedData(cacheKey, data);
+                return data;
+            } catch (err) {
+                const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
+                setError(message);
+                return null;
+            } finally {
+                setIsLoading(false);
             }
-
-            return await response.json();
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
-            setError(message);
-            return null;
-        } finally {
-            setIsLoading(false);
-        }
-    }, [apiKey]);
+        },
+        [apiKey]
+    );
 
     // API 키 갱신 함수
     const refreshApiKey = useCallback(() => {
@@ -217,4 +299,3 @@ export function useAIGeneration() {
         refreshApiKey,
     };
 }
-

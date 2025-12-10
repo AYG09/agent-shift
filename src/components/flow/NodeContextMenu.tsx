@@ -10,6 +10,7 @@ interface ContextMenuProps {
     onEdit: () => void;
     onDuplicate: () => void;
     onSplit: () => void;
+    onDrilldown: () => void;
     onDelete: () => void;
     isLoading?: boolean;
 }
@@ -22,6 +23,7 @@ export default function NodeContextMenu({
     onEdit,
     onDuplicate,
     onSplit,
+    onDrilldown,
     onDelete,
     isLoading = false,
 }: ContextMenuProps) {
@@ -50,6 +52,7 @@ export default function NodeContextMenu({
     const menuItems = [
         { icon: '✏️', label: '편집', action: onEdit, disabled: false },
         { icon: '📋', label: '복제', action: onDuplicate, disabled: false },
+        { icon: '🔍', label: '상세 분석 (Drill-down)', action: onDrilldown, disabled: isLoading },
         { icon: '🔀', label: '세분화 (AI)', action: onSplit, disabled: isLoading },
         { divider: true },
         { icon: '🗑️', label: '삭제', action: onDelete, danger: true, disabled: false },
@@ -63,9 +66,7 @@ export default function NodeContextMenu({
         >
             {/* Header */}
             <div className="px-3 py-2 bg-slate-700/50 border-b border-slate-600">
-                <div className="text-xs text-slate-400 truncate max-w-[160px]">
-                    {nodeLabel}
-                </div>
+                <div className="text-xs text-slate-400 truncate max-w-[160px]">{nodeLabel}</div>
             </div>
 
             {/* Menu Items */}
@@ -75,7 +76,13 @@ export default function NodeContextMenu({
                         return <div key={idx} className="border-t border-slate-600 my-1" />;
                     }
 
-                    const menuItem = item as { icon: string; label: string; action: () => void; danger?: boolean; disabled?: boolean };
+                    const menuItem = item as {
+                        icon: string;
+                        label: string;
+                        action: () => void;
+                        danger?: boolean;
+                        disabled?: boolean;
+                    };
 
                     return (
                         <button
@@ -92,7 +99,8 @@ export default function NodeContextMenu({
                             className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors
                                 ${menuItem.danger
                                     ? 'text-red-400 hover:bg-red-500/20'
-                                    : 'text-slate-200 hover:bg-slate-700'}
+                                    : 'text-slate-200 hover:bg-slate-700'
+                                }
                                 ${menuItem.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                             `}
                         >

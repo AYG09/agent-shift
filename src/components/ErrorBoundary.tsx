@@ -40,7 +40,8 @@ export default class ErrorBoundary extends Component<Props, State> {
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <p className="text-slate-300">
-                                예기치 않은 오류가 발생했습니다. 페이지를 새로고침하거나 홈으로 돌아가 주세요.
+                                예기치 않은 오류가 발생했습니다. 페이지를 새로고침하거나 홈으로
+                                돌아가 주세요.
                             </p>
 
                             {this.state.error && (
@@ -57,7 +58,7 @@ export default class ErrorBoundary extends Component<Props, State> {
                                     🔄 새로고침
                                 </Button>
                                 <Button
-                                    onClick={() => window.location.href = '/'}
+                                    onClick={() => (window.location.href = '/')}
                                     variant="outline"
                                     className="border-slate-600"
                                 >

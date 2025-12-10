@@ -79,7 +79,14 @@ ${context.painPoints ? `- 주요 고충/문제점: ${context.painPoints}` : ''}
 }
 
 function getToBePrompt(
-    context: { industry: string; role: string; task: string; teamSize?: string; tooling?: string; painPoints?: string },
+    context: {
+        industry: string;
+        role: string;
+        task: string;
+        teamSize?: string;
+        tooling?: string;
+        painPoints?: string;
+    },
     asIsNodes: unknown[],
     scenario: 'conservative' | 'balanced' | 'aggressive' = 'balanced'
 ) {
@@ -145,11 +152,14 @@ ${JSON.stringify(asIsNodes, null, 2)}
 노드 배치: 모든 노드의 x는 250, y는 0부터 100 간격으로 배치하세요.`;
 }
 
-function getStrategyPrompt(context: { industry: string; role: string; task: string }, framework: string) {
+function getStrategyPrompt(
+    context: { industry: string; role: string; task: string },
+    framework: string
+) {
     const frameworkGuide: Record<string, string> = {
-        kotter: "Kotter의 8단계 변화 관리 (긴급성 조성 → 추진팀 구성 → 비전 수립 → 비전 전파 → 장애물 제거 → 단기 성과 → 변화 가속 → 문화 정착)",
-        adkar: "ADKAR 모델 (Awareness → Desire → Knowledge → Ability → Reinforcement)",
-        lewin: "Lewin의 3단계 모델 (Unfreeze → Change → Refreeze)"
+        kotter: 'Kotter의 8단계 변화 관리 (긴급성 조성 → 추진팀 구성 → 비전 수립 → 비전 전파 → 장애물 제거 → 단기 성과 → 변화 가속 → 문화 정착)',
+        adkar: 'ADKAR 모델 (Awareness → Desire → Knowledge → Ability → Reinforcement)',
+        lewin: 'Lewin의 3단계 모델 (Unfreeze → Change → Refreeze)',
     };
 
     return `당신은 변화 관리 전문 컨설턴트입니다.
@@ -171,7 +181,11 @@ ${frameworkGuide[framework] || framework}
 5. 예상 리스크와 완화 방안을 2~3개 제시하세요.`;
 }
 
-function getDrilldownPrompt(node: { id: string; label: string; description?: string; type: string }, context: { industry: string; role: string; task: string }, flowType: string) {
+function getDrilldownPrompt(
+    node: { id: string; label: string; description?: string; type: string },
+    context: { industry: string; role: string; task: string },
+    flowType: string
+) {
     return `당신은 업무 프로세스 세분화 전문가입니다.
 다음 프로세스 단계를 더 세부적인 하위 단계로 분해해주세요.
 
@@ -210,7 +224,10 @@ export async function POST(request: NextRequest) {
         console.log('[API Route] Debug - Raw env key exists:', !!rawEnvKey);
         console.log('[API Route] Debug - Raw env key length:', rawEnvKey?.length);
         console.log('[API Route] Debug - Raw env key first 10 chars:', rawEnvKey?.substring(0, 10));
-        console.log('[API Route] Debug - Raw env key last 10 chars:', rawEnvKey?.substring(rawEnvKey?.length - 10));
+        console.log(
+            '[API Route] Debug - Raw env key last 10 chars:',
+            rawEnvKey?.substring(rawEnvKey?.length - 10)
+        );
         console.log('[API Route] Debug - User provided key exists:', !!trimmedApiKey);
 
         let model;
@@ -247,7 +264,10 @@ export async function POST(request: NextRequest) {
 
             case 'generateToBeFlow':
                 if (!context || !asIsNodes) {
-                    return NextResponse.json({ error: 'context and asIsNodes are required' }, { status: 400 });
+                    return NextResponse.json(
+                        { error: 'context and asIsNodes are required' },
+                        { status: 400 }
+                    );
                 }
                 schema = ToBeFlowResponseSchema;
                 prompt = getToBePrompt(context, asIsNodes, scenario || 'balanced');
@@ -255,7 +275,10 @@ export async function POST(request: NextRequest) {
 
             case 'generateChangeStrategy':
                 if (!context || !framework) {
-                    return NextResponse.json({ error: 'context and framework are required' }, { status: 400 });
+                    return NextResponse.json(
+                        { error: 'context and framework are required' },
+                        { status: 400 }
+                    );
                 }
                 schema = ChangeStrategyResponseSchema;
                 prompt = getStrategyPrompt(context, framework);
@@ -263,7 +286,10 @@ export async function POST(request: NextRequest) {
 
             case 'generateDrilldown':
                 if (!context || !node || !flowType) {
-                    return NextResponse.json({ error: 'context, node and flowType are required' }, { status: 400 });
+                    return NextResponse.json(
+                        { error: 'context, node and flowType are required' },
+                        { status: 400 }
+                    );
                 }
                 schema = DrilldownResponseSchema;
                 prompt = getDrilldownPrompt(node, context, flowType);
@@ -271,7 +297,10 @@ export async function POST(request: NextRequest) {
 
             case 'generateNodeSplit':
                 if (!context || !node || !flowType) {
-                    return NextResponse.json({ error: 'context, node and flowType are required' }, { status: 400 });
+                    return NextResponse.json(
+                        { error: 'context, node and flowType are required' },
+                        { status: 400 }
+                    );
                 }
                 schema = NodeSplitResponseSchema;
                 prompt = `당신은 업무 프로세스 분석 전문가입니다.
@@ -311,10 +340,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(normalizedObject);
     } catch (error) {
         console.error('AI API Error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'AI 생성 중 오류가 발생했습니다.';
-        return NextResponse.json(
-            { error: errorMessage },
-            { status: 500 }
-        );
+        const errorMessage =
+            error instanceof Error ? error.message : 'AI 생성 중 오류가 발생했습니다.';
+        return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 }

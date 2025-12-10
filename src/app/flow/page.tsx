@@ -6,7 +6,13 @@ import { Node, Edge } from '@xyflow/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAppStore } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
@@ -67,8 +73,20 @@ const timeScales = [
 ];
 
 export default function FlowPage() {
-    const { context, setContext, viewMode, setViewMode, asIsNodes, asIsEdges, toBeNodes, toBeEdges, setAsIsFlow, setToBeFlow } = useAppStore();
-    const { isLoading, error, generateAsIsFlow, generateToBeFlow, generateNodeSplit } = useAIGeneration();
+    const {
+        context,
+        setContext,
+        viewMode,
+        setViewMode,
+        asIsNodes,
+        asIsEdges,
+        toBeNodes,
+        toBeEdges,
+        setAsIsFlow,
+        setToBeFlow,
+    } = useAppStore();
+    const { isLoading, error, generateAsIsFlow, generateToBeFlow, generateNodeSplit, generateDrilldown } =
+        useAIGeneration();
 
     const [industry, setIndustry] = useState('');
     const [customIndustry, setCustomIndustry] = useState('');
@@ -78,23 +96,46 @@ export default function FlowPage() {
     const [teamSize, setTeamSize] = useState('');
     const [tooling, setTooling] = useState('');
     const [painPoints, setPainPoints] = useState('');
-    const [timeScale, setTimeScale] = useState<'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'project'>('weekly');
+    const [timeScale, setTimeScale] = useState<
+        'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'project'
+    >('weekly');
     const [step, setStep] = useState<'context' | 'canvas'>('context');
     const [isSimulating, setIsSimulating] = useState(false);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-    const [selectedScenario, setSelectedScenario] = useState<'conservative' | 'balanced' | 'aggressive'>('balanced');
+    const [selectedScenario, setSelectedScenario] = useState<
+        'conservative' | 'balanced' | 'aggressive'
+    >('balanced');
 
     // Drilldown state
-    const [drilldownNode, setDrilldownNode] = useState<{ id: string; label: string; description?: string; type: string } | null>(null);
-    const [drilldownResult, setDrilldownResult] = useState<{ subSteps: Array<{ id: string; label: string; description: string; duration?: string; tools?: string[]; aiPotential?: string }>; summary: string } | null>(null);
+    const [drilldownNode, setDrilldownNode] = useState<{
+        id: string;
+        label: string;
+        description?: string;
+        type: string;
+    } | null>(null);
+    const [drilldownResult, setDrilldownResult] = useState<{
+        subSteps: Array<{
+            id: string;
+            label: string;
+            description: string;
+            duration?: string;
+            tools?: string[];
+            aiPotential?: string;
+        }>;
+        summary: string;
+    } | null>(null);
     const drilldownFlowType: 'as-is' | 'to-be' = viewMode === 'tobe' ? 'to-be' : 'as-is';
 
     // ReactFlow 형식으로 변환
     // Note: ReactFlow conversion helpers removed (unused)
 
     const handleStart = () => {
-        const finalIndustry = industry === 'other' ? customIndustry : industries.find(i => i.value === industry)?.label || industry;
-        const finalRole = role === 'other' ? customRole : roles.find(r => r.value === role)?.label || role;
+        const finalIndustry =
+            industry === 'other'
+                ? customIndustry
+                : industries.find((i) => i.value === industry)?.label || industry;
+        const finalRole =
+            role === 'other' ? customRole : roles.find((r) => r.value === role)?.label || role;
 
         const isIndustryValid = industry !== 'other' || customIndustry.trim() !== '';
         const isRoleValid = role !== 'other' || customRole.trim() !== '';
@@ -107,7 +148,7 @@ export default function FlowPage() {
                 timeScale: timeScale as 'daily' | 'weekly' | 'monthly' | 'quarterly',
                 teamSize,
                 tooling,
-                painPoints
+                painPoints,
             });
             setStep('canvas');
         }
@@ -117,8 +158,9 @@ export default function FlowPage() {
         if (!context) return;
 
         const result = await generateAsIsFlow({
-            industry: industries.find(i => i.value === context.industry)?.label || context.industry,
-            role: roles.find(r => r.value === context.role)?.label || context.role,
+            industry:
+                industries.find((i) => i.value === context.industry)?.label || context.industry,
+            role: roles.find((r) => r.value === context.role)?.label || context.role,
             task: context.task,
             timeScale: context.timeScale,
             teamSize: context.teamSize,
@@ -128,7 +170,7 @@ export default function FlowPage() {
 
         if (result) {
             // AI 응답을 Zustand FlowNode 형식으로 변환 (label이 루트 레벨)
-            const storeNodes = result.nodes.map(node => ({
+            const storeNodes = result.nodes.map((node) => ({
                 id: node.id,
                 type: node.type as 'task' | 'decision' | 'subprocess' | 'agent',
                 label: node.label,
@@ -137,7 +179,7 @@ export default function FlowPage() {
                 position: node.position,
                 metrics: node.metrics,
             }));
-            const storeEdges = result.edges.map(edge => ({
+            const storeEdges = result.edges.map((edge) => ({
                 id: edge.id,
                 source: edge.source,
                 target: edge.target,
@@ -151,15 +193,16 @@ export default function FlowPage() {
 
         const result = await generateToBeFlow(
             {
-                industry: industries.find(i => i.value === context.industry)?.label || context.industry,
-                role: roles.find(r => r.value === context.role)?.label || context.role,
+                industry:
+                    industries.find((i) => i.value === context.industry)?.label || context.industry,
+                role: roles.find((r) => r.value === context.role)?.label || context.role,
                 task: context.task,
                 timeScale: context.timeScale,
                 teamSize: context.teamSize,
                 tooling: context.tooling,
                 painPoints: context.painPoints,
             },
-            asIsNodes.map(n => ({
+            asIsNodes.map((n) => ({
                 id: n.id,
                 label: n.label,
                 description: n.description,
@@ -172,18 +215,22 @@ export default function FlowPage() {
 
         if (result) {
             // AI 응답을 Zustand FlowNode 형식으로 변환
-            const storeNodes = result.nodes.map(node => ({
+            const storeNodes = result.nodes.map((node) => ({
                 id: node.id,
                 type: node.type as 'task' | 'decision' | 'subprocess' | 'agent',
                 label: node.label,
                 description: node.description,
                 stressLevel: node.stressLevel as 'low' | 'medium' | 'high' | undefined,
-                collaborationType: node.collaborationType as 'copilot' | 'monitor' | 'autonomous' | undefined,
+                collaborationType: node.collaborationType as
+                    | 'copilot'
+                    | 'monitor'
+                    | 'autonomous'
+                    | undefined,
                 agentDescription: node.agentDescription,
                 position: node.position,
                 metrics: node.metrics,
             }));
-            const storeEdges = result.edges.map(edge => ({
+            const storeEdges = result.edges.map((edge) => ({
                 id: edge.id,
                 source: edge.source,
                 target: edge.target,
@@ -199,7 +246,7 @@ export default function FlowPage() {
     // 노드 세분화 (우클릭 메뉴에서 호출)
     const handleNodeSplit = async (nodeId: string, flowType: 'asis' | 'tobe') => {
         const nodes = flowType === 'asis' ? asIsNodes : toBeNodes;
-        const node = nodes.find(n => n.id === nodeId);
+        const node = nodes.find((n) => n.id === nodeId);
         if (!node || !context) return null;
 
         const result = await generateNodeSplit(
@@ -211,18 +258,62 @@ export default function FlowPage() {
         if (result) {
             // FlowNode 형식으로 변환
             return {
-                nodes: result.nodes.map((n: { id: string; label: string; description?: string; type: string; stressLevel?: string }) => ({
-                    id: n.id,
-                    label: n.label,
-                    description: n.description,
-                    type: n.type as 'task' | 'decision' | 'subprocess' | 'agent',
-                    stressLevel: n.stressLevel as 'low' | 'medium' | 'high' | undefined,
-                    position: { x: 0, y: 0 }, // FlowCanvas에서 재배치
-                })),
+                nodes: result.nodes.map(
+                    (n: {
+                        id: string;
+                        label: string;
+                        description?: string;
+                        type: string;
+                        stressLevel?: string;
+                    }) => ({
+                        id: n.id,
+                        label: n.label,
+                        description: n.description,
+                        type: n.type as 'task' | 'decision' | 'subprocess' | 'agent',
+                        stressLevel: n.stressLevel as 'low' | 'medium' | 'high' | undefined,
+                        position: { x: 0, y: 0 }, // FlowCanvas에서 재배치
+                    })
+                ),
                 edges: [] as { id: string; source: string; target: string }[],
             };
         }
         return null;
+    };
+
+    // 드릴다운 핸들러
+    const handleDrilldown = async (nodeId: string) => {
+        const nodes = viewMode === 'tobe' ? toBeNodes : asIsNodes;
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node || !context) return;
+
+        setDrilldownNode({
+            id: node.id,
+            label: node.label,
+            description: node.description,
+            type: node.type,
+        });
+
+        const flowType = viewMode === 'tobe' ? 'to-be' : 'as-is';
+
+        const result = await generateDrilldown(
+            { industry: context.industry, role: context.role, task: context.task },
+            { id: node.id, label: node.label, description: node.description, type: node.type },
+            flowType
+        );
+
+        if (result) {
+            setDrilldownResult({
+                subSteps: result.subSteps.map((step: { id: string; label: string; description: string; duration?: string; tools?: string[]; aiPotential?: string }) => ({
+                    id: step.id,
+                    label: step.label,
+                    description: step.description,
+                    duration: step.duration,
+                    tools: step.tools,
+                    aiPotential: step.aiPotential
+                })),
+                summary: result.summary
+            });
+        }
     };
 
     // 드릴다운 다이얼로그 닫기
@@ -236,7 +327,12 @@ export default function FlowPage() {
         return (
             <div className="min-h-screen overflow-y-auto pro-canvas relative text-[#18181B] p-8">
                 <div className="max-w-2xl mx-auto">
-                    <Link href="/" className="text-[#71717A] hover:text-[#18181B] mb-8 inline-block">← 홈으로</Link>
+                    <Link
+                        href="/"
+                        className="text-[#71717A] hover:text-[#18181B] mb-8 inline-block"
+                    >
+                        ← 홈으로
+                    </Link>
 
                     <Card className="bg-white/70 backdrop-blur-xl border-white/50 shadow-xl">
                         <CardHeader>
@@ -250,10 +346,14 @@ export default function FlowPage() {
                                     <label className="text-sm text-[#71717A]">산업군</label>
                                     <div className="space-y-2">
                                         <Select value={industry} onValueChange={setIndustry}>
-                                            <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]"><SelectValue placeholder="선택" /></SelectTrigger>
+                                            <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
+                                                <SelectValue placeholder="선택" />
+                                            </SelectTrigger>
                                             <SelectContent>
                                                 {industries.map((ind) => (
-                                                    <SelectItem key={ind.value} value={ind.value}>{ind.label}</SelectItem>
+                                                    <SelectItem key={ind.value} value={ind.value}>
+                                                        {ind.label}
+                                                    </SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
@@ -272,10 +372,14 @@ export default function FlowPage() {
                                     <label className="text-sm text-[#71717A]">직무</label>
                                     <div className="space-y-2">
                                         <Select value={role} onValueChange={setRole}>
-                                            <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]"><SelectValue placeholder="선택" /></SelectTrigger>
+                                            <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
+                                                <SelectValue placeholder="선택" />
+                                            </SelectTrigger>
                                             <SelectContent>
                                                 {roles.map((r) => (
-                                                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                                                    <SelectItem key={r.value} value={r.value}>
+                                                        {r.label}
+                                                    </SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
@@ -294,14 +398,21 @@ export default function FlowPage() {
 
                             <div className="space-y-2">
                                 <label className="text-sm text-[#71717A]">업무명</label>
-                                <Input value={task} onChange={(e) => setTask(e.target.value)} placeholder="예: 주간 영업 실적 취합 및 보고" className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#A1A1AA]" />
+                                <Input
+                                    value={task}
+                                    onChange={(e) => setTask(e.target.value)}
+                                    placeholder="예: 주간 영업 실적 취합 및 보고"
+                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#A1A1AA]"
+                                />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-sm text-[#71717A]">팀 규모</label>
                                     <Select value={teamSize} onValueChange={setTeamSize}>
-                                        <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]"><SelectValue placeholder="선택" /></SelectTrigger>
+                                        <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
+                                            <SelectValue placeholder="선택" />
+                                        </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="1-5">1-5명</SelectItem>
                                             <SelectItem value="5-20">5-20명</SelectItem>
@@ -312,21 +423,46 @@ export default function FlowPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm text-[#71717A]">업무 주기</label>
-                                    <Select value={timeScale} onValueChange={(v) => setTimeScale(v as typeof timeScale)}>
-                                        <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]"><SelectValue /></SelectTrigger>
-                                        <SelectContent>{timeScales.map((ts) => (<SelectItem key={ts.value} value={ts.value}>{ts.label}</SelectItem>))}</SelectContent>
+                                    <Select
+                                        value={timeScale}
+                                        onValueChange={(v) => setTimeScale(v as typeof timeScale)}
+                                    >
+                                        <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {timeScales.map((ts) => (
+                                                <SelectItem key={ts.value} value={ts.value}>
+                                                    {ts.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
                                     </Select>
                                 </div>
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm text-[#71717A]">사용 중인 도구 (선택)</label>
-                                <Input value={tooling} onChange={(e) => setTooling(e.target.value)} placeholder="예: Excel, Slack, Jira, Notion" className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#A1A1AA]" />
+                                <label className="text-sm text-[#71717A]">
+                                    사용 중인 도구 (선택)
+                                </label>
+                                <Input
+                                    value={tooling}
+                                    onChange={(e) => setTooling(e.target.value)}
+                                    placeholder="예: Excel, Slack, Jira, Notion"
+                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#A1A1AA]"
+                                />
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm text-[#71717A]">주요 고충 (Pain Points)</label>
-                                <Input value={painPoints} onChange={(e) => setPainPoints(e.target.value)} placeholder="예: 데이터 복사/붙여넣기에 시간이 너무 많이 걸림" className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#A1A1AA]" />
+                                <label className="text-sm text-[#71717A]">
+                                    주요 고충 (Pain Points)
+                                </label>
+                                <Input
+                                    value={painPoints}
+                                    onChange={(e) => setPainPoints(e.target.value)}
+                                    placeholder="예: 데이터 복사/붙여넣기에 시간이 너무 많이 걸림"
+                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#A1A1AA]"
+                                />
                             </div>
 
                             <Button
@@ -350,21 +486,53 @@ export default function FlowPage() {
     }
 
     // 현재 표시할 노드/엣지
-    const displayAsIsNodes: Node[] = asIsNodes.length > 0
-        ? asIsNodes.map(n => ({ id: n.id, type: n.type, position: n.position, data: { label: n.label, description: n.description, stressLevel: n.stressLevel, metrics: n.metrics } }))
-        : [{ id: 'placeholder', type: 'task', position: { x: 250, y: 100 }, data: { label: '✨ AI 플로우 생성을 클릭하세요', stressLevel: 'low' } }];
+    const displayAsIsNodes: Node[] =
+        asIsNodes.length > 0
+            ? asIsNodes.map((n) => ({
+                id: n.id,
+                type: n.type,
+                position: n.position,
+                data: {
+                    label: n.label,
+                    description: n.description,
+                    stressLevel: n.stressLevel,
+                    metrics: n.metrics,
+                },
+            }))
+            : [
+                {
+                    id: 'placeholder',
+                    type: 'task',
+                    position: { x: 250, y: 100 },
+                    data: { label: '✨ AI 플로우 생성을 클릭하세요', stressLevel: 'low' },
+                },
+            ];
 
-    const displayAsIsEdges: Edge[] = asIsNodes.length > 0
-        ? asIsEdges.map(e => ({ id: e.id, source: e.source, target: e.target }))
-        : [];
+    const displayAsIsEdges: Edge[] =
+        asIsNodes.length > 0
+            ? asIsEdges.map((e) => ({ id: e.id, source: e.source, target: e.target }))
+            : [];
 
-    const displayToBeNodes: Node[] = toBeNodes.length > 0
-        ? toBeNodes.map(n => ({ id: n.id, type: n.type, position: n.position, data: { label: n.label, description: n.description, collaborationType: n.collaborationType, agentDescription: n.agentDescription, stressLevel: n.stressLevel } }))
-        : displayAsIsNodes;
+    const displayToBeNodes: Node[] =
+        toBeNodes.length > 0
+            ? toBeNodes.map((n) => ({
+                id: n.id,
+                type: n.type,
+                position: n.position,
+                data: {
+                    label: n.label,
+                    description: n.description,
+                    collaborationType: n.collaborationType,
+                    agentDescription: n.agentDescription,
+                    stressLevel: n.stressLevel,
+                },
+            }))
+            : displayAsIsNodes;
 
-    const displayToBeEdges: Edge[] = toBeNodes.length > 0
-        ? toBeEdges.map(e => ({ id: e.id, source: e.source, target: e.target }))
-        : displayAsIsEdges;
+    const displayToBeEdges: Edge[] =
+        toBeNodes.length > 0
+            ? toBeEdges.map((e) => ({ id: e.id, source: e.source, target: e.target }))
+            : displayAsIsEdges;
 
     // Canvas with Sidebar
     return (
@@ -379,7 +547,8 @@ export default function FlowPage() {
                     <div className="text-xs text-[#71717A] mb-2">현재 분석 중</div>
                     <div className="text-sm font-medium text-[#18181B]">{context?.task}</div>
                     <div className="text-xs text-[#71717A] mt-1">
-                        {industries.find(i => i.value === context?.industry)?.label} · {roles.find(r => r.value === context?.role)?.label}
+                        {industries.find((i) => i.value === context?.industry)?.label} ·{' '}
+                        {roles.find((r) => r.value === context?.role)?.label}
                     </div>
                 </div>
 
@@ -440,7 +609,9 @@ export default function FlowPage() {
 
                 {/* 뷰 모드 탭 바 */}
                 <div className="mb-4">
-                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1">플로우 뷰</div>
+                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1">
+                        플로우 뷰
+                    </div>
                     <div className="bg-gray-100 rounded-lg p-1 flex gap-1">
                         <button
                             onClick={() => setViewMode('asis')}
@@ -474,14 +645,22 @@ export default function FlowPage() {
 
                 {/* 추가 메뉴 */}
                 <div className="space-y-1 flex-1">
-                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1">추가 기능</div>
+                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1">
+                        추가 기능
+                    </div>
                     <Link href="/strategy">
-                        <Button variant="ghost" className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100">
+                        <Button
+                            variant="ghost"
+                            className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                        >
                             📈 변화 전략
                         </Button>
                     </Link>
                     <Link href="/export">
-                        <Button variant="ghost" className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100">
+                        <Button
+                            variant="ghost"
+                            className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                        >
                             📤 내보내기
                         </Button>
                     </Link>
@@ -492,10 +671,15 @@ export default function FlowPage() {
                     <ApiKeySettings />
                 </div>
 
-                <Button variant="outline" className="border-slate-700" onClick={() => setStep('context')}>
+                <Button
+                    variant="outline"
+                    className="border-slate-700"
+                    onClick={() => setStep('context')}
+                >
                     ← 맥락 수정
                 </Button>
             </div>
+
 
             {/* Main Canvas */}
             <div className="flex-1 relative">
@@ -510,9 +694,12 @@ export default function FlowPage() {
                     />
                 ) : (
                     <FlowCanvas
-                        onGenerateFlow={viewMode === 'asis' ? handleGenerateAsIs : handleGenerateToBe}
+                        onGenerateFlow={
+                            viewMode === 'asis' ? handleGenerateAsIs : handleGenerateToBe
+                        }
                         isLoading={isLoading}
                         onNodeSplit={handleNodeSplit}
+                        onDrilldown={handleDrilldown}
                     />
                 )}
             </div>
@@ -524,8 +711,13 @@ export default function FlowPage() {
                         <DialogTitle>가치 분석</DialogTitle>
                     </DialogHeader>
                     <ValueCard
-                        nodeLabel={selectedNode?.data?.label as string || ''}
-                        collaborationType={selectedNode?.data?.collaborationType as 'copilot' | 'monitor' | 'autonomous'}
+                        nodeLabel={(selectedNode?.data?.label as string) || ''}
+                        collaborationType={
+                            selectedNode?.data?.collaborationType as
+                            | 'copilot'
+                            | 'monitor'
+                            | 'autonomous'
+                        }
                     />
                 </DialogContent>
             </Dialog>
@@ -536,7 +728,9 @@ export default function FlowPage() {
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             🔍 세부 단계 분석
-                            <span className={`text-xs px-2 py-1 rounded ${drilldownFlowType === 'as-is' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                            <span
+                                className={`text-xs px-2 py-1 rounded ${drilldownFlowType === 'as-is' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}
+                            >
                                 {drilldownFlowType === 'as-is' ? 'As-Is' : 'To-Be'}
                             </span>
                         </DialogTitle>
@@ -546,7 +740,9 @@ export default function FlowPage() {
                         <div className="mb-4 p-3 bg-[#F5F6F8] rounded-lg border border-[#E2E4E9]">
                             <div className="font-medium text-[#18181B]">{drilldownNode.label}</div>
                             {drilldownNode.description && (
-                                <div className="text-sm text-[#71717A] mt-1">{drilldownNode.description}</div>
+                                <div className="text-sm text-[#71717A] mt-1">
+                                    {drilldownNode.description}
+                                </div>
                             )}
                         </div>
                     )}
@@ -565,21 +761,35 @@ export default function FlowPage() {
                             </div>
 
                             {drilldownResult.subSteps.map((step, idx) => (
-                                <div key={step.id} className="p-3 bg-[#F5F6F8] rounded-lg border border-[#E2E4E9]">
+                                <div
+                                    key={step.id}
+                                    className="p-3 bg-[#F5F6F8] rounded-lg border border-[#E2E4E9]"
+                                >
                                     <div className="flex items-start gap-3">
                                         <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#3B82F6]/20 flex items-center justify-center text-xs text-[#3B82F6]">
                                             {idx + 1}
                                         </div>
                                         <div className="flex-1">
-                                            <div className="font-medium text-[#18181B] text-sm">{step.label}</div>
-                                            <div className="text-xs text-[#71717A] mt-1">{step.description}</div>
+                                            <div className="font-medium text-[#18181B] text-sm">
+                                                {step.label}
+                                            </div>
+                                            <div className="text-xs text-[#71717A] mt-1">
+                                                {step.description}
+                                            </div>
 
                                             <div className="flex flex-wrap gap-2 mt-2">
                                                 {step.duration && (
-                                                    <span className="text-xs bg-[#E2E4E9] px-2 py-1 rounded">⏱️ {step.duration}</span>
+                                                    <span className="text-xs bg-[#E2E4E9] px-2 py-1 rounded">
+                                                        ⏱️ {step.duration}
+                                                    </span>
                                                 )}
-                                                {step.tools?.map(tool => (
-                                                    <span key={tool} className="text-xs bg-[#E2E4E9] px-2 py-1 rounded">🔧 {tool}</span>
+                                                {step.tools?.map((tool) => (
+                                                    <span
+                                                        key={tool}
+                                                        className="text-xs bg-[#E2E4E9] px-2 py-1 rounded"
+                                                    >
+                                                        🔧 {tool}
+                                                    </span>
                                                 ))}
                                             </div>
 

@@ -9,6 +9,7 @@ import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 type TerminalNodeData = {
     label: string;
     terminalType?: 'start' | 'end';
+    shape?: ShapeType;
 };
 
 type ProcessNodeData = {
@@ -20,29 +21,33 @@ type ProcessNodeData = {
         costKRW?: number;
         peopleCount?: number;
     };
+    isHeatmapMode?: boolean;
+    shape?: ShapeType;
 };
 
 type DecisionNodeData = {
     label: string;
     condition?: string;
+    shape?: ShapeType;
 };
 
 type IONodeData = {
     label: string;
     ioType?: 'input' | 'output';
     description?: string;
+    shape?: ShapeType;
 };
 
 type AgentNodeData = {
     label: string;
     collaborationType?: 'copilot' | 'monitor' | 'autonomous';
     agentDescription?: string;
+    shape?: ShapeType;
 };
 
 // ============================================
 // 공통 스타일
 // ============================================
-const nodeBaseStyle = "flow-node relative font-medium transition-all duration-200";
 
 const formatNumber = (num: number): string => {
     if (num >= 10000) return `${(num / 10000).toFixed(1)}만`;
@@ -50,27 +55,154 @@ const formatNumber = (num: number): string => {
     return num.toString();
 };
 
+export type ShapeType = 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
+
+// ============================================
+// Node Shape Wrapper (공통 모양 & 핸들 관리)
+// ============================================
+interface NodeShapeWrapperProps {
+    shape?: ShapeType;
+    stress?: 'low' | 'medium' | 'high';
+    isHeatmapMode?: boolean;
+    selected?: boolean;
+    className?: string;
+    children: React.ReactNode;
+    onClick?: (e: React.MouseEvent) => void;
+    handles?: {
+        top?: boolean;
+        right?: boolean;
+        bottom?: boolean;
+        left?: boolean;
+    };
+}
+
+const NodeShapeWrapper = ({
+    shape = 'rectangle',
+    stress = 'low',
+    isHeatmapMode,
+    selected,
+    className = '',
+    children,
+    onClick,
+    handles = { top: true, right: true, bottom: true, left: true }, // 기본값: 4방향 모두 활성
+}: NodeShapeWrapperProps) => {
+    // Shape별 스타일 정의
+    const getShapeStyle = (s: ShapeType) => {
+        switch (s) {
+            case 'pill':
+                return 'rounded-full';
+            case 'rounded':
+                return 'rounded-xl';
+            case 'diamond':
+                return 'rotate-45 scale-90'; // 내용은 역회전 필요
+            case 'parallelogram':
+                return '-skew-x-12'; // 내용은 역스큐 필요
+            case 'hexagon':
+                return 'clip-path-hexagon'; // CSS 클래스 또는 clip-path 필요
+            case 'rectangle':
+            default:
+                return 'rounded-md';
+        }
+    };
+
+    // Stress & Heatmap 스타일
+    const getVisualStyles = () => {
+        // 히트맵 모드 처리
+        if (isHeatmapMode) {
+            switch (stress) {
+                case 'high':
+                    return 'ring-4 ring-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.4)] bg-red-50/90 border-red-500 scale-105 z-10 transition-all duration-300';
+                case 'medium':
+                    return 'ring-2 ring-amber-400/50 shadow-[0_0_10px_rgba(251,191,36,0.3)] bg-amber-50/80 border-amber-400 transition-all duration-300';
+                case 'low':
+                default:
+                    return 'opacity-40 grayscale blur-[1px] scale-95 transition-all duration-300';
+            }
+        }
+
+        // 일반 모드 테두리 색상
+        const borderColors = {
+            low: 'border-blue-400',
+            medium: 'border-amber-400',
+            high: 'border-red-400',
+        };
+        return borderColors[stress] || 'border-slate-400';
+    };
+
+    const baseStyle = `relative bg-white border-2 shadow-sm transition-all duration-200 ${getShapeStyle(shape)} ${getVisualStyles()} ${selected ? 'ring-2 ring-indigo-400/50 ring-offset-2 ring-offset-slate-900' : ''} ${className}`;
+
+    // 내부 컨텐츠용 역변환 스타일 (도형 변형 시 내용물 바로잡기)
+    const contentStyle =
+        shape === 'diamond' ? '-rotate-45 scale-110' : shape === 'parallelogram' ? 'skew-x-12' : '';
+
+    return (
+        <div className={baseStyle} onClick={onClick}>
+            {/* 4-way Handles */}
+            {handles.top && (
+                <Handle
+                    type="target"
+                    position={Position.Top}
+                    className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                />
+            )}
+            {handles.right && (
+                <Handle
+                    type="source"
+                    position={Position.Right}
+                    className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                />
+            )}
+            {handles.bottom && (
+                <Handle
+                    type="source"
+                    position={Position.Bottom}
+                    className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                />
+            )}
+            {handles.left && (
+                <Handle
+                    type="target"
+                    position={Position.Left}
+                    className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                />
+            )}
+
+            {/* Content Area */}
+            <div className={`flex items-center justify-center w-full h-full p-2 ${contentStyle}`}>
+                {children}
+            </div>
+
+            {/* Stress indicator (Standard Mode only) */}
+            {!isHeatmapMode && stress !== 'low' && (
+                <div
+                    className={`absolute -top-1 -right-1 w-3 h-3 rounded-full z-10 
+                    ${stress === 'high' ? 'bg-red-500 animate-pulse' : 'bg-amber-500'}`}
+                />
+            )}
+        </div>
+    );
+};
+
 // ============================================
 // Terminal Node (타원형 - 시작/종료)
 // ============================================
 export const TerminalNode = memo(({ data, selected }: NodeProps<Node<TerminalNodeData>>) => {
     const isStart = data.terminalType !== 'end';
+    const shape = data.shape || 'pill';
 
     return (
-        <div
-            className={`${nodeBaseStyle} flow-terminal px-8 py-4 min-w-[140px] text-center
-                ${selected ? 'ring-2 ring-indigo-400/50 ring-offset-2 ring-offset-white' : ''}
-            `}
+        <NodeShapeWrapper
+            shape={shape}
+            selected={selected}
+            className="px-8 py-4 min-w-[140px] text-center"
         >
-            {!isStart && <Handle type="target" position={Position.Top} className="!bg-indigo-300" />}
-
             <div className="flex items-center justify-center gap-2">
                 <span className="text-xl">{isStart ? '▶' : '⏹'}</span>
-                <span className="font-semibold text-sm tracking-wide text-indigo-600">{data.label}</span>
+                <span className="font-semibold text-sm tracking-wide text-indigo-600">
+                    {data.label}
+                </span>
             </div>
-
-            {isStart && <Handle type="source" position={Position.Bottom} className="!bg-indigo-300" />}
-        </div>
+        </NodeShapeWrapper>
     );
 });
 TerminalNode.displayName = 'TerminalNode';
@@ -78,36 +210,39 @@ TerminalNode.displayName = 'TerminalNode';
 // ============================================
 // Process Node (직사각형 - 처리) - 아코디언 확장
 // ============================================
+// ============================================
+// Process Node (직사각형 - 처리) - 아코디언 확장
+// ============================================
 export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeData>>) => {
     const [expanded, setExpanded] = useState(false);
 
-    const stressBorderColors = {
-        low: 'border-blue-400',
-        medium: 'border-amber-400',
-        high: 'border-red-400',
-    };
     const stress = data.stressLevel || 'low';
     const metrics = data.metrics;
     const hasDescription = !!data.description;
+    const isHeatmapMode = data.isHeatmapMode;
+    // Default shape for Process is 'rectangle' if not specified
+    const shape = data.shape || 'rectangle';
 
     return (
-        <div
-            className={`${nodeBaseStyle} flow-process px-5 py-4 min-w-[180px] ${stressBorderColors[stress]} cursor-pointer
-                ${expanded ? 'max-w-[320px]' : 'max-w-[220px]'}
-                ${selected ? 'ring-2 ring-blue-400/50 ring-offset-2 ring-offset-white' : ''}
-            `}
-            onClick={(e) => {
+        <NodeShapeWrapper
+            shape={shape}
+            stress={stress}
+            isHeatmapMode={isHeatmapMode}
+            selected={selected}
+            className={`min-w-[150px] ${expanded ? 'max-w-[300px]' : 'max-w-[200px]'}`}
+            onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();
                 if (hasDescription) setExpanded(!expanded);
             }}
         >
-            <Handle type="target" position={Position.Top} className="!bg-blue-300" />
-
-            <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col w-full">
+                <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="font-semibold text-sm text-slate-800">{data.label}</span>
                     {hasDescription && (
-                        <span className="text-xs text-slate-400 transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                        <span
+                            className="text-xs text-slate-400 transition-transform"
+                            style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                        >
                             ▼
                         </span>
                     )}
@@ -116,7 +251,7 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
                 {/* 축소 상태: 미리보기 */}
                 {!expanded && hasDescription && (
                     <div className="text-xs text-slate-500 truncate">
-                        {data.description?.slice(0, 30)}...
+                        {data.description?.slice(0, 25)}...
                     </div>
                 )}
 
@@ -128,23 +263,13 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
                 )}
 
                 {metrics && (metrics.timeMinutes || metrics.costKRW || metrics.peopleCount) && (
-                    <div className="flex gap-2 pt-2 border-t border-slate-200 text-xs text-slate-500">
-                        {metrics.timeMinutes && <span>⏱️ {metrics.timeMinutes}분</span>}
-                        {metrics.costKRW && <span>💰 {formatNumber(metrics.costKRW)}₩</span>}
-                        {metrics.peopleCount && <span>👥 {metrics.peopleCount}명</span>}
+                    <div className="flex gap-2 pt-2 mt-2 border-t border-slate-200 text-xs text-slate-500">
+                        {metrics.timeMinutes && <span>⏱️{metrics.timeMinutes}</span>}
+                        {metrics.costKRW && <span>💰{formatNumber(metrics.costKRW)}</span>}
                     </div>
                 )}
             </div>
-
-            {/* Stress indicator */}
-            {stress !== 'low' && (
-                <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full 
-                    ${stress === 'high' ? 'bg-red-500 animate-pulse' : 'bg-amber-500'}`}
-                />
-            )}
-
-            <Handle type="source" position={Position.Bottom} className="!bg-blue-300" />
-        </div>
+        </NodeShapeWrapper>
     );
 });
 ProcessNode.displayName = 'ProcessNode';
@@ -152,23 +277,27 @@ ProcessNode.displayName = 'ProcessNode';
 // ============================================
 // Decision Node (마름모 - 판단/분기)
 // ============================================
+// ============================================
+// Decision Node (마름모 - 판단/분기)
+// ============================================
 export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNodeData>>) => {
+    // Default shape for Decision is 'diamond'
+    const shape = data.shape || 'diamond';
+
     return (
-        <div
-            className={`${nodeBaseStyle} flow-decision w-[120px] h-[120px] flex items-center justify-center
-                ${selected ? 'ring-2 ring-amber-400/50' : ''}
-            `}
+        <NodeShapeWrapper
+            shape={shape}
+            selected={selected}
+            className="w-[120px] h-[120px]"
+            // Decision 노드는 모든 방향 연결 허용
         >
-            <Handle type="target" position={Position.Top} className="!bg-amber-300 !top-[10px]" />
-
             <div className="text-center p-2">
-                <span className="text-lg">❓</span>
-                <div className="font-semibold text-xs mt-1 text-slate-800">{data.label}</div>
+                <span className="text-xl mb-1 block">❓</span>
+                <div className="font-semibold text-xs text-slate-800 leading-tight">
+                    {data.label}
+                </div>
             </div>
-
-            <Handle type="source" position={Position.Bottom} id="yes" className="!bg-purple-300 !bottom-[10px]" />
-            <Handle type="source" position={Position.Right} id="no" className="!bg-purple-300 !right-[10px]" />
-        </div>
+        </NodeShapeWrapper>
     );
 });
 DecisionNode.displayName = 'DecisionNode';
@@ -180,33 +309,36 @@ export const IONode = memo(({ data, selected }: NodeProps<Node<IONodeData>>) => 
     const [expanded, setExpanded] = useState(false);
     const isInput = data.ioType !== 'output';
     const hasDescription = !!data.description;
+    const shape = data.shape || 'parallelogram';
 
     return (
-        <div
-            className={`${nodeBaseStyle} flow-io px-6 py-4 min-w-[160px] cursor-pointer
-                ${expanded ? 'max-w-[280px]' : 'max-w-[200px]'}
-                ${selected ? 'ring-2 ring-cyan-400/50 ring-offset-2 ring-offset-white' : ''}
-            `}
+        <NodeShapeWrapper
+            shape={shape}
+            selected={selected}
+            className={`px-6 py-4 min-w-[160px] cursor-pointer ${expanded ? 'max-w-[280px]' : 'max-w-[200px]'}`}
             onClick={(e) => {
                 e.stopPropagation();
                 if (hasDescription) setExpanded(!expanded);
             }}
         >
-            <Handle type="target" position={Position.Top} className="!bg-cyan-300" />
-
-            <div className="space-y-1">
+            <div className="space-y-1 w-full">
                 <div className="flex items-center gap-2">
                     <span className="text-lg">{isInput ? '📥' : '📤'}</span>
                     <span className="font-semibold text-sm text-slate-800">{data.label}</span>
                     {hasDescription && (
-                        <span className="text-xs text-slate-400 ml-auto transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                        <span
+                            className="text-xs text-slate-400 ml-auto transition-transform"
+                            style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                        >
                             ▼
                         </span>
                     )}
                 </div>
 
                 {!expanded && hasDescription && (
-                    <div className="text-xs text-slate-500 truncate">{data.description?.slice(0, 25)}...</div>
+                    <div className="text-xs text-slate-500 truncate">
+                        {data.description?.slice(0, 25)}...
+                    </div>
                 )}
 
                 {expanded && hasDescription && (
@@ -215,9 +347,7 @@ export const IONode = memo(({ data, selected }: NodeProps<Node<IONodeData>>) => 
                     </div>
                 )}
             </div>
-
-            <Handle type="source" position={Position.Bottom} className="!bg-cyan-300" />
-        </div>
+        </NodeShapeWrapper>
     );
 });
 IONode.displayName = 'IONode';
@@ -228,12 +358,6 @@ IONode.displayName = 'IONode';
 export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>>) => {
     const [expanded, setExpanded] = useState(false);
 
-    const collabBorderColors = {
-        copilot: 'border-emerald-400',
-        monitor: 'border-cyan-400',
-        autonomous: 'border-violet-400',
-    };
-
     const collabLabels = {
         copilot: '🤝 Co-pilot',
         monitor: '👁️ Monitor',
@@ -242,21 +366,19 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
 
     const collab = data.collaborationType || 'copilot';
     const hasDescription = !!data.agentDescription;
+    const shape = data.shape || 'hexagon';
 
     return (
-        <div
-            className={`${nodeBaseStyle} flow-agent flex items-center justify-center ${collabBorderColors[collab]} cursor-pointer
-                ${expanded ? 'w-[260px] h-auto min-h-[160px]' : 'w-[180px] h-[140px]'}
-                ${selected ? 'ring-2 ring-emerald-400/50' : ''}
-            `}
+        <NodeShapeWrapper
+            shape={shape}
+            selected={selected}
+            className={`flex items-center justify-center cursor-pointer ${expanded ? 'w-[260px] h-auto min-h-[160px]' : 'w-[180px] h-[140px]'}`}
             onClick={(e) => {
                 e.stopPropagation();
                 if (hasDescription) setExpanded(!expanded);
             }}
         >
-            <Handle type="target" position={Position.Top} className="!bg-emerald-300 !top-[15px]" />
-
-            <div className="text-center p-4 space-y-2">
+            <div className="text-center p-4 space-y-2 w-full">
                 <span className="text-3xl">🤖</span>
                 <div className="font-semibold text-sm text-slate-800">{data.label}</div>
                 <div className="flex items-center justify-center gap-2">
@@ -264,7 +386,10 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
                         {collabLabels[collab]}
                     </div>
                     {hasDescription && (
-                        <span className="text-xs text-slate-400 transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                        <span
+                            className="text-xs text-slate-400 transition-transform"
+                            style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                        >
                             ▼
                         </span>
                     )}
@@ -272,21 +397,19 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
 
                 {/* 축소 상태: 미리보기 */}
                 {!expanded && hasDescription && (
-                    <div className="text-xs text-slate-500 max-w-[140px] truncate">
+                    <div className="text-xs text-slate-500 max-w-[140px] truncate mx-auto">
                         {data.agentDescription?.slice(0, 40)}...
                     </div>
                 )}
 
                 {/* 확장 상태: 전체 설명 */}
                 {expanded && hasDescription && (
-                    <div className="text-xs text-slate-700 leading-relaxed max-w-[220px] text-left animate-in fade-in slide-in-from-top-1 duration-200 border-t border-slate-200 pt-2 mt-2">
+                    <div className="text-xs text-slate-700 leading-relaxed max-w-[220px] text-left animate-in fade-in slide-in-from-top-1 duration-200 border-t border-slate-200 pt-2 mt-2 mx-auto">
                         {data.agentDescription}
                     </div>
                 )}
             </div>
-
-            <Handle type="source" position={Position.Bottom} className="!bg-emerald-300 !bottom-[15px]" />
-        </div>
+        </NodeShapeWrapper>
     );
 });
 AgentNode.displayName = 'AgentNode';

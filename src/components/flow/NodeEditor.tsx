@@ -4,15 +4,28 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog';
 
 interface NodeData {
     id?: string;
     label: string;
     description?: string;
     type: 'task' | 'decision' | 'subprocess' | 'agent';
+    shape?: 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
     stressLevel?: 'low' | 'medium' | 'high';
     collaborationType?: 'copilot' | 'monitor' | 'autonomous';
 }
@@ -34,18 +47,21 @@ export default function NodeEditor({
     onDelete,
     initialData,
     mode,
-    flowType
+    flowType,
 }: NodeEditorProps) {
     const [label, setLabel] = useState('');
     const [description, setDescription] = useState('');
     const [type, setType] = useState<NodeData['type']>('task');
+    const [shape, setShape] = useState<NodeData['shape']>('rectangle');
     const [stressLevel, setStressLevel] = useState<NodeData['stressLevel']>('low');
-    const [collaborationType, setCollaborationType] = useState<NodeData['collaborationType']>('copilot');
+    const [collaborationType, setCollaborationType] =
+        useState<NodeData['collaborationType']>('copilot');
 
     const resetForm = () => {
         setLabel('');
         setDescription('');
         setType(flowType === 'tobe' ? 'agent' : 'task');
+        setShape(undefined); // Reset to default
         setStressLevel('low');
         setCollaborationType('copilot');
     };
@@ -56,6 +72,7 @@ export default function NodeEditor({
             setLabel(initialData.label || '');
             setDescription(initialData.description || '');
             setType(initialData.type || (flowType === 'tobe' ? 'agent' : 'task'));
+            setShape(initialData.shape);
             setStressLevel(initialData.stressLevel || 'low');
             setCollaborationType(initialData.collaborationType || 'copilot');
         } else {
@@ -70,6 +87,7 @@ export default function NodeEditor({
             label,
             description,
             type,
+            shape, // Save shape
             stressLevel: type !== 'agent' ? stressLevel : undefined,
             collaborationType: type === 'agent' ? collaborationType : undefined,
         });
@@ -125,11 +143,35 @@ export default function NodeEditor({
                         </Select>
                     </div>
 
+                    {/* Shape Selection */}
+                    <div className="space-y-2">
+                        <Label>도형 모양 (선택 사항)</Label>
+                        <Select
+                            value={shape}
+                            onValueChange={(v) => setShape(v as NodeData['shape'])}
+                        >
+                            <SelectTrigger className="bg-slate-800 border-slate-600">
+                                <SelectValue placeholder="자동 (기본값)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="rectangle">🟩 직사각형 (기본)</SelectItem>
+                                <SelectItem value="rounded">🔲 둥근 사각형</SelectItem>
+                                <SelectItem value="pill">💊 캡슐형 (타원)</SelectItem>
+                                <SelectItem value="diamond">💠 다이아몬드 (판단)</SelectItem>
+                                <SelectItem value="parallelogram">▱ 평행사변형 (입출력)</SelectItem>
+                                <SelectItem value="hexagon">🛑 육각형 (에이전트)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     {/* Stress Level (for non-agent) */}
                     {type !== 'agent' && (
                         <div className="space-y-2">
                             <Label>스트레스 레벨</Label>
-                            <Select value={stressLevel} onValueChange={(v) => setStressLevel(v as NodeData['stressLevel'])}>
+                            <Select
+                                value={stressLevel}
+                                onValueChange={(v) => setStressLevel(v as NodeData['stressLevel'])}
+                            >
                                 <SelectTrigger className="bg-slate-800 border-slate-600">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -146,14 +188,21 @@ export default function NodeEditor({
                     {type === 'agent' && (
                         <div className="space-y-2">
                             <Label>협업 유형</Label>
-                            <Select value={collaborationType} onValueChange={(v) => setCollaborationType(v as NodeData['collaborationType'])}>
+                            <Select
+                                value={collaborationType}
+                                onValueChange={(v) =>
+                                    setCollaborationType(v as NodeData['collaborationType'])
+                                }
+                            >
                                 <SelectTrigger className="bg-slate-800 border-slate-600">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="copilot">🤝 Co-pilot (인간 협력)</SelectItem>
                                     <SelectItem value="monitor">👁️ Monitor (인간 감독)</SelectItem>
-                                    <SelectItem value="autonomous">🚀 Autonomous (자율 수행)</SelectItem>
+                                    <SelectItem value="autonomous">
+                                        🚀 Autonomous (자율 수행)
+                                    </SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -167,10 +216,18 @@ export default function NodeEditor({
                         </Button>
                     )}
                     <div className="flex gap-2">
-                        <Button variant="outline" onClick={onClose} className="border-slate-600 bg-white text-slate-900 hover:bg-slate-100">
+                        <Button
+                            variant="outline"
+                            onClick={onClose}
+                            className="border-slate-600 bg-white text-slate-900 hover:bg-slate-100"
+                        >
                             취소
                         </Button>
-                        <Button onClick={handleSave} disabled={!label} className="bg-indigo-600 hover:bg-indigo-500">
+                        <Button
+                            onClick={handleSave}
+                            disabled={!label}
+                            className="bg-indigo-600 hover:bg-indigo-500"
+                        >
                             {mode === 'create' ? '추가' : '저장'}
                         </Button>
                     </div>

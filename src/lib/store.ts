@@ -3,10 +3,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 // 노드 타입 정의
 export interface NodeMetrics {
-    timeMinutes?: number;     // 소요 시간 (분)
-    costKRW?: number;         // 비용 (원)
-    peopleCount?: number;     // 관련 인원
-    errorRate?: number;       // 오류율 (%)
+    timeMinutes?: number; // 소요 시간 (분)
+    costKRW?: number; // 비용 (원)
+    peopleCount?: number; // 관련 인원
+    errorRate?: number; // 오류율 (%)
 }
 
 export interface FlowNode {
@@ -75,7 +75,11 @@ interface AppState {
     addNode: (node: FlowNode, target: 'asis' | 'tobe') => void;
     updateNode: (id: string, updates: Partial<FlowNode>, target: 'asis' | 'tobe') => void;
     deleteNode: (id: string, target: 'asis' | 'tobe') => void;
-    updateNodePosition: (id: string, position: { x: number; y: number }, target: 'asis' | 'tobe') => void;
+    updateNodePosition: (
+        id: string,
+        position: { x: number; y: number },
+        target: 'asis' | 'tobe'
+    ) => void;
 
     // 엣지 CRUD 액션
     addEdge: (edge: FlowEdge, target: 'asis' | 'tobe') => void;
@@ -103,82 +107,97 @@ export const useAppStore = create<AppState>()(
             setAsIsFlow: (nodes, edges) => set({ asIsNodes: nodes, asIsEdges: edges }),
             setToBeFlow: (nodes, edges) => set({ toBeNodes: nodes, toBeEdges: edges }),
 
-            pushDrilldown: (nodeId) => set((state) => ({
-                drilldownPath: [...state.drilldownPath, nodeId]
-            })),
+            pushDrilldown: (nodeId) =>
+                set((state) => ({
+                    drilldownPath: [...state.drilldownPath, nodeId],
+                })),
 
-            popDrilldown: () => set((state) => ({
-                drilldownPath: state.drilldownPath.slice(0, -1)
-            })),
+            popDrilldown: () =>
+                set((state) => ({
+                    drilldownPath: state.drilldownPath.slice(0, -1),
+                })),
 
             resetDrilldown: () => set({ drilldownPath: [] }),
             setViewMode: (mode) => set({ viewMode: mode }),
             setIsGenerating: (loading) => set({ isGenerating: loading }),
 
             // 노드 추가
-            addNode: (node, target) => set((state) => ({
-                [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: [
-                    ...(target === 'asis' ? state.asIsNodes : state.toBeNodes),
-                    node
-                ]
-            })),
+            addNode: (node, target) =>
+                set((state) => ({
+                    [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: [
+                        ...(target === 'asis' ? state.asIsNodes : state.toBeNodes),
+                        node,
+                    ],
+                })),
 
             // 노드 수정
-            updateNode: (id, updates, target) => set((state) => {
-                const nodes = target === 'asis' ? state.asIsNodes : state.toBeNodes;
-                return {
-                    [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: nodes.map(node =>
-                        node.id === id ? { ...node, ...updates } : node
-                    )
-                };
-            }),
+            updateNode: (id, updates, target) =>
+                set((state) => {
+                    const nodes = target === 'asis' ? state.asIsNodes : state.toBeNodes;
+                    return {
+                        [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: nodes.map((node) =>
+                            node.id === id ? { ...node, ...updates } : node
+                        ),
+                    };
+                }),
 
             // 노드 삭제
-            deleteNode: (id, target) => set((state) => {
-                const nodes = target === 'asis' ? state.asIsNodes : state.toBeNodes;
-                const edges = target === 'asis' ? state.asIsEdges : state.toBeEdges;
-                return {
-                    [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: nodes.filter(node => node.id !== id),
-                    [target === 'asis' ? 'asIsEdges' : 'toBeEdges']: edges.filter(edge => edge.source !== id && edge.target !== id)
-                };
-            }),
+            deleteNode: (id, target) =>
+                set((state) => {
+                    const nodes = target === 'asis' ? state.asIsNodes : state.toBeNodes;
+                    const edges = target === 'asis' ? state.asIsEdges : state.toBeEdges;
+                    return {
+                        [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: nodes.filter(
+                            (node) => node.id !== id
+                        ),
+                        [target === 'asis' ? 'asIsEdges' : 'toBeEdges']: edges.filter(
+                            (edge) => edge.source !== id && edge.target !== id
+                        ),
+                    };
+                }),
 
             // 노드 위치 업데이트
-            updateNodePosition: (id, position, target) => set((state) => {
-                const nodes = target === 'asis' ? state.asIsNodes : state.toBeNodes;
-                return {
-                    [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: nodes.map(node =>
-                        node.id === id ? { ...node, position } : node
-                    )
-                };
-            }),
+            updateNodePosition: (id, position, target) =>
+                set((state) => {
+                    const nodes = target === 'asis' ? state.asIsNodes : state.toBeNodes;
+                    return {
+                        [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: nodes.map((node) =>
+                            node.id === id ? { ...node, position } : node
+                        ),
+                    };
+                }),
 
             // 엣지 추가
-            addEdge: (edge, target) => set((state) => ({
-                [target === 'asis' ? 'asIsEdges' : 'toBeEdges']: [
-                    ...(target === 'asis' ? state.asIsEdges : state.toBeEdges),
-                    edge
-                ]
-            })),
+            addEdge: (edge, target) =>
+                set((state) => ({
+                    [target === 'asis' ? 'asIsEdges' : 'toBeEdges']: [
+                        ...(target === 'asis' ? state.asIsEdges : state.toBeEdges),
+                        edge,
+                    ],
+                })),
 
             // 엣지 삭제
-            deleteEdge: (id, target) => set((state) => {
-                const edges = target === 'asis' ? state.asIsEdges : state.toBeEdges;
-                return {
-                    [target === 'asis' ? 'asIsEdges' : 'toBeEdges']: edges.filter(edge => edge.id !== id)
-                };
-            }),
+            deleteEdge: (id, target) =>
+                set((state) => {
+                    const edges = target === 'asis' ? state.asIsEdges : state.toBeEdges;
+                    return {
+                        [target === 'asis' ? 'asIsEdges' : 'toBeEdges']: edges.filter(
+                            (edge) => edge.id !== id
+                        ),
+                    };
+                }),
 
             // 초기화
-            clearAll: () => set({
-                context: null,
-                asIsNodes: [],
-                asIsEdges: [],
-                toBeNodes: [],
-                toBeEdges: [],
-                drilldownPath: [],
-                viewMode: 'asis',
-            }),
+            clearAll: () =>
+                set({
+                    context: null,
+                    asIsNodes: [],
+                    asIsEdges: [],
+                    toBeNodes: [],
+                    toBeEdges: [],
+                    drilldownPath: [],
+                    viewMode: 'asis',
+                }),
         }),
         {
             name: 'agent-shift-storage',
@@ -187,8 +206,8 @@ export const useAppStore = create<AppState>()(
                 if (typeof window === 'undefined') {
                     return {
                         getItem: () => null,
-                        setItem: () => { },
-                        removeItem: () => { },
+                        setItem: () => {},
+                        removeItem: () => {},
                     };
                 }
                 return localStorage;

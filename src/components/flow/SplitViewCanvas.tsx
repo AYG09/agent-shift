@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import {
     ReactFlow,
     Background,
@@ -35,22 +36,49 @@ export default function SplitViewCanvas({
     isSimulating = false,
     onToggleSimulation,
 }: SplitViewCanvasProps) {
-    const [nodesLeft, , onNodesChangeLeft] = useNodesState(asIsNodes);
+    const [isHeatmapMode, setIsHeatmapMode] = useState(false);
+
+    const [nodesLeft, setNodesLeft, onNodesChangeLeft] = useNodesState(asIsNodes);
     const [edgesLeft, , onEdgesChangeLeft] = useEdgesState(
-        asIsEdges.map(e => ({ ...e, type: isSimulating ? 'tokenFlow' : 'smooth', data: { speed: 'slow' } }))
+        asIsEdges.map((e) => ({
+            ...e,
+            type: isSimulating ? 'tokenFlow' : 'smooth',
+            data: { speed: 'slow' },
+        }))
     );
 
-    const [nodesRight, , onNodesChangeRight] = useNodesState(toBeNodes);
+    const [nodesRight, setNodesRight, onNodesChangeRight] = useNodesState(toBeNodes);
     const [edgesRight, , onEdgesChangeRight] = useEdgesState(
-        toBeEdges.map(e => ({ ...e, type: isSimulating ? 'tokenFlow' : 'smooth', data: { speed: 'fast' } }))
+        toBeEdges.map((e) => ({
+            ...e,
+            type: isSimulating ? 'tokenFlow' : 'smooth',
+            data: { speed: 'fast' },
+        }))
     );
+
+    // Propagate Heatmap Mode to nodes
+    useEffect(() => {
+        setNodesLeft((nodes) =>
+            nodes.map((node) => ({
+                ...node,
+                data: { ...node.data, isHeatmapMode },
+            }))
+        );
+        setNodesRight((nodes) =>
+            nodes.map((node) => ({
+                ...node,
+                data: { ...node.data, isHeatmapMode },
+            }))
+        );
+    }, [isHeatmapMode, setNodesLeft, setNodesRight]);
 
     // Type-safe metrics extraction
     type MetricsType = { timeMinutes?: number; costKRW?: number; peopleCount?: number } | undefined;
-    const extractMetrics = (nodes: Node[]) => nodes.map(n => ({
-        id: n.id,
-        metrics: (n.data as { metrics?: MetricsType })?.metrics
-    }));
+    const extractMetrics = (nodes: Node[]) =>
+        nodes.map((n) => ({
+            id: n.id,
+            metrics: (n.data as { metrics?: MetricsType })?.metrics,
+        }));
 
     return (
         <div className="w-full h-full flex">
@@ -71,19 +99,35 @@ export default function SplitViewCanvas({
                     className="bg-slate-950"
                     defaultEdgeOptions={{ type: isSimulating ? 'tokenFlow' : 'smooth' }}
                 >
-                    <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#334155" />
+                    <Background
+                        variant={BackgroundVariant.Dots}
+                        gap={20}
+                        size={1}
+                        color="#334155"
+                    />
                     <Controls className="!bg-slate-800 !border-slate-700" />
                 </ReactFlow>
             </div>
 
             {/* Center Controls */}
-            <div className="absolute left-1/2 top-4 -translate-x-1/2 z-20">
+            <div className="absolute left-1/2 top-4 -translate-x-1/2 z-20 flex gap-2">
+                <Button
+                    onClick={() => setIsHeatmapMode(!isHeatmapMode)}
+                    className={`${
+                        isHeatmapMode
+                            ? 'bg-red-600 hover:bg-red-500'
+                            : 'bg-slate-700 hover:bg-slate-600'
+                    } shadow-lg transition-colors duration-300`}
+                >
+                    {isHeatmapMode ? '🔥 Heatmap ON' : '🌡️ Heatmap OFF'}
+                </Button>
                 <Button
                     onClick={onToggleSimulation}
-                    className={`${isSimulating
-                        ? 'bg-green-600 hover:bg-green-500'
-                        : 'bg-indigo-600 hover:bg-indigo-500'
-                        } shadow-lg`}
+                    className={`${
+                        isSimulating
+                            ? 'bg-green-600 hover:bg-green-500'
+                            : 'bg-indigo-600 hover:bg-indigo-500'
+                    } shadow-lg transition-colors duration-300`}
                 >
                     {isSimulating ? '⏸️ 시뮬레이션 정지' : '▶️ 토큰 시뮬레이션'}
                 </Button>
@@ -106,14 +150,22 @@ export default function SplitViewCanvas({
                     className="bg-slate-950"
                     defaultEdgeOptions={{ type: isSimulating ? 'tokenFlow' : 'smooth' }}
                 >
-                    <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#334155" />
+                    <Background
+                        variant={BackgroundVariant.Dots}
+                        gap={20}
+                        size={1}
+                        color="#334155"
+                    />
                     <Controls className="!bg-slate-800 !border-slate-700" />
                 </ReactFlow>
             </div>
 
             {/* Speed Legend */}
             {isSimulating && (
-                <Panel position="bottom-center" className="bg-slate-800/90 px-4 py-2 rounded-lg border border-slate-700 flex gap-6">
+                <Panel
+                    position="bottom-center"
+                    className="bg-slate-800/90 px-4 py-2 rounded-lg border border-slate-700 flex gap-6"
+                >
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
                         <span className="text-xs text-slate-400">병목 (느림)</span>

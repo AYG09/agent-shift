@@ -19,25 +19,55 @@ export default function ExportPage() {
         ? { industry: context.industry, role: context.role, task: context.task }
         : { industry: '제조업', role: '영업 관리자', task: '주간 영업 보고서 작성' };
 
-    const exportAsIsNodes = asIsNodes.length > 0
-        ? asIsNodes.map(n => ({ id: n.id, label: n.label, description: n.description, type: n.type }))
-        : [
-            { id: '1', label: '데이터 수집', description: '각 팀에서 수동으로 요청', type: 'task' as const },
-            { id: '2', label: '엑셀 취합', description: '병목 구간 - 3시간 소요', type: 'task' as const },
-        ];
+    const exportAsIsNodes =
+        asIsNodes.length > 0
+            ? asIsNodes.map((n) => ({
+                  id: n.id,
+                  label: n.label,
+                  description: n.description,
+                  type: n.type,
+              }))
+            : [
+                  {
+                      id: '1',
+                      label: '데이터 수집',
+                      description: '각 팀에서 수동으로 요청',
+                      type: 'task' as const,
+                  },
+                  {
+                      id: '2',
+                      label: '엑셀 취합',
+                      description: '병목 구간 - 3시간 소요',
+                      type: 'task' as const,
+                  },
+              ];
 
-    const exportToBeNodes = toBeNodes.length > 0
-        ? toBeNodes.map(n => ({ id: n.id, label: n.label, description: n.description, type: n.type }))
-        : [
-            { id: 't1', label: '데이터 수집 Agent', description: '', type: 'agent' as const },
-            { id: 't2', label: '데이터 분석 Agent', description: '', type: 'agent' as const },
-        ];
+    const exportToBeNodes =
+        toBeNodes.length > 0
+            ? toBeNodes.map((n) => ({
+                  id: n.id,
+                  label: n.label,
+                  description: n.description,
+                  type: n.type,
+              }))
+            : [
+                  { id: 't1', label: '데이터 수집 Agent', description: '', type: 'agent' as const },
+                  { id: 't2', label: '데이터 분석 Agent', description: '', type: 'agent' as const },
+              ];
 
     const sampleStrategy = {
         framework: "Kotter's 8 Steps",
         phases: [
-            { name: '긴급성 조성', duration: '2주', actions: ['위기 인식 공유', '변화 필요성 전파'] },
-            { name: '추진팀 구성', duration: '1주', actions: ['변화 리더 선정', '크로스펑셔널 팀 구성'] },
+            {
+                name: '긴급성 조성',
+                duration: '2주',
+                actions: ['위기 인식 공유', '변화 필요성 전파'],
+            },
+            {
+                name: '추진팀 구성',
+                duration: '1주',
+                actions: ['변화 리더 선정', '크로스펑셔널 팀 구성'],
+            },
             { name: '비전 수립', duration: '2주', actions: ['목표 상태 정의', '전략 로드맵 작성'] },
         ],
     };
@@ -100,29 +130,46 @@ export default function ExportPage() {
     return (
         <div className="min-h-screen pro-canvas text-[#18181B] p-8 pb-24">
             <div className="max-w-3xl mx-auto">
-                <Link href="/flow" className="text-[#71717A] hover:text-[#18181B] mb-8 inline-block text-sm">
+                <Link
+                    href="/flow"
+                    className="text-[#71717A] hover:text-[#18181B] mb-8 inline-block text-sm"
+                >
                     ← Flow 캔버스로
                 </Link>
 
-                <h1 className="text-2xl font-semibold text-[#18181B] mb-8">
-                    결과 내보내기
-                </h1>
+                <h1 className="text-2xl font-semibold text-[#18181B] mb-8">결과 내보내기</h1>
 
                 {/* Data Status */}
-                <Card className={`mb-6 shadow-sm ${hasData ? 'bg-[#DCFCE7] border-[#86EFAC]' : 'bg-[#FEF3C7] border-[#FCD34D]'}`}>
+                <Card
+                    className={`mb-6 shadow-sm ${hasData ? 'bg-[#DCFCE7] border-[#86EFAC]' : 'bg-[#FEF3C7] border-[#FCD34D]'}`}
+                >
                     <CardContent className="py-4">
                         {hasData ? (
                             <div className="text-[#166534] text-sm">
                                 ✓ 내보낼 데이터가 준비되었습니다
                                 <ul className="mt-2 text-[#166534]/70">
                                     <li>• 업무: {context?.task || '샘플 데이터'}</li>
-                                    <li>• As-Is 노드: {asIsNodes.length > 0 ? `${asIsNodes.length}개` : '샘플 데이터'}</li>
-                                    <li>• To-Be 노드: {toBeNodes.length > 0 ? `${toBeNodes.length}개` : '샘플 데이터'}</li>
+                                    <li>
+                                        • As-Is 노드:{' '}
+                                        {asIsNodes.length > 0
+                                            ? `${asIsNodes.length}개`
+                                            : '샘플 데이터'}
+                                    </li>
+                                    <li>
+                                        • To-Be 노드:{' '}
+                                        {toBeNodes.length > 0
+                                            ? `${toBeNodes.length}개`
+                                            : '샘플 데이터'}
+                                    </li>
                                 </ul>
                             </div>
                         ) : (
                             <p className="text-[#92400E] text-sm">
-                                ⚠️ AI 플로우가 생성되지 않아 샘플 데이터로 내보냅니다. <Link href="/flow" className="underline">Flow 캔버스</Link>에서 먼저 플로우를 생성해주세요.
+                                ⚠️ AI 플로우가 생성되지 않아 샘플 데이터로 내보냅니다.{' '}
+                                <Link href="/flow" className="underline">
+                                    Flow 캔버스
+                                </Link>
+                                에서 먼저 플로우를 생성해주세요.
                             </p>
                         )}
                     </CardContent>
@@ -133,8 +180,12 @@ export default function ExportPage() {
                     {/* Word Report */}
                     <Card className="bg-white border-[#E2E4E9] hover:border-[#3B82F6] transition-colors shadow-sm">
                         <CardHeader>
-                            <div className="w-10 h-10 bg-[#DBEAFE] rounded-lg flex items-center justify-center text-xl mb-3">📄</div>
-                            <CardTitle className="text-base font-medium text-[#18181B]">Word 보고서</CardTitle>
+                            <div className="w-10 h-10 bg-[#DBEAFE] rounded-lg flex items-center justify-center text-xl mb-3">
+                                📄
+                            </div>
+                            <CardTitle className="text-base font-medium text-[#18181B]">
+                                Word 보고서
+                            </CardTitle>
                             <CardDescription className="text-[#71717A] text-sm">
                                 변화 관리 분석 결과를 Word 문서로 내보냅니다
                             </CardDescription>
@@ -159,8 +210,12 @@ export default function ExportPage() {
                     {/* Excel WBS */}
                     <Card className="bg-white border-[#E2E4E9] hover:border-[#10B981] transition-colors shadow-sm">
                         <CardHeader>
-                            <div className="w-10 h-10 bg-[#D1FAE5] rounded-lg flex items-center justify-center text-xl mb-3">📊</div>
-                            <CardTitle className="text-base font-medium text-[#18181B]">Excel WBS</CardTitle>
+                            <div className="w-10 h-10 bg-[#D1FAE5] rounded-lg flex items-center justify-center text-xl mb-3">
+                                📊
+                            </div>
+                            <CardTitle className="text-base font-medium text-[#18181B]">
+                                Excel WBS
+                            </CardTitle>
                             <CardDescription className="text-[#71717A] text-sm">
                                 Work Breakdown Structure를 Excel로 내보냅니다
                             </CardDescription>
@@ -211,7 +266,9 @@ export default function ExportPage() {
 
                 {/* Export Status */}
                 {exportStatus && (
-                    <Card className={`${exportStatus.includes('✅') ? 'border-green-500' : 'border-red-500'} bg-slate-800/50`}>
+                    <Card
+                        className={`${exportStatus.includes('✅') ? 'border-green-500' : 'border-red-500'} bg-slate-800/50`}
+                    >
                         <CardContent className="py-4 text-center">
                             <span className="text-lg">{exportStatus}</span>
                         </CardContent>

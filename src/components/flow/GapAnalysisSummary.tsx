@@ -90,7 +90,9 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
                         <span className="text-red-400 line-through">{metrics.asIs.time}분</span>
                         <span className="text-green-400 font-bold">{metrics.toBe.time}분</span>
                     </div>
-                    <div className={`mt-1 font-semibold ${metrics.savings.time > 0 ? 'text-green-400' : 'text-slate-400'}`}>
+                    <div
+                        className={`mt-1 font-semibold ${metrics.savings.time > 0 ? 'text-green-400' : 'text-slate-400'}`}
+                    >
                         {metrics.savings.time > 0 ? `▼ ${metrics.savings.time}분 절감` : '—'}
                     </div>
                 </div>
@@ -99,11 +101,19 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
                 <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700">
                     <div className="text-slate-400 mb-1">💰 비용</div>
                     <div className="flex justify-between items-baseline">
-                        <span className="text-red-400 line-through">{formatNumber(metrics.asIs.cost)}₩</span>
-                        <span className="text-green-400 font-bold">{formatNumber(metrics.toBe.cost)}₩</span>
+                        <span className="text-red-400 line-through">
+                            {formatNumber(metrics.asIs.cost)}₩
+                        </span>
+                        <span className="text-green-400 font-bold">
+                            {formatNumber(metrics.toBe.cost)}₩
+                        </span>
                     </div>
-                    <div className={`mt-1 font-semibold ${metrics.savings.cost > 0 ? 'text-green-400' : 'text-slate-400'}`}>
-                        {metrics.savings.cost > 0 ? `▼ ${formatNumber(metrics.savings.cost)}₩ 절감` : '—'}
+                    <div
+                        className={`mt-1 font-semibold ${metrics.savings.cost > 0 ? 'text-green-400' : 'text-slate-400'}`}
+                    >
+                        {metrics.savings.cost > 0
+                            ? `▼ ${formatNumber(metrics.savings.cost)}₩ 절감`
+                            : '—'}
                     </div>
                 </div>
 
@@ -114,7 +124,9 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
                         <span className="text-red-400 line-through">{metrics.asIs.people}명</span>
                         <span className="text-green-400 font-bold">{metrics.toBe.people}명</span>
                     </div>
-                    <div className={`mt-1 font-semibold ${metrics.savings.people > 0 ? 'text-green-400' : 'text-slate-400'}`}>
+                    <div
+                        className={`mt-1 font-semibold ${metrics.savings.people > 0 ? 'text-green-400' : 'text-slate-400'}`}
+                    >
                         {metrics.savings.people > 0 ? `▼ ${metrics.savings.people}명 절감` : '—'}
                     </div>
                 </div>

@@ -15,8 +15,9 @@
 - 언어 지침: 모든 추론과정 표시는 물론 최종 답변도 한국어/한글로 작성한다.
 
 ## MCP Mandatory Workflow (triggered by user saying "mcp" or "mcp로")
-1) Sequential Thinking MCP: restate request, scope, constraints.
-2) Context7 + Tavily: fetch official guidance/best practices for relevant stack; note versions and pitfalls.
-3) Version/tech check: compare findings to project stack; if mismatch or conflict, stop and surface options.
-4) User confirmation: get approval on changes/versions before proceeding when mismatches exist.
-5) Shrimp Task Manager: plan with `plan_task`/`split_tasks`, then execute per plan.
+
+1. Sequential Thinking MCP: restate request, scope, constraints.
+2. Context7 + Tavily: fetch official guidance/best practices for relevant stack; note versions and pitfalls.
+3. Version/tech check: compare findings to project stack; if mismatch or conflict, stop and surface options.
+4. User confirmation: get approval on changes/versions before proceeding when mismatches exist.
+5. Shrimp Task Manager: plan with `plan_task`/`split_tasks`, then execute per plan.

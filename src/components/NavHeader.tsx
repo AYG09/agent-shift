@@ -35,9 +35,10 @@ export default function NavHeader() {
                             <Button
                                 variant={pathname === item.href ? 'default' : 'ghost'}
                                 size="sm"
-                                className={pathname === item.href
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                className={
+                                    pathname === item.href
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                                 }
                             >
                                 <span className="mr-1">{item.icon}</span>

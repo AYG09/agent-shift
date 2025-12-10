@@ -13,7 +13,16 @@ const frameworks = {
         name: "Kotter's 8 Steps",
         icon: '🔥',
         description: '긴급성 조성부터 문화 정착까지 8단계 체계적 변화 관리',
-        steps: ['긴급성 조성', '추진팀 구성', '비전 수립', '비전 전파', '장애물 제거', '단기 성과', '변화 가속', '문화 정착'],
+        steps: [
+            '긴급성 조성',
+            '추진팀 구성',
+            '비전 수립',
+            '비전 전파',
+            '장애물 제거',
+            '단기 성과',
+            '변화 가속',
+            '문화 정착',
+        ],
         color: 'from-orange-500 to-red-500',
         borderColor: 'border-orange-500/30',
     },
@@ -21,7 +30,13 @@ const frameworks = {
         name: 'ADKAR Model',
         icon: '🎯',
         description: '개인 변화에 초점을 맞춘 5단계 모델',
-        steps: ['Awareness (인식)', 'Desire (욕구)', 'Knowledge (지식)', 'Ability (능력)', 'Reinforcement (강화)'],
+        steps: [
+            'Awareness (인식)',
+            'Desire (욕구)',
+            'Knowledge (지식)',
+            'Ability (능력)',
+            'Reinforcement (강화)',
+        ],
         color: 'from-blue-500 to-cyan-500',
         borderColor: 'border-blue-500/30',
     },
@@ -41,10 +56,11 @@ export default function FrameworkCard({ id, selected, onSelect }: FrameworkCardP
     return (
         <Card
             className={`cursor-pointer transition-all duration-300 backdrop-blur-sm
-        ${selected
-                    ? `bg-gradient-to-br ${fw.color} bg-opacity-20 border-2 ${fw.borderColor} scale-105 shadow-lg`
-                    : 'bg-slate-800/70 border-slate-700 hover:border-slate-500 hover:scale-102'
-                }
+        ${
+            selected
+                ? `bg-gradient-to-br ${fw.color} bg-opacity-20 border-2 ${fw.borderColor} scale-105 shadow-lg`
+                : 'bg-slate-800/70 border-slate-700 hover:border-slate-500 hover:scale-102'
+        }
       `}
             onClick={() => onSelect?.(id)}
         >
@@ -79,7 +95,7 @@ export default function FrameworkCard({ id, selected, onSelect }: FrameworkCardP
 // 모든 프레임워크를 그리드로 표시
 export function FrameworkSelector({
     selected,
-    onSelect
+    onSelect,
 }: {
     selected?: 'kotter' | 'adkar' | 'lewin';
     onSelect?: (id: 'kotter' | 'adkar' | 'lewin') => void;
@@ -87,12 +103,7 @@ export function FrameworkSelector({
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {(['kotter', 'adkar', 'lewin'] as const).map((id) => (
-                <FrameworkCard
-                    key={id}
-                    id={id}
-                    selected={selected === id}
-                    onSelect={onSelect}
-                />
+                <FrameworkCard key={id} id={id} selected={selected === id} onSelect={onSelect} />
             ))}
         </div>
     );

@@ -28,10 +28,14 @@ import { useAppStore, FlowNode, FlowEdge } from '@/lib/store';
 interface FlowCanvasProps {
     onGenerateFlow?: () => void;
     isLoading?: boolean;
-    onNodeSplit?: (nodeId: string, flowType: 'asis' | 'tobe') => Promise<{ nodes: FlowNode[]; edges: FlowEdge[] } | null>;
+    onNodeSplit?: (
+        nodeId: string,
+        flowType: 'asis' | 'tobe'
+    ) => Promise<{ nodes: FlowNode[]; edges: FlowEdge[] } | null>;
+    onDrilldown?: (nodeId: string) => void;
 }
 
-export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: FlowCanvasProps) {
+export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onDrilldown }: FlowCanvasProps) {
     const {
         viewMode,
         setViewMode,
@@ -54,8 +58,15 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
     const [newNodePosition, setNewNodePosition] = useState({ x: 250, y: 100 });
 
     // Context Menu State
-    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string; nodeLabel: string } | null>(null);
+    const [contextMenu, setContextMenu] = useState<{
+        x: number;
+        y: number;
+        nodeId: string;
+        nodeLabel: string;
+    } | null>(null);
+
     const [isSplitting, setIsSplitting] = useState(false);
+    const [isHeatmapMode, setIsHeatmapMode] = useState(false);
 
     const target = viewMode === 'tobe' ? 'tobe' : 'asis';
 
@@ -73,6 +84,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
                     collaborationType: n.collaborationType,
                     agentDescription: n.agentDescription,
                     metrics: n.metrics,
+                    isHeatmapMode,
                 },
             }));
         }
@@ -81,9 +93,15 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
             id: n.id,
             type: n.type,
             position: n.position,
-            data: { label: n.label, description: n.description, stressLevel: n.stressLevel, metrics: n.metrics },
+            data: {
+                label: n.label,
+                description: n.description,
+                stressLevel: n.stressLevel,
+                metrics: n.metrics,
+                isHeatmapMode,
+            },
         }));
-    }, [viewMode, storeAsIsNodes, storeToBeNodes]);
+    }, [viewMode, storeAsIsNodes, storeToBeNodes, isHeatmapMode]);
 
     const currentEdges = useMemo(() => {
         if (viewMode === 'tobe') {
@@ -95,9 +113,17 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
     const storeNodes = viewMode === 'tobe' ? storeToBeNodes : storeAsIsNodes;
     const storeEdges = viewMode === 'tobe' ? storeToBeEdges : storeAsIsEdges;
 
-    const placeholderNodes: Node[] = useMemo(() => ([
-        { id: 'placeholder', type: 'process', position: { x: 250, y: 100 }, data: { label: '✨ AI 플로우 생성을 클릭하세요', stressLevel: 'low' } }
-    ]), []);
+    const placeholderNodes: Node[] = useMemo(
+        () => [
+            {
+                id: 'placeholder',
+                type: 'process',
+                position: { x: 250, y: 100 },
+                data: { label: '✨ AI 플로우 생성을 클릭하세요', stressLevel: 'low' },
+            },
+        ],
+        []
+    );
 
     const displayNodes = currentNodes.length > 0 ? currentNodes : placeholderNodes;
     const displayEdges = currentNodes.length > 0 ? currentEdges : [];
@@ -124,20 +150,23 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
     }, []);
 
     // 우클릭 컨텍스트 메뉴
-    const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
-        event.preventDefault();
-        if (node.id === 'placeholder') return;
+    const onNodeContextMenu = useCallback(
+        (event: React.MouseEvent, node: Node) => {
+            event.preventDefault();
+            if (node.id === 'placeholder') return;
 
-        const foundNode = storeNodes.find(n => n.id === node.id);
-        if (foundNode) {
-            setContextMenu({
-                x: event.clientX,
-                y: event.clientY,
-                nodeId: node.id,
-                nodeLabel: foundNode.label,
-            });
-        }
-    }, [storeNodes]);
+            const foundNode = storeNodes.find((n) => n.id === node.id);
+            if (foundNode) {
+                setContextMenu({
+                    x: event.clientX,
+                    y: event.clientY,
+                    nodeId: node.id,
+                    nodeLabel: foundNode.label,
+                });
+            }
+        },
+        [storeNodes]
+    );
 
     // 컨텍스트 메뉴 닫기
     const closeContextMenu = useCallback(() => {
@@ -147,7 +176,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
     // 편집
     const handleEdit = useCallback(() => {
         if (!contextMenu) return;
-        const foundNode = storeNodes.find(n => n.id === contextMenu.nodeId);
+        const foundNode = storeNodes.find((n) => n.id === contextMenu.nodeId);
         if (foundNode) {
             setEditingNode(foundNode);
             setEditorMode('edit');
@@ -159,7 +188,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
     // 복제
     const handleDuplicate = useCallback(() => {
         if (!contextMenu) return;
-        const foundNode = storeNodes.find(n => n.id === contextMenu.nodeId);
+        const foundNode = storeNodes.find((n) => n.id === contextMenu.nodeId);
         if (foundNode) {
             const newNode: FlowNode = {
                 ...foundNode,
@@ -182,7 +211,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
             const result = await onNodeSplit(contextMenu.nodeId, target);
 
             if (result && result.nodes.length > 0) {
-                const originalNode = storeNodes.find(n => n.id === contextMenu.nodeId);
+                const originalNode = storeNodes.find((n) => n.id === contextMenu.nodeId);
                 if (!originalNode) return;
 
                 // 기존 노드의 위치 기준으로 하위 노드 배치
@@ -193,12 +222,12 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
                 const newNodes = result.nodes.map((node, idx) => ({
                     ...node,
                     id: `${contextMenu.nodeId}-sub-${idx}`,
-                    position: { x: originalNode.position.x, y: baseY + (idx * spacing) },
+                    position: { x: originalNode.position.x, y: baseY + idx * spacing },
                 }));
 
                 // 기존 엣지에서 원본 노드 연결 찾기
-                const incomingEdges = storeEdges.filter(e => e.target === contextMenu.nodeId);
-                const outgoingEdges = storeEdges.filter(e => e.source === contextMenu.nodeId);
+                const incomingEdges = storeEdges.filter((e) => e.target === contextMenu.nodeId);
+                const outgoingEdges = storeEdges.filter((e) => e.source === contextMenu.nodeId);
 
                 // 새 엣지: 하위 노드들 연결 (순차)
                 const subEdges: FlowEdge[] = newNodes.slice(0, -1).map((node, idx) => ({
@@ -208,24 +237,26 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
                 }));
 
                 // 기존 incoming을 첫 번째 하위 노드로 연결
-                const reconnectedIncoming: FlowEdge[] = incomingEdges.map(e => ({
+                const reconnectedIncoming: FlowEdge[] = incomingEdges.map((e) => ({
                     ...e,
                     target: newNodes[0].id,
                 }));
 
                 // 기존 outgoing을 마지막 하위 노드에서 연결
-                const reconnectedOutgoing: FlowEdge[] = outgoingEdges.map(e => ({
+                const reconnectedOutgoing: FlowEdge[] = outgoingEdges.map((e) => ({
                     ...e,
                     source: newNodes[newNodes.length - 1].id,
                 }));
 
                 // 원본 노드와 관련 엣지 제거 후 새 노드/엣지 추가
                 const updatedNodes = [
-                    ...storeNodes.filter(n => n.id !== contextMenu.nodeId),
+                    ...storeNodes.filter((n) => n.id !== contextMenu.nodeId),
                     ...newNodes,
                 ];
                 const updatedEdges = [
-                    ...storeEdges.filter(e => e.source !== contextMenu.nodeId && e.target !== contextMenu.nodeId),
+                    ...storeEdges.filter(
+                        (e) => e.source !== contextMenu.nodeId && e.target !== contextMenu.nodeId
+                    ),
                     ...subEdges,
                     ...reconnectedIncoming,
                     ...reconnectedOutgoing,
@@ -242,7 +273,23 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
             setIsSplitting(false);
             closeContextMenu();
         }
-    }, [contextMenu, onNodeSplit, target, storeNodes, storeEdges, setAsIsFlow, setToBeFlow, closeContextMenu]);
+    }, [
+        contextMenu,
+        onNodeSplit,
+        target,
+        storeNodes,
+        storeEdges,
+        setAsIsFlow,
+        setToBeFlow,
+        closeContextMenu,
+    ]);
+
+    // 드릴다운
+    const handleDrilldown = useCallback(() => {
+        if (!contextMenu || !onDrilldown) return;
+        onDrilldown(contextMenu.nodeId);
+        closeContextMenu();
+    }, [contextMenu, onDrilldown, closeContextMenu]);
 
     // 삭제
     const handleDelete = useCallback(() => {
@@ -267,43 +314,60 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
     }, []);
 
     // 노드 이동 후 위치 저장
-    const handleNodesChange = useCallback((changes: NodeChange<Node>[]) => {
-        onNodesChange(changes);
+    const handleNodesChange = useCallback(
+        (changes: NodeChange<Node>[]) => {
+            onNodesChange(changes);
 
-        changes.forEach(change => {
-            if (change.type === 'position' && change.position && change.id !== 'placeholder') {
-                const posChange = change as NodePositionChange;
-                if (posChange.position) {
-                    updateNodePosition(change.id, posChange.position, target);
+            changes.forEach((change) => {
+                if (change.type === 'position' && change.position && change.id !== 'placeholder') {
+                    const posChange = change as NodePositionChange;
+                    if (posChange.position) {
+                        updateNodePosition(change.id, posChange.position, target);
+                    }
                 }
-            }
-        });
-    }, [onNodesChange, updateNodePosition, target]);
+            });
+        },
+        [onNodesChange, updateNodePosition, target]
+    );
 
     // 노드 저장 핸들러
-    const handleSaveNode = useCallback((data: { id?: string; label: string; description?: string; type: 'task' | 'decision' | 'subprocess' | 'agent'; stressLevel?: 'low' | 'medium' | 'high'; collaborationType?: 'copilot' | 'monitor' | 'autonomous' }) => {
-        if (editorMode === 'create') {
-            const newNode: FlowNode = {
-                id: `node-${Date.now()}`,
-                label: data.label,
-                description: data.description,
-                type: data.type,
-                stressLevel: data.stressLevel,
-                collaborationType: data.collaborationType,
-                position: newNodePosition,
-            };
-            addNode(newNode, target);
-        } else if (data.id) {
-            updateNode(data.id, {
-                label: data.label,
-                description: data.description,
-                type: data.type,
-                stressLevel: data.stressLevel,
-                collaborationType: data.collaborationType,
-            }, target);
-        }
-        setEditorOpen(false);
-    }, [editorMode, newNodePosition, addNode, updateNode, target]);
+    const handleSaveNode = useCallback(
+        (data: {
+            id?: string;
+            label: string;
+            description?: string;
+            type: 'task' | 'decision' | 'subprocess' | 'agent';
+            stressLevel?: 'low' | 'medium' | 'high';
+            collaborationType?: 'copilot' | 'monitor' | 'autonomous';
+        }) => {
+            if (editorMode === 'create') {
+                const newNode: FlowNode = {
+                    id: `node-${Date.now()}`,
+                    label: data.label,
+                    description: data.description,
+                    type: data.type,
+                    stressLevel: data.stressLevel,
+                    collaborationType: data.collaborationType,
+                    position: newNodePosition,
+                };
+                addNode(newNode, target);
+            } else if (data.id) {
+                updateNode(
+                    data.id,
+                    {
+                        label: data.label,
+                        description: data.description,
+                        type: data.type,
+                        stressLevel: data.stressLevel,
+                        collaborationType: data.collaborationType,
+                    },
+                    target
+                );
+            }
+            setEditorOpen(false);
+        },
+        [editorMode, newNodePosition, addNode, updateNode, target]
+    );
 
     // 노드 삭제 핸들러
     const handleDeleteNode = useCallback(() => {
@@ -315,7 +379,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
 
     // 새 노드 추가 버튼 핸들러
     const handleAddNewNode = () => {
-        const maxY = Math.max(0, ...currentNodes.map(n => n.position.y));
+        const maxY = Math.max(0, ...currentNodes.map((n) => n.position.y));
         setNewNodePosition({ x: 250, y: maxY + 100 });
         setEditingNode(null);
         setEditorMode('create');
@@ -360,20 +424,38 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
 
                 {/* View Mode Panel */}
                 <Panel position="top-left" className="flex gap-2">
-                    <Button size="sm" variant={viewMode === 'asis' ? 'default' : 'outline'} onClick={() => setViewMode('asis')} className="bg-white border-gray-200 text-gray-700 hover:bg-gray-100 shadow-sm">
+                    <Button
+                        size="sm"
+                        variant={viewMode === 'asis' ? 'default' : 'outline'}
+                        onClick={() => setViewMode('asis')}
+                        className="bg-white border-gray-200 text-gray-700 hover:bg-gray-100 shadow-sm"
+                    >
                         📊 As-Is
                     </Button>
-                    <Button size="sm" variant={viewMode === 'tobe' ? 'default' : 'outline'} onClick={() => setViewMode('tobe')} className="bg-white border-gray-200 text-gray-700 hover:bg-gray-100 shadow-sm">
+                    <Button
+                        size="sm"
+                        variant={viewMode === 'tobe' ? 'default' : 'outline'}
+                        onClick={() => setViewMode('tobe')}
+                        className="bg-white border-gray-200 text-gray-700 hover:bg-gray-100 shadow-sm"
+                    >
                         🤖 To-Be
                     </Button>
-                    <Button size="sm" variant={viewMode === 'split' ? 'default' : 'outline'} onClick={() => setViewMode('split')} className="bg-white border-gray-200 text-gray-700 hover:bg-gray-100 shadow-sm">
+                    <Button
+                        size="sm"
+                        variant={viewMode === 'split' ? 'default' : 'outline'}
+                        onClick={() => setViewMode('split')}
+                        className="bg-white border-gray-200 text-gray-700 hover:bg-gray-100 shadow-sm"
+                    >
                         ⚡ 비교
                     </Button>
                 </Panel>
 
                 {/* Breadcrumb */}
                 {drilldownPath.length > 0 && (
-                    <Panel position="top-center" className="bg-white/90 px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
+                    <Panel
+                        position="top-center"
+                        className="bg-white/90 px-4 py-2 rounded-lg border border-gray-200 shadow-sm"
+                    >
                         <div className="flex items-center gap-2 text-sm">
                             <span className="text-gray-400">📁</span>
                             {drilldownPath.map((id, idx) => (
@@ -388,6 +470,16 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
 
                 {/* Top Right Controls */}
                 <Panel position="top-right" className="flex gap-2">
+                    <Button
+                        size="sm"
+                        onClick={() => setIsHeatmapMode(!isHeatmapMode)}
+                        className={`${isHeatmapMode
+                                ? 'bg-red-600 hover:bg-red-500 text-white'
+                                : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'
+                            } shadow-sm border`}
+                    >
+                        {isHeatmapMode ? '🔥 Heatmap ON' : '🌡️ Heatmap OFF'}
+                    </Button>
                     <Button
                         size="sm"
                         onClick={handleAddNewNode}
@@ -405,9 +497,15 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
                 </Panel>
 
                 {/* Node Count Info */}
-                <Panel position="bottom-left" className="bg-slate-800/80 px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-400">
+                <Panel
+                    position="bottom-left"
+                    className="bg-slate-800/80 px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-400"
+                >
                     {currentNodes.length > 0 ? (
-                        <span>{viewMode === 'tobe' ? '🤖' : '📊'} {currentNodes.length}개 노드 | 우클릭: 메뉴 | 더블클릭: 추가</span>
+                        <span>
+                            {viewMode === 'tobe' ? '🤖' : '📊'} {currentNodes.length}개 노드 |
+                            우클릭: 메뉴 | 더블클릭: 추가
+                        </span>
                     ) : (
                         <span>노드 없음 | 더블클릭으로 추가</span>
                     )}
@@ -419,12 +517,12 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit }: F
                 <NodeContextMenu
                     x={contextMenu.x}
                     y={contextMenu.y}
-                    nodeId={contextMenu.nodeId}
                     nodeLabel={contextMenu.nodeLabel}
                     onClose={closeContextMenu}
                     onEdit={handleEdit}
                     onDuplicate={handleDuplicate}
                     onSplit={handleSplit}
+                    onDrilldown={handleDrilldown}
                     onDelete={handleDelete}
                     isLoading={isSplitting}
                 />

@@ -116,18 +116,15 @@ export function generateExcelWBS(data: {
     const worksheet = XLSX.utils.aoa_to_sheet(wbsData);
 
     // Set column widths
-    worksheet['!cols'] = [
-        { wch: 20 },
-        { wch: 10 },
-        { wch: 40 },
-        { wch: 15 },
-    ];
+    worksheet['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 15 }];
 
     XLSX.utils.book_append_sheet(workbook, worksheet, 'WBS');
 
     // Generate and download
     const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const blob = new Blob([excelBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
     downloadBlob(blob, 'agent-shift-wbs.xlsx');
 }
 

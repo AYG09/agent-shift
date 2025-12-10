@@ -133,10 +133,9 @@ const PdfReportDocument = ({ data }: { data: ReportData }) => {
         day: 'numeric',
     });
 
-    const agentCount = data.toBeNodes.filter(n => n.type === 'agent').length;
-    const automationRate = data.asIsNodes.length > 0
-        ? Math.round((agentCount / data.asIsNodes.length) * 100)
-        : 0;
+    const agentCount = data.toBeNodes.filter((n) => n.type === 'agent').length;
+    const automationRate =
+        data.asIsNodes.length > 0 ? Math.round((agentCount / data.asIsNodes.length) * 100) : 0;
 
     return (
         <Document>
@@ -187,7 +186,8 @@ const PdfReportDocument = ({ data }: { data: ReportData }) => {
                     <Text style={styles.sectionTitle}>📊 As-Is 현황 분석</Text>
                     {data.asIsNodes.map((node) => (
                         <Text key={node.id} style={styles.listItem}>
-                            • {node.label}{node.description ? ` - ${node.description}` : ''}
+                            • {node.label}
+                            {node.description ? ` - ${node.description}` : ''}
                         </Text>
                     ))}
                 </View>
@@ -205,12 +205,18 @@ const PdfReportDocument = ({ data }: { data: ReportData }) => {
                 {/* Strategy */}
                 {data.strategy && (
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>📈 실행 전략 ({data.strategy.framework})</Text>
+                        <Text style={styles.sectionTitle}>
+                            📈 실행 전략 ({data.strategy.framework})
+                        </Text>
                         {data.strategy.phases.slice(0, 4).map((phase, idx) => (
                             <View key={idx} style={styles.phaseCard}>
-                                <Text style={styles.phaseName}>{phase.name} ({phase.duration})</Text>
+                                <Text style={styles.phaseName}>
+                                    {phase.name} ({phase.duration})
+                                </Text>
                                 {phase.actions.map((action, aidx) => (
-                                    <Text key={aidx} style={styles.phaseAction}>• {action}</Text>
+                                    <Text key={aidx} style={styles.phaseAction}>
+                                        • {action}
+                                    </Text>
                                 ))}
                             </View>
                         ))}
