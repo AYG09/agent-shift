@@ -138,19 +138,7 @@ export default function SplitViewCanvas({
                     </ReactFlow>
                 </div>
 
-            {/* Center Controls - Heatmap toggle only */}
-            <div className="absolute left-1/2 top-4 -translate-x-1/2 z-40 flex gap-2">
-                <Button
-                    onClick={() => setIsHeatmapMode(!isHeatmapMode)}
-                    className={`${
-                        isHeatmapMode
-                            ? 'bg-red-500 hover:bg-red-600 text-white'
-                            : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
-                    } shadow-md transition-colors duration-300`}
-                >
-                    {isHeatmapMode ? '🔥 Heatmap ON' : '🌡️ Heatmap OFF'}
-                </Button>
-            </div>
+
 
             {/* After (To-Be) */}
             <div className="flex-1 relative">
@@ -182,6 +170,20 @@ export default function SplitViewCanvas({
 
             {/* Right Sidebar - ROI Summary Panel */}
             <div className="w-80 border-l border-slate-200 bg-slate-50/50 p-4 overflow-y-auto flex flex-col gap-4">
+                {/* Heatmap 토글 */}
+                <div className="flex-shrink-0">
+                    <Button
+                        onClick={() => setIsHeatmapMode(!isHeatmapMode)}
+                        className={`w-full ${
+                            isHeatmapMode
+                                ? 'bg-red-500 hover:bg-red-600 text-white'
+                                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+                        } shadow-sm transition-colors duration-300`}
+                    >
+                        {isHeatmapMode ? '🔥 Heatmap ON' : '🌡️ Heatmap OFF'}
+                    </Button>
+                </div>
+
                 <div className="flex-shrink-0">
                     <GapAnalysisSummary
                         asIsNodes={extractMetrics(asIsNodes)}
