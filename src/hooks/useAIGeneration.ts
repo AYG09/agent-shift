@@ -225,7 +225,7 @@ export function useAIGeneration() {
     const generateDrilldown = useCallback(
         async (
             context: { industry: string; role: string; task: string },
-            node: { id: string; label: string; description?: string; type: string },
+            node: { id: string; label: string; description?: string; type: string; collaborationType?: string },
             flowType: 'as-is' | 'to-be'
         ) => {
             setIsLoading(true);

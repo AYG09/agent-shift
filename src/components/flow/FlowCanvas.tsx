@@ -170,21 +170,90 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
         setEdges(newEdges as Edge[]);
     }, [currentNodes, currentEdges, placeholderNodes, setNodes, setEdges]);
 
+    // 노드 위치 기반으로 최적의 연결점(handle) 결정
+    const determineOptimalHandles = useCallback(
+        (sourceId: string, targetId: string, providedSourceHandle?: string | null, providedTargetHandle?: string | null) => {
+            // 사용자가 명시적으로 handle을 지정한 경우 그대로 사용
+            if (providedSourceHandle && providedTargetHandle) {
+                return { sourceHandle: providedSourceHandle, targetHandle: providedTargetHandle };
+            }
+
+            const sourceNodes = target === 'asis' ? storeAsIsNodes : storeToBeNodes;
+            const sourceNode = sourceNodes.find(n => n.id === sourceId);
+            const targetNode = sourceNodes.find(n => n.id === targetId);
+
+            if (!sourceNode || !targetNode) {
+                return { sourceHandle: 'bottom', targetHandle: 'top' };
+            }
+
+            const dx = targetNode.position.x - sourceNode.position.x;
+            const dy = targetNode.position.y - sourceNode.position.y;
+            const absDx = Math.abs(dx);
+            const absDy = Math.abs(dy);
+
+            // 마름모(decision) 노드 특별 처리: 분기점에서 나가는 연결
+            const isSourceDecision = sourceNode.type === 'decision';
+            
+            // 수직 이동이 더 큰 경우 (일반적인 위→아래 흐름)
+            if (absDy > absDx * 0.5) {
+                if (dy > 0) {
+                    // target이 아래에 있음: source의 bottom → target의 top
+                    return { sourceHandle: 'bottom', targetHandle: 'top' };
+                } else {
+                    // target이 위에 있음 (역방향): source의 top → target의 bottom
+                    return { sourceHandle: 'top', targetHandle: 'bottom' };
+                }
+            }
+            
+            // 수평 이동이 더 큰 경우 (분기)
+            if (dx > 0) {
+                // target이 오른쪽: source의 right → target의 left
+                // 마름모에서 나가는 분기일 경우 right 사용
+                return { 
+                    sourceHandle: isSourceDecision ? 'right' : 'right', 
+                    targetHandle: 'left' 
+                };
+            } else {
+                // target이 왼쪽: source의 left → target의 right
+                return { 
+                    sourceHandle: isSourceDecision ? 'left' : 'left', 
+                    targetHandle: 'right' 
+                };
+            }
+        },
+        [target, storeAsIsNodes, storeToBeNodes]
+    );
+
     const onConnect = useCallback(
         (connection: Connection) => {
+            // 위치 기반으로 최적의 handle 결정
+            const { sourceHandle, targetHandle } = determineOptimalHandles(
+                connection.source || '',
+                connection.target || '',
+                connection.sourceHandle,
+                connection.targetHandle
+            );
+
+            // 최적화된 연결 정보로 엣지 생성
+            const optimizedConnection: Connection = {
+                ...connection,
+                sourceHandle,
+                targetHandle,
+            };
+
             // 새 엣지를 로컬 상태에 추가
-            setEdges((eds) => addEdge(connection, eds));
+            setEdges((eds) => addEdge(optimizedConnection, eds));
             
             // Store에도 동기화 (handle 정보 포함)
-            const handleSuffix = connection.sourceHandle && connection.targetHandle 
-                ? `-${connection.sourceHandle}-${connection.targetHandle}` 
+            const handleSuffix = sourceHandle && targetHandle 
+                ? `-${sourceHandle}-${targetHandle}` 
                 : '';
             const newEdge: FlowEdge = {
                 id: `edge-${connection.source}-${connection.target}${handleSuffix}`,
                 source: connection.source || '',
                 target: connection.target || '',
-                sourceHandle: connection.sourceHandle || undefined,
-                targetHandle: connection.targetHandle || undefined,
+                sourceHandle: sourceHandle || undefined,
+                targetHandle: targetHandle || undefined,
             };
             
             if (target === 'asis') {
@@ -193,7 +262,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                 setToBeFlow(storeToBeNodes, [...storeToBeEdges, newEdge]);
             }
         },
-        [setEdges, target, storeAsIsNodes, storeAsIsEdges, storeToBeNodes, storeToBeEdges, setAsIsFlow, setToBeFlow]
+        [setEdges, target, storeAsIsNodes, storeAsIsEdges, storeToBeNodes, storeToBeEdges, setAsIsFlow, setToBeFlow, determineOptimalHandles]
     );
 
     // Edge 클릭 핸들러

@@ -261,17 +261,38 @@ export default function FlowPage() {
         label: string;
         description?: string;
         type: string;
+        collaborationType?: string;
     } | null>(null);
     const [drilldownResult, setDrilldownResult] = useState<{
+        flowType?: 'asis' | 'tobe';
         subSteps: Array<{
             id: string;
             label: string;
             description: string;
             duration?: string;
             tools?: string[];
-            aiPotential?: string;
+            // AS-IS 전용
+            painPoints?: string;
+            // TO-BE 전용
+            aiImplementation?: {
+                method: string;
+                technology: string[];
+                platforms?: string[];
+                automationLevel?: 'full' | 'partial' | 'assisted';
+            };
+            resources?: Array<{
+                type: 'youtube' | 'docs' | 'article' | 'tutorial';
+                title: string;
+                url?: string;
+                description?: string;
+            }>;
         }>;
         summary: string;
+        automationOverview?: {
+            totalTimeReduction?: string;
+            keyBenefits?: string[];
+            implementationTips?: string[];
+        };
     } | null>(null);
     const drilldownFlowType: 'as-is' | 'to-be' = viewMode === 'tobe' ? 'to-be' : 'as-is';
 
@@ -440,27 +461,51 @@ export default function FlowPage() {
             label: node.label,
             description: node.description,
             type: node.type,
+            collaborationType: node.collaborationType,
         });
 
         const flowType = viewMode === 'tobe' ? 'to-be' : 'as-is';
 
         const result = await generateDrilldown(
             { industry: context.industry, role: context.role, task: context.task },
-            { id: node.id, label: node.label, description: node.description, type: node.type },
+            { id: node.id, label: node.label, description: node.description, type: node.type, collaborationType: node.collaborationType },
             flowType
         );
 
         if (result) {
             setDrilldownResult({
-                subSteps: result.subSteps.map((step: { id: string; label: string; description: string; duration?: string; tools?: string[]; aiPotential?: string }) => ({
+                flowType: viewMode === 'tobe' ? 'tobe' : 'asis',
+                subSteps: result.subSteps.map((step: { 
+                    id: string; 
+                    label: string; 
+                    description: string; 
+                    duration?: string; 
+                    tools?: string[];
+                    painPoints?: string;
+                    aiImplementation?: {
+                        method: string;
+                        technology: string[];
+                        platforms?: string[];
+                        automationLevel?: 'full' | 'partial' | 'assisted';
+                    };
+                    resources?: Array<{
+                        type: 'youtube' | 'docs' | 'article' | 'tutorial';
+                        title: string;
+                        url?: string;
+                        description?: string;
+                    }>;
+                }) => ({
                     id: step.id,
                     label: step.label,
                     description: step.description,
                     duration: step.duration,
                     tools: step.tools,
-                    aiPotential: step.aiPotential
+                    painPoints: step.painPoints,
+                    aiImplementation: step.aiImplementation,
+                    resources: step.resources,
                 })),
-                summary: result.summary
+                summary: result.summary,
+                automationOverview: result.automationOverview,
             });
         }
     };
@@ -1255,6 +1300,33 @@ export default function FlowPage() {
                                 {drilldownResult.summary}
                             </div>
 
+                            {/* TO-BE: 자동화 개요 섹션 */}
+                            {drilldownFlowType === 'to-be' && drilldownResult.automationOverview && (
+                                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                                    <div className="text-sm font-semibold text-blue-800 mb-2">⚡ AI 자동화 효과</div>
+                                    {drilldownResult.automationOverview.totalTimeReduction && (
+                                        <div className="text-lg font-bold text-blue-600 mb-2">
+                                            {drilldownResult.automationOverview.totalTimeReduction}
+                                        </div>
+                                    )}
+                                    {drilldownResult.automationOverview.keyBenefits && (
+                                        <ul className="text-xs text-blue-700 space-y-1 mb-2">
+                                            {drilldownResult.automationOverview.keyBenefits.map((benefit, i) => (
+                                                <li key={i}>✅ {benefit}</li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                    {drilldownResult.automationOverview.implementationTips && (
+                                        <div className="text-xs text-blue-600 mt-2 pt-2 border-t border-blue-200">
+                                            <div className="font-medium mb-1">💡 구현 팁:</div>
+                                            {drilldownResult.automationOverview.implementationTips.map((tip, i) => (
+                                                <div key={i} className="ml-2">• {tip}</div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {drilldownResult.subSteps.map((step, idx) => (
                                 <div
                                     key={step.id}
@@ -1288,9 +1360,80 @@ export default function FlowPage() {
                                                 ))}
                                             </div>
 
-                                            {step.aiPotential && (
-                                                <div className="mt-2 text-xs text-[#3B82F6] bg-blue-50 p-2 rounded">
-                                                    🤖 {step.aiPotential}
+                                            {/* AS-IS: 어려움/비효율 표시 */}
+                                            {drilldownFlowType === 'as-is' && step.painPoints && (
+                                                <div className="mt-2 text-xs text-orange-700 bg-orange-50 p-2 rounded border border-orange-200">
+                                                    ⚠️ {step.painPoints}
+                                                </div>
+                                            )}
+
+                                            {/* TO-BE: AI 구현 방법 상세 */}
+                                            {drilldownFlowType === 'to-be' && step.aiImplementation && (
+                                                <div className="mt-3 space-y-2">
+                                                    <div className="text-xs text-blue-700 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                                        <div className="font-semibold mb-1">🤖 AI 처리 방법</div>
+                                                        <div className="text-blue-600">{step.aiImplementation.method}</div>
+                                                        
+                                                        <div className="flex flex-wrap gap-1 mt-2">
+                                                            {step.aiImplementation.technology?.map((tech) => (
+                                                                <span key={tech} className="text-[10px] bg-blue-100 px-1.5 py-0.5 rounded">
+                                                                    {tech}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                        
+                                                        {step.aiImplementation.platforms && step.aiImplementation.platforms.length > 0 && (
+                                                            <div className="mt-2 pt-2 border-t border-blue-200">
+                                                                <div className="text-[10px] text-blue-500 mb-1">구현 플랫폼:</div>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {step.aiImplementation.platforms.map((platform) => (
+                                                                        <span key={platform} className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                                                                            {platform}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        
+                                                        {step.aiImplementation.automationLevel && (
+                                                            <div className="mt-2 text-[10px]">
+                                                                자동화 수준: {
+                                                                    step.aiImplementation.automationLevel === 'full' ? '🟢 완전 자동' :
+                                                                    step.aiImplementation.automationLevel === 'partial' ? '🟡 부분 자동' :
+                                                                    '🔵 AI 보조'
+                                                                }
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* 학습 리소스 */}
+                                                    {step.resources && step.resources.length > 0 && (
+                                                        <div className="text-xs bg-purple-50 p-3 rounded-lg border border-purple-200">
+                                                            <div className="font-semibold text-purple-700 mb-2">📚 학습 자료</div>
+                                                            {step.resources.map((resource, ri) => (
+                                                                <div key={ri} className="mb-2 last:mb-0">
+                                                                    <div className="flex items-center gap-1">
+                                                                        <span className="text-[10px]">
+                                                                            {resource.type === 'youtube' ? '▶️' :
+                                                                             resource.type === 'docs' ? '📄' :
+                                                                             resource.type === 'article' ? '📰' : '🎓'}
+                                                                        </span>
+                                                                        <span className="font-medium text-purple-800">{resource.title}</span>
+                                                                    </div>
+                                                                    {resource.url && (
+                                                                        <div className="text-[10px] text-purple-600 ml-4">
+                                                                            🔍 검색: {resource.url}
+                                                                        </div>
+                                                                    )}
+                                                                    {resource.description && (
+                                                                        <div className="text-[10px] text-purple-500 ml-4 mt-0.5">
+                                                                            {resource.description}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>

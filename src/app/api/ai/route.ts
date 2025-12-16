@@ -187,13 +187,13 @@ ${frameworkGuide[framework] || framework}
 5. 예상 리스크와 완화 방안을 2~3개 제시하세요.`;
 }
 
-function getDrilldownPrompt(
+// AS-IS 전용 드릴다운 프롬프트: 인간 작업 과정만 상세 분석
+function getDrilldownPromptAsIs(
     node: { id: string; label: string; description?: string; type: string },
-    context: { industry: string; role: string; task: string },
-    flowType: string
+    context: { industry: string; role: string; task: string }
 ) {
-    return `당신은 업무 프로세스 세분화 전문가입니다.
-다음 프로세스 단계를 더 세부적인 하위 단계로 분해해주세요.
+    return `당신은 업무 프로세스 분석 전문가입니다.
+다음 프로세스 단계를 **인간이 수행하는 관점**에서 세부적으로 분해해주세요.
 
 ## 업무 정보
 - 산업: ${context.industry}
@@ -205,16 +205,99 @@ function getDrilldownPrompt(
 - 이름: ${node.label}
 - 설명: ${node.description || '없음'}
 - 타입: ${node.type}
-- 플로우 종류: ${flowType} (As-Is 또는 To-Be)
+
+## 중요 지침 ⚠️
+이것은 **As-Is (현재 상태)** 분석입니다.
+- AI 자동화, AI 도입, AI 대체 가능성은 **절대 언급하지 마세요**
+- 오직 **인간이 현재 이 작업을 어떻게 수행하는지**만 분석하세요
 
 ## 요구사항
 1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
 2. 각 하위 단계에 대해:
-   - 구체적인 활동 description (2~3문장)
-   - 예상 소요 시간 duration
-   - 사용되는 도구 tools 배열
-   - AI 자동화 가능성 aiPotential (${flowType === 'to-be' ? '현재 AI가 어떻게 처리하는지' : 'AI로 대체 가능한지 여부와 방법'})
-3. summary에 전체 요약을 작성하세요.`;
+   - **description**: 담당자가 수행하는 구체적인 활동 (2~3문장)
+   - **duration**: 예상 소요 시간
+   - **tools**: 사용되는 도구 (엑셀, 이메일, 워드 등)
+   - **painPoints**: 이 단계에서 겪는 어려움, 비효율, 실수 가능성 (1~2문장)
+3. **summary**: 전체 과정 요약과 주요 병목점
+
+## 응답 형식
+- flowType: "asis"
+- subSteps 배열에 각 하위 단계
+- aiImplementation, resources 필드는 **생략** (null 또는 undefined)`;
+}
+
+// TO-BE 전용 드릴다운 프롬프트: AI 자동화 구현 방법 상세 안내
+function getDrilldownPromptToBe(
+    node: { id: string; label: string; description?: string; type: string; collaborationType?: string },
+    context: { industry: string; role: string; task: string }
+) {
+    return `당신은 AI 자동화 구현 전문가이자 기술 교육자입니다.
+다음 프로세스 단계가 AI로 어떻게 자동화되는지 **구체적이고 실용적으로** 설명해주세요.
+
+## 업무 정보
+- 산업: ${context.industry}
+- 직무: ${context.role}  
+- 전체 업무: ${context.task}
+
+## 분석 대상 노드 (AI 자동화 단계)
+- ID: ${node.id}
+- 이름: ${node.label}
+- 설명: ${node.description || '없음'}
+- 협업 유형: ${node.collaborationType || 'copilot'} (copilot=인간+AI 협력, autonomous=AI 독립 수행, monitor=인간 감독)
+
+## 중요 지침 ⚠️
+이것은 **To-Be (AI 도입 후)** 분석입니다.
+- 이 단계는 이미 AI가 처리하는 것으로 계획되어 있습니다
+- **AI가 구체적으로 어떻게 이 작업을 수행하는지** 설명하세요
+- 비전문가도 이해할 수 있게 쉽게 설명하세요
+- 실제로 구현 가능한 방법을 제시하세요
+
+## 요구사항
+1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
+2. 각 하위 단계에 대해:
+   - **description**: AI가 수행하는 구체적인 작업 설명 (2~3문장)
+   - **duration**: AI 처리 예상 시간 (대부분 초~분 단위로 단축)
+   - **tools**: 사용되는 AI 도구/플랫폼
+   - **aiImplementation**: 필수! 아래 형식으로 작성
+     - method: AI가 이 작업을 처리하는 구체적 방법 (예: "이메일 본문을 NLP로 분석하여 핵심 키워드를 추출하고, 미리 정의된 카테고리에 자동 분류")
+     - technology: 사용 기술 배열 (예: ["LLM", "NLP", "OCR", "RPA"])
+     - platforms: 구현 가능한 플랫폼 (예: ["Microsoft 365 Copilot", "Google Gemini", "Power Automate"])
+     - automationLevel: "full"(완전자동), "partial"(부분자동), "assisted"(AI보조)
+   - **resources**: 학습 자료 1~2개 (필수!)
+     - type: "youtube", "docs", "article", "tutorial" 중 택일
+     - title: 자료 제목 (예: "Power Automate로 이메일 자동 분류하기")
+     - url: 검색 키워드 또는 추천 검색어 (예: "Power Automate email classification tutorial")
+     - description: 이 자료가 도움이 되는 이유
+
+3. **summary**: AI 도입으로 인한 효율성 향상 요약
+4. **automationOverview**: 전체 자동화 개요
+   - totalTimeReduction: 예상 시간 절감률 (예: "기존 60분 → 5분, 92% 절감")
+   - keyBenefits: 핵심 이점 3가지
+   - implementationTips: 실무 구현 시 유의사항 2~3가지
+
+## 실제 기업 AI 도구 예시 (참고)
+- **Microsoft 365 Copilot**: Word/Excel/Outlook/Teams에서 AI 지원
+- **Power Automate**: 워크플로우 자동화, AI Builder 포함
+- **Google Workspace + Gemini**: 문서/이메일/스프레드시트 AI 지원
+- **Zapier + AI**: 앱 간 자동화 + AI 처리
+- **ChatGPT API / Claude API**: 커스텀 AI 에이전트 구축
+
+## 응답 형식
+- flowType: "tobe"
+- subSteps 배열에 각 하위 단계 (aiImplementation, resources 필수!)
+- painPoints 필드는 **생략**`;
+}
+
+function getDrilldownPrompt(
+    node: { id: string; label: string; description?: string; type: string; collaborationType?: string },
+    context: { industry: string; role: string; task: string },
+    flowType: string
+) {
+    // flowType에 따라 완전히 다른 프롬프트 반환
+    if (flowType === 'tobe' || flowType === 'to-be') {
+        return getDrilldownPromptToBe(node, context);
+    }
+    return getDrilldownPromptAsIs(node, context);
 }
 
 export async function POST(request: NextRequest) {

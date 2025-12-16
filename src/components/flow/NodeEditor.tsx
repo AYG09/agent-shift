@@ -28,6 +28,11 @@ interface NodeData {
     shape?: 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
     stressLevel?: 'low' | 'medium' | 'high';
     collaborationType?: 'copilot' | 'monitor' | 'autonomous';
+    metrics?: {
+        timeMinutes?: number;
+        costKRW?: number;
+        peopleCount?: number;
+    };
 }
 
 interface NodeEditorProps {
@@ -56,6 +61,9 @@ export default function NodeEditor({
     const [stressLevel, setStressLevel] = useState<NodeData['stressLevel']>('low');
     const [collaborationType, setCollaborationType] =
         useState<NodeData['collaborationType']>('copilot');
+    const [timeMinutes, setTimeMinutes] = useState<number | undefined>(undefined);
+    const [costKRW, setCostKRW] = useState<number | undefined>(undefined);
+    const [peopleCount, setPeopleCount] = useState<number | undefined>(undefined);
 
     const resetForm = () => {
         setLabel('');
@@ -64,6 +72,9 @@ export default function NodeEditor({
         setShape(undefined); // Reset to default
         setStressLevel('low');
         setCollaborationType('copilot');
+        setTimeMinutes(undefined);
+        setCostKRW(undefined);
+        setPeopleCount(undefined);
     };
 
     useEffect(() => {
@@ -75,6 +86,9 @@ export default function NodeEditor({
             setShape(initialData.shape);
             setStressLevel(initialData.stressLevel || 'low');
             setCollaborationType(initialData.collaborationType || 'copilot');
+            setTimeMinutes(initialData.metrics?.timeMinutes);
+            setCostKRW(initialData.metrics?.costKRW);
+            setPeopleCount(initialData.metrics?.peopleCount);
         } else {
             resetForm();
         }
@@ -90,6 +104,11 @@ export default function NodeEditor({
             shape, // Save shape
             stressLevel: type !== 'agent' ? stressLevel : undefined,
             collaborationType: type === 'agent' ? collaborationType : undefined,
+            metrics: {
+                timeMinutes,
+                costKRW,
+                peopleCount,
+            },
         });
         onClose();
     };
@@ -162,6 +181,46 @@ export default function NodeEditor({
                                 <SelectItem value="hexagon">🛑 육각형 (에이전트)</SelectItem>
                             </SelectContent>
                         </Select>
+                    </div>
+
+                    {/* Metrics Section */}
+                    <div className="space-y-3 p-3 bg-[#F4F4F5]/50 rounded-lg border border-[#E2E4E9]">
+                        <Label className="text-[#71717A] font-medium">📊 노드 메트릭 (선택 사항)</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                            <div className="space-y-1">
+                                <Label className="text-[#A1A1AA] text-xs">⏱️ 소요시간 (분)</Label>
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    value={timeMinutes ?? ''}
+                                    onChange={(e) => setTimeMinutes(e.target.value ? Number(e.target.value) : undefined)}
+                                    placeholder="60"
+                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#D4D4D8] h-8 text-sm"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label className="text-[#A1A1AA] text-xs">💰 비용 (원)</Label>
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    value={costKRW ?? ''}
+                                    onChange={(e) => setCostKRW(e.target.value ? Number(e.target.value) : undefined)}
+                                    placeholder="50000"
+                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#D4D4D8] h-8 text-sm"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <Label className="text-[#A1A1AA] text-xs">👥 인원 (명)</Label>
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    value={peopleCount ?? ''}
+                                    onChange={(e) => setPeopleCount(e.target.value ? Number(e.target.value) : undefined)}
+                                    placeholder="2"
+                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#D4D4D8] h-8 text-sm"
+                                />
+                            </div>
+                        </div>
                     </div>
 
                     {/* Stress Level (for non-agent) */}

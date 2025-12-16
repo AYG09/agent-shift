@@ -109,9 +109,10 @@ export type AsIsFlowResponse = z.infer<typeof AsIsFlowResponseSchema>;
 export type ToBeFlowResponse = z.infer<typeof ToBeFlowResponseSchema>;
 export type ChangeStrategyResponse = z.infer<typeof ChangeStrategyResponseSchema>;
 
-// 드릴다운 응답 스키마
+// 드릴다운 응답 스키마 (AS-IS/TO-BE 분리)
 export const DrilldownResponseSchema = z.object({
     parentNodeId: z.string(),
+    flowType: z.enum(['asis', 'tobe']).optional(), // 어떤 플로우인지 명시
     subSteps: z.array(
         z.object({
             id: z.string(),
@@ -119,10 +120,31 @@ export const DrilldownResponseSchema = z.object({
             description: z.string(),
             duration: z.string().optional(),
             tools: z.array(z.string()).optional(),
-            aiPotential: z.string().optional(), // AI 자동화 가능성 설명
+            // AS-IS 전용: 인간이 겪는 어려움/비효율
+            painPoints: z.string().optional(),
+            // TO-BE 전용: AI 구현 방법 상세
+            aiImplementation: z.object({
+                method: z.string(), // AI가 어떻게 처리하는지 상세 설명
+                technology: z.array(z.string()), // 사용 기술 (LLM, RPA, OCR 등)
+                platforms: z.array(z.string()).optional(), // MS365 Copilot, Google AI 등
+                automationLevel: z.enum(['full', 'partial', 'assisted']).optional(),
+            }).optional(),
+            // TO-BE 전용: 학습 리소스
+            resources: z.array(z.object({
+                type: z.enum(['youtube', 'docs', 'article', 'tutorial']),
+                title: z.string(),
+                url: z.string().optional(), // 실제 URL 또는 검색 키워드
+                description: z.string().optional(),
+            })).optional(),
         })
     ),
     summary: z.string(),
+    // TO-BE 전용: 전체 자동화 개요
+    automationOverview: z.object({
+        totalTimeReduction: z.string().optional(),
+        keyBenefits: z.array(z.string()).optional(),
+        implementationTips: z.array(z.string()).optional(),
+    }).optional(),
 });
 
 export type DrilldownResponse = z.infer<typeof DrilldownResponseSchema>;
