@@ -218,6 +218,9 @@ ${JSON.stringify(asIsNodes, null, 2)}
 - agentDescription: 100자 이내 (예: "LLM으로 문서 요약 후 인간이 검토")
 - description: 60자 이내
 - 모든 숫자는 정수만
+- metrics: { duration: 정수, durationUnit: 'minutes'|'hours'|'days'|'weeks'|'months' }
+  - AI 자동화 단계는 대폭 단축된 시간 반영
+  - As-Is 대비 절감률을 반영한 현실적 시간 추정
 
 ## 노드 배치 (수직 플로우)
 - x=250, y=0부터 100 간격
