@@ -2,10 +2,10 @@ import { z } from 'zod';
 
 // 노드 메트릭 스키마 - 다양한 시간 단위 지원 (분/시간/일/주/월)
 export const NodeMetricsSchema = z.object({
-    timeMinutes: z.number().int().optional().describe('하위 호환성용 시간(분)'),
-    duration: z.number().int().optional().describe('소요 시간 (정수)'),
-    durationUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months']).optional().describe('시간 단위'),
-});
+    timeMinutes: z.number().int().optional().describe('하위 호환성용 (사용하지 말 것)'),
+    duration: z.number().int().optional().describe('소요 시간 (필수, 정수)'),
+    durationUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months']).optional().describe('시간 단위 (필수)'),
+}).describe('시간 메트릭 - 모든 노드에 필수로 포함');
 
 // 노드 스키마 - .describe()로 모델에 명확한 지시, .max()로 JSON Schema maxLength 강제
 export const FlowNodeSchema = z.object({
@@ -22,7 +22,7 @@ export const FlowNodeSchema = z.object({
         x: z.number(),
         y: z.number(),
     }),
-    metrics: NodeMetricsSchema.optional(),
+    metrics: NodeMetricsSchema.optional().describe('시간 메트릭 (반드시 포함: duration, durationUnit)'),
 });
 
 // 엣지 스키마
