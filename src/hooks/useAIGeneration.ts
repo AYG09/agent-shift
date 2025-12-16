@@ -35,6 +35,18 @@ function safeGetStorageItem(key: string): string | null {
     }
 }
 
+// 수직 플로우를 위한 엣지 핸들 보정 (AI가 handle 누락 시 기본값 적용)
+function normalizeEdgeHandles<T extends { edges: Array<{ id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }> }>(data: T): T {
+    return {
+        ...data,
+        edges: data.edges.map(edge => ({
+            ...edge,
+            sourceHandle: edge.sourceHandle || 'bottom',
+            targetHandle: edge.targetHandle || 'top',
+        })),
+    };
+}
+
 export function useAIGeneration() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -99,7 +111,9 @@ export function useAIGeneration() {
                     throw new Error(errorData.error || 'AI 생성 실패');
                 }
 
-                const data = await response.json();
+                const rawData = await response.json();
+                // 엣지 핸들 보정 (수직 플로우용 bottom→top)
+                const data = normalizeEdgeHandles(rawData);
 
                 // 3. Save Cache
                 setCachedData(cacheKey, data);
@@ -150,7 +164,9 @@ export function useAIGeneration() {
                     throw new Error(errorData.error || 'AI 생성 실패');
                 }
 
-                const data = await response.json();
+                const rawData = await response.json();
+                // 엣지 핸들 보정 (수직 플로우용 bottom→top)
+                const data = normalizeEdgeHandles(rawData);
                 setCachedData(cacheKey, data);
                 return data;
             } catch (err) {

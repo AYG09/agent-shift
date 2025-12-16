@@ -359,7 +359,6 @@ export function CollaborativeFlowCanvas() {
                     onClose={closeContextMenu}
                     onEdit={handleEditNode}
                     onDuplicate={() => {}} // 협업 모드에서는 사용 안 함
-                    onSplit={() => {}} // 협업 모드에서는 사용 안 함
                     onDrilldown={() => {}} // 협업 모드에서는 사용 안 함
                     onDelete={handleDeleteNode}
                 />

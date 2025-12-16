@@ -644,7 +644,6 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                     onClose={closeContextMenu}
                     onEdit={handleEdit}
                     onDuplicate={handleDuplicate}
-                    onSplit={handleSplit}
                     onDrilldown={handleDrilldown}
                     onDelete={handleDelete}
                     isLoading={isSplitting}

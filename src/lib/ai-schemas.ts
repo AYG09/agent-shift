@@ -31,6 +31,8 @@ export const FlowEdgeSchema = z.object({
     id: z.string(),
     source: z.string(),
     target: z.string(),
+    sourceHandle: z.enum(['top', 'right', 'bottom', 'left']).optional().default('bottom'),
+    targetHandle: z.enum(['top', 'right', 'bottom', 'left']).optional().default('top'),
 });
 
 // As-Is 플로우 응답 스키마

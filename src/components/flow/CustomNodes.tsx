@@ -138,38 +138,74 @@ const NodeShapeWrapper = ({
 
     return (
         <div className={baseStyle} onClick={onClick}>
-            {/* 4-way Handles */}
+            {/* 4-way Handles - 각 방향별로 source/target 모두 지원 */}
             {handles.top && (
-                <Handle
-                    type="target"
-                    position={Position.Top}
-                    id="top"
-                    className="!bg-slate-300 w-3 h-3 border-2 border-white"
-                />
+                <>
+                    <Handle
+                        type="target"
+                        position={Position.Top}
+                        id="top"
+                        className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                    />
+                    <Handle
+                        type="source"
+                        position={Position.Top}
+                        id="top-source"
+                        className="!bg-slate-300 w-3 h-3 border-2 border-white !opacity-0 pointer-events-auto"
+                        style={{ top: 0 }}
+                    />
+                </>
             )}
             {handles.right && (
-                <Handle
-                    type="source"
-                    position={Position.Right}
-                    id="right"
-                    className="!bg-slate-300 w-3 h-3 border-2 border-white"
-                />
+                <>
+                    <Handle
+                        type="source"
+                        position={Position.Right}
+                        id="right"
+                        className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                    />
+                    <Handle
+                        type="target"
+                        position={Position.Right}
+                        id="right-target"
+                        className="!bg-slate-300 w-3 h-3 border-2 border-white !opacity-0 pointer-events-auto"
+                        style={{ right: 0 }}
+                    />
+                </>
             )}
             {handles.bottom && (
-                <Handle
-                    type="source"
-                    position={Position.Bottom}
-                    id="bottom"
-                    className="!bg-slate-300 w-3 h-3 border-2 border-white"
-                />
+                <>
+                    <Handle
+                        type="source"
+                        position={Position.Bottom}
+                        id="bottom"
+                        className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                    />
+                    <Handle
+                        type="target"
+                        position={Position.Bottom}
+                        id="bottom-target"
+                        className="!bg-slate-300 w-3 h-3 border-2 border-white !opacity-0 pointer-events-auto"
+                        style={{ bottom: 0 }}
+                    />
+                </>
             )}
             {handles.left && (
-                <Handle
-                    type="target"
-                    position={Position.Left}
-                    id="left"
-                    className="!bg-slate-300 w-3 h-3 border-2 border-white"
-                />
+                <>
+                    <Handle
+                        type="target"
+                        position={Position.Left}
+                        id="left"
+                        className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                    />
+                    <Handle
+                        type="source"
+                        position={Position.Left}
+                        id="left-source"
+                        className="!bg-slate-300 w-3 h-3 border-2 border-white !opacity-0 pointer-events-auto"
+                        style={{ left: 0 }}
+                    />
+                </>
             )}
 
             {/* Content Area */}

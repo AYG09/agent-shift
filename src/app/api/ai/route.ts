@@ -75,7 +75,10 @@ ${context.painPoints ? `- 주요 고충/문제점: ${context.painPoints}` : ''}
 - peopleCount: 관련 인원 수 (정수만 예: 2)
 - errorRate: 예상 오류율 (%, 정수만 예: 5)
 
-노드 배치: 모든 노드의 x는 250, y는 0부터 120 간격으로 배치하세요.`;
+## 중요: 노드 및 엣지 배치 규칙 (⬇️ 수직 플로우)
+- 모든 노드의 x는 250, y는 0부터 120 간격으로 배치하세요.
+- 엣지(edges)는 반드시 sourceHandle='bottom', targetHandle='top' 으로 설정하세요.
+- 예시: { "id": "e1", "source": "node1", "target": "node2", "sourceHandle": "bottom", "targetHandle": "top" }`;
 }
 
 function getToBePrompt(
@@ -149,7 +152,10 @@ ${JSON.stringify(asIsNodes, null, 2)}
 - peopleCount: 관련 인원 수 (정수만 예: 1)
 - errorRate: 예상 오류율 (%, 정수만 예: 2)
 
-노드 배치: 모든 노드의 x는 250, y는 0부터 100 간격으로 배치하세요.`;
+## 중요: 노드 및 엣지 배치 규칙 (⬇️ 수직 플로우)
+- 모든 노드의 x는 250, y는 0부터 100 간격으로 배치하세요.
+- 엣지(edges)는 반드시 sourceHandle='bottom', targetHandle='top' 으로 설정하세요.
+- 예시: { "id": "e1", "source": "node1", "target": "node2", "sourceHandle": "bottom", "targetHandle": "top" }`;
 }
 
 function getStrategyPrompt(

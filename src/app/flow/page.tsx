@@ -465,6 +465,81 @@ export default function FlowPage() {
         }
     };
 
+    // 드릴다운 결과를 플로우에 적용 (기존 노드를 세부 단계로 대체)
+    const applyDrilldownToFlow = () => {
+        if (!drilldownNode || !drilldownResult) return;
+
+        const targetNodes = viewMode === 'tobe' ? toBeNodes : asIsNodes;
+        const targetEdges = viewMode === 'tobe' ? toBeEdges : asIsEdges;
+        
+        const originalNode = targetNodes.find((n) => n.id === drilldownNode.id);
+        if (!originalNode) return;
+
+        // 새 노드들 생성 (기존 노드 위치 기준으로 배치)
+        const baseY = originalNode.position.y;
+        const spacing = 100;
+
+        const newNodes: typeof targetNodes = drilldownResult.subSteps.map((step, idx) => ({
+            id: `${drilldownNode.id}-step-${idx}`,
+            type: 'task' as const, // FlowNode 타입에 맞게 'task' 사용
+            label: step.label,
+            description: step.description,
+            stressLevel: 'low' as const,
+            position: { x: originalNode.position.x, y: baseY + idx * spacing },
+        }));
+
+        // 기존 엣지에서 원본 노드 연결 찾기
+        const incomingEdges = targetEdges.filter((e) => e.target === drilldownNode.id);
+        const outgoingEdges = targetEdges.filter((e) => e.source === drilldownNode.id);
+
+        // 새 엣지: 하위 노드들 순차 연결
+        const subEdges = newNodes.slice(0, -1).map((node, idx) => ({
+            id: `edge-${node.id}-to-${newNodes[idx + 1].id}`,
+            source: node.id,
+            target: newNodes[idx + 1].id,
+            sourceHandle: 'bottom',
+            targetHandle: 'top',
+        }));
+
+        // 기존 incoming을 첫 번째 하위 노드로 연결
+        const reconnectedIncoming = incomingEdges.map((e) => ({
+            ...e,
+            target: newNodes[0].id,
+            targetHandle: 'top',
+        }));
+
+        // 기존 outgoing을 마지막 하위 노드에서 연결
+        const reconnectedOutgoing = outgoingEdges.map((e) => ({
+            ...e,
+            source: newNodes[newNodes.length - 1].id,
+            sourceHandle: 'bottom',
+        }));
+
+        // 업데이트된 노드/엣지 배열
+        const updatedNodes = [
+            ...targetNodes.filter((n) => n.id !== drilldownNode.id),
+            ...newNodes,
+        ];
+        const updatedEdges = [
+            ...targetEdges.filter(
+                (e) => e.source !== drilldownNode.id && e.target !== drilldownNode.id
+            ),
+            ...subEdges,
+            ...reconnectedIncoming,
+            ...reconnectedOutgoing,
+        ];
+
+        // Store 업데이트
+        if (viewMode === 'tobe') {
+            setToBeFlow(updatedNodes, updatedEdges);
+        } else {
+            setAsIsFlow(updatedNodes, updatedEdges);
+        }
+
+        // 다이얼로그 닫기
+        closeDrilldown();
+    };
+
     // 드릴다운 다이얼로그 닫기
     const closeDrilldown = () => {
         setDrilldownNode(null);
@@ -1222,6 +1297,20 @@ export default function FlowPage() {
                                     </div>
                                 </div>
                             ))}
+
+                            {/* 플로우에 적용 버튼 */}
+                            <motion.button
+                                onClick={applyDrilldownToFlow}
+                                className="w-full mt-4 py-3 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all"
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                            >
+                                <Layers className="w-4 h-4" />
+                                이 세부 단계로 플로우에 적용
+                            </motion.button>
+                            <p className="text-xs text-center text-gray-400 mt-2">
+                                기존 노드가 {drilldownResult.subSteps.length}개의 세부 단계로 대체됩니다
+                            </p>
                         </div>
                     )}
                 </DialogContent>
