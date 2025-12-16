@@ -125,7 +125,7 @@ export const DrilldownResponseSchema = z.object({
             aiImplementation: z.object({
                 method: z.string().max(150).describe('AI 처리 방법 (150자 이내)'),
                 technology: z.array(z.string().max(35)).max(3).describe('기술명 1~3개 (35자 이내)'),
-                platforms: z.array(z.string().max(35)).max(2).optional().describe('플랫폼명 1~2개 (35자 이내)'),
+                platforms: z.array(z.string().max(35)).max(4).optional().describe('플랫폼명 1~4개 (35자 이내)'),
                 automationLevel: z.enum(['full', 'partial', 'assisted']).optional(),
             }).optional().describe('TO-BE AI 노드 전용'),
             resources: z.array(z.object({
