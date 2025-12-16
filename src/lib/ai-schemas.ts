@@ -60,7 +60,7 @@ export const ToBeFlowResponseSchema = z.object({
     ),
 });
 
-// 변화 전략 응답 스키마
+// 변화 전략 응답 스키마 (Schein의 8가지 접근방법 통합)
 export const ChangeStrategyResponseSchema = z.object({
     phases: z.array(
         z.object({
@@ -80,6 +80,24 @@ export const ChangeStrategyResponseSchema = z.object({
             mitigation: z.string(),
         })
     ),
+    // Schein의 심리적 안전 프레임워크 (Lewin 모델과 통합)
+    survivalAnxiety: z.object({
+        description: z.string(), // 왜 변화해야 하는가
+        triggers: z.array(z.string()), // 생존불안을 높이는 요소들
+    }).optional(),
+    learningAnxiety: z.object({
+        description: z.string(), // 변화에 대한 두려움
+        barriers: z.array(z.string()), // 학습불안의 원인들
+    }).optional(),
+    // Schein의 8가지 학습불안 감소 방법 (조직문화와 리더십, 2017)
+    scheinApproaches: z.array(
+        z.object({
+            id: z.number(), // 1-8
+            approach: z.string(), // 접근방법 이름
+            description: z.string(), // 이 업무에 맞는 적용 방법
+            actions: z.array(z.string()), // 구체적 실행 항목
+        })
+    ).optional(),
 });
 
 // 타입 추출

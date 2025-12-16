@@ -13,6 +13,7 @@ const frameworks = {
         name: "Kotter's 8 Steps",
         icon: '🔥',
         description: '긴급성 조성부터 문화 정착까지 8단계 체계적 변화 관리',
+        theory: 'John Kotter (1996) - 순차적 단계별 접근',
         steps: [
             '긴급성 조성',
             '추진팀 구성',
@@ -30,6 +31,7 @@ const frameworks = {
         name: 'ADKAR Model',
         icon: '🎯',
         description: '개인 변화에 초점을 맞춘 5단계 모델',
+        theory: 'Prosci (Jeff Hiatt) - 개인 심리 중심',
         steps: [
             'Awareness (인식)',
             'Desire (욕구)',
@@ -41,10 +43,22 @@ const frameworks = {
         borderColor: 'border-blue-500/30',
     },
     lewin: {
-        name: "Lewin's 3-Step",
-        icon: '❄️',
-        description: '해빙-변화-재동결의 단순하고 직관적인 모델',
+        name: "Lewin + Schein",
+        icon: '🧊',
+        description: 'Lewin의 3단계 + Schein의 8가지 학습불안 감소 방법',
+        theory: 'Kurt Lewin (1947) + Edgar Schein (2017)',
+        badge: '심층 분석',
         steps: ['해빙 (Unfreeze)', '변화 (Change)', '재동결 (Refreeze)'],
+        scheinApproaches: [
+            '긍정적 비전',
+            '공식 교육',
+            '학습자 참여',
+            '팀 학습',
+            '연습·피드백',
+            '역할 모델',
+            '지원 그룹',
+            '일관된 시스템',
+        ],
         color: 'from-purple-500 to-pink-500',
         borderColor: 'border-purple-500/30',
     },
@@ -52,6 +66,7 @@ const frameworks = {
 
 export default function FrameworkCard({ id, selected, onSelect }: FrameworkCardProps) {
     const fw = frameworks[id];
+    const hasSchein = 'scheinApproaches' in fw;
 
     return (
         <Card
@@ -72,6 +87,12 @@ export default function FrameworkCard({ id, selected, onSelect }: FrameworkCardP
                     </svg>
                 </div>
             )}
+            {/* 심층 분석 뱃지 */}
+            {'badge' in fw && fw.badge && (
+                <div className={`absolute top-3 ${selected ? 'right-12' : 'right-3'} px-2 py-0.5 rounded-full text-[10px] font-medium ${selected ? 'bg-white/30 text-white' : 'bg-purple-100 text-purple-700'}`}>
+                    {fw.badge}
+                </div>
+            )}
             <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-lg">
                     <span className="text-2xl">{fw.icon}</span>
@@ -80,9 +101,15 @@ export default function FrameworkCard({ id, selected, onSelect }: FrameworkCardP
                 <CardDescription className={selected ? 'text-white/90' : 'text-[#71717A]'}>
                     {fw.description}
                 </CardDescription>
+                {'theory' in fw && (
+                    <p className={`text-xs mt-1 ${selected ? 'text-white/70' : 'text-[#A1A1AA]'}`}>
+                        {fw.theory}
+                    </p>
+                )}
             </CardHeader>
 
-            <CardContent>
+            <CardContent className="space-y-3">
+                {/* 기본 단계 */}
                 <div className="flex flex-wrap gap-1">
                     {fw.steps.map((step, idx) => (
                         <span
@@ -95,6 +122,27 @@ export default function FrameworkCard({ id, selected, onSelect }: FrameworkCardP
                         </span>
                     ))}
                 </div>
+                
+                {/* Schein 8가지 접근방법 (Lewin 모델만) */}
+                {hasSchein && (
+                    <div className="pt-2 border-t border-white/20">
+                        <p className={`text-xs mb-2 ${selected ? 'text-white/80' : 'text-[#71717A]'}`}>
+                            + Schein의 8가지 학습불안 감소 방법
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                            {(fw as typeof frameworks.lewin).scheinApproaches.map((approach, idx) => (
+                                <span
+                                    key={idx}
+                                    className={`text-[10px] px-1.5 py-0.5 rounded transition-colors
+                                        ${selected ? 'bg-white/10 text-white/90' : 'bg-purple-50 text-purple-600'}
+                                    `}
+                                >
+                                    {idx + 1}. {approach}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </CardContent>
         </Card>
     );

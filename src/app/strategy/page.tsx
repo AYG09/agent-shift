@@ -26,16 +26,31 @@ interface Phase {
     color: string;
 }
 
+interface ScheinApproach {
+    approach: string;
+    description: string;
+    tactics: string[];
+}
+
+interface StrategyResult {
+    phases: Phase[];
+    scheinApproaches?: ScheinApproach[];
+    frameworkExplanation?: string;
+}
+
 export default function StrategyPage() {
     const { context, setStrategy } = useAppStore();
     const { isLoading, error, generateChangeStrategy } = useAIGeneration();
     const [selectedFramework, setSelectedFramework] = useState<FrameworkType | null>(null);
     const [generatedPhases, setGeneratedPhases] = useState<Phase[] | null>(null);
+    const [scheinApproaches, setScheinApproaches] = useState<ScheinApproach[] | null>(null);
+    const [frameworkExplanation, setFrameworkExplanation] = useState<string | null>(null);
     const [totalWeeks, setTotalWeeks] = useState(12);
 
     // Interactive state
     const [completedActions, setCompletedActions] = useState<Set<string>>(new Set());
     const [roleAssignments, setRoleAssignments] = useState<Record<string, string>>({});
+    const [expandedApproach, setExpandedApproach] = useState<number | null>(null);
 
     const handleGenerateStrategy = async () => {
         if (!selectedFramework || !context) return;
@@ -48,10 +63,12 @@ export default function StrategyPage() {
                 timeScale: context.timeScale,
             },
             selectedFramework
-        );
+        ) as StrategyResult | null;
 
         if (result?.phases) {
             setGeneratedPhases(result.phases);
+            setScheinApproaches(result.scheinApproaches || null);
+            setFrameworkExplanation(result.frameworkExplanation || null);
             // Store에 전략 저장
             setStrategy({
                 framework: selectedFramework,
@@ -61,6 +78,7 @@ export default function StrategyPage() {
             // Reset completion state for new phases
             setCompletedActions(new Set());
             setRoleAssignments({});
+            setExpandedApproach(null);
         }
     };
 
@@ -208,6 +226,112 @@ export default function StrategyPage() {
                                     totalWeeks={totalWeeks}
                                     onPhaseClick={(phase) => console.log('Phase clicked:', phase)}
                                 />
+                            </div>
+
+                            {/* Framework Explanation */}
+                            {frameworkExplanation && (
+                                <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
+                                            <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-medium text-blue-900 mb-1">프레임워크 이론적 배경</h4>
+                                            <p className="text-sm text-blue-700 leading-relaxed">{frameworkExplanation}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Schein's 8 Approaches (Lewin model) */}
+                {scheinApproaches && scheinApproaches.length > 0 && (
+                    <Card className="bg-white border-[#E2E4E9] mb-6 shadow-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base font-medium text-[#18181B]">
+                                <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-2 py-1 rounded">
+                                    2.5
+                                </span>
+                                <span className="flex items-center gap-2">
+                                    Schein의 학습불안 감소 전략
+                                    <span className="text-xs font-normal text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                                        생존불안 &gt; 학습불안
+                                    </span>
+                                </span>
+                            </CardTitle>
+                            <p className="text-sm text-[#71717A] mt-1">
+                                변화에 대한 저항을 줄이고 새로운 학습을 촉진하는 8가지 접근방법입니다.
+                            </p>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {scheinApproaches.map((item, idx) => (
+                                    <div
+                                        key={idx}
+                                        className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                                            expandedApproach === idx
+                                                ? 'bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200 shadow-md'
+                                                : 'bg-white/60 border-[#E2E4E9] hover:border-purple-200 hover:shadow-sm'
+                                        }`}
+                                        onClick={() => setExpandedApproach(expandedApproach === idx ? null : idx)}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold ${
+                                                expandedApproach === idx
+                                                    ? 'bg-purple-500 text-white'
+                                                    : 'bg-purple-100 text-purple-600'
+                                            }`}>
+                                                {idx + 1}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className={`font-medium text-sm ${
+                                                    expandedApproach === idx ? 'text-purple-900' : 'text-[#18181B]'
+                                                }`}>
+                                                    {item.approach}
+                                                </h4>
+                                                <p className="text-xs text-[#71717A] mt-1 line-clamp-2">
+                                                    {item.description}
+                                                </p>
+                                                
+                                                {/* Expanded Tactics */}
+                                                {expandedApproach === idx && item.tactics.length > 0 && (
+                                                    <div className="mt-3 pt-3 border-t border-purple-100">
+                                                        <p className="text-xs font-medium text-purple-700 mb-2">실행 전술</p>
+                                                        <ul className="space-y-1.5">
+                                                            {item.tactics.map((tactic, tIdx) => (
+                                                                <li key={tIdx} className="flex items-start gap-2 text-xs text-[#52525B]">
+                                                                    <span className="text-purple-400 mt-0.5">▸</span>
+                                                                    {tactic}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <svg 
+                                                className={`w-4 h-4 text-[#A1A1AA] transition-transform ${expandedApproach === idx ? 'rotate-180' : ''}`} 
+                                                fill="none" 
+                                                viewBox="0 0 24 24" 
+                                                stroke="currentColor"
+                                            >
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            {/* Theory Note */}
+                            <div className="mt-4 p-3 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border border-amber-100">
+                                <p className="text-xs text-amber-800">
+                                    💡 <strong>Schein의 핵심 원리:</strong> 변화가 일어나려면 생존불안(변하지 않으면 안 된다는 인식)이 
+                                    학습불안(새로운 것을 배우는 두려움)보다 커야 합니다. 
+                                    위 8가지 접근방법은 학습불안을 감소시켜 심리적 안전감을 높이는 전략입니다.
+                                </p>
                             </div>
                         </CardContent>
                     </Card>
