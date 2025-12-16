@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Node, Edge } from '@xyflow/react';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,7 @@ import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
 import { ShareDialog } from '@/components/collaboration/ShareDialog';
 import { Spinner } from '@/components/ui/spinner';
-import { Sparkles, Bot, Shield, Scale, Rocket, TrendingUp, Upload } from 'lucide-react';
+import { Sparkles, Bot, Shield, Scale, Rocket, TrendingUp, Upload, FolderOpen, Save } from 'lucide-react';
 import Link from 'next/link';
 
 // ReactFlow 동적 import
@@ -87,7 +87,45 @@ export default function FlowPage() {
         toBeEdges,
         setAsIsFlow,
         setToBeFlow,
+        getCurrentProject,
+        updateCurrentProject,
+        currentProjectId,
     } = useAppStore();
+
+    // 현재 프로젝트 정보
+    const currentProject = getCurrentProject();
+    
+    // 자동 저장 debounce (2초)
+    const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+    const debouncedSave = useCallback(() => {
+        if (!currentProjectId) return;
+        
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+        
+        setIsSaving(true);
+        saveTimeoutRef.current = setTimeout(() => {
+            updateCurrentProject();
+            setIsSaving(false);
+            setLastSaved(new Date());
+        }, 2000);
+    }, [currentProjectId, updateCurrentProject]);
+
+    // 플로우 변경 시 자동 저장
+    useEffect(() => {
+        if (currentProjectId && (asIsNodes.length > 0 || toBeNodes.length > 0)) {
+            debouncedSave();
+        }
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+        };
+    }, [asIsNodes, asIsEdges, toBeNodes, toBeEdges, context, currentProjectId, debouncedSave]);
     const { isLoading, error, generateAsIsFlow, generateToBeFlow, generateNodeSplit, generateDrilldown } =
         useAIGeneration();
 
@@ -550,6 +588,25 @@ export default function FlowPage() {
                     <Link href="/" className="text-xl font-semibold text-[#18181B]">
                         Agent Shift
                     </Link>
+                    {currentProject && (
+                        <div className="mt-2 flex items-center gap-2">
+                            <FolderOpen className="w-3.5 h-3.5 text-[#71717A]" />
+                            <span className="text-xs text-[#71717A] truncate flex-1" title={currentProject.name}>
+                                {currentProject.name}
+                            </span>
+                            {isSaving ? (
+                                <span className="text-xs text-amber-500 flex items-center gap-1">
+                                    <Save className="w-3 h-3 animate-pulse" />
+                                    저장 중...
+                                </span>
+                            ) : lastSaved && (
+                                <span className="text-xs text-green-600 flex items-center gap-1">
+                                    <Save className="w-3 h-3" />
+                                    저장됨
+                                </span>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Scrollable Content */}

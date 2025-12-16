@@ -62,8 +62,32 @@ export interface UserContext {
     painPoints?: string; // User input text
 }
 
+// 프로젝트 정보
+export interface Project {
+    id: string;
+    name: string;
+    createdAt: string; // ISO 날짜 문자열
+    updatedAt: string; // ISO 날짜 문자열
+    context: UserContext | null;
+    asIsNodes: FlowNode[];
+    asIsEdges: FlowEdge[];
+    toBeNodes: FlowNode[];
+    toBeEdges: FlowEdge[];
+    strategy: StrategyData | null;
+}
+
 // 스토어 상태 타입
 interface AppState {
+    // 프로젝트 관리
+    projects: Project[];
+    currentProjectId: string | null;
+    createProject: (name: string) => string; // 생성된 프로젝트 ID 반환
+    loadProject: (id: string) => void;
+    updateCurrentProject: () => void;
+    deleteProject: (id: string) => void;
+    renameProject: (id: string, name: string) => void;
+    getCurrentProject: () => Project | null;
+
     // 사용자 컨텍스트
     context: UserContext | null;
     setContext: (context: UserContext) => void;
@@ -123,8 +147,10 @@ interface AppState {
 
 export const useAppStore = create<AppState>()(
     persist(
-        (set) => ({
+        (set, get) => ({
             // 초기 상태
+            projects: [],
+            currentProjectId: null,
             context: null,
             strategy: null,
             asIsNodes: [],
@@ -136,6 +162,117 @@ export const useAppStore = create<AppState>()(
             isGenerating: false,
             strategyScope: 'full',
             selectedToBeNodeId: null,
+
+            // 프로젝트 CRUD 액션
+            createProject: (name) => {
+                const id = crypto.randomUUID();
+                const now = new Date().toISOString();
+                const newProject: Project = {
+                    id,
+                    name,
+                    createdAt: now,
+                    updatedAt: now,
+                    context: null,
+                    asIsNodes: [],
+                    asIsEdges: [],
+                    toBeNodes: [],
+                    toBeEdges: [],
+                    strategy: null,
+                };
+                set((state) => ({
+                    projects: [...state.projects, newProject],
+                    currentProjectId: id,
+                    // 새 프로젝트이므로 현재 상태 초기화
+                    context: null,
+                    asIsNodes: [],
+                    asIsEdges: [],
+                    toBeNodes: [],
+                    toBeEdges: [],
+                    strategy: null,
+                    drilldownPath: [],
+                    viewMode: 'asis',
+                    strategyScope: 'full',
+                    selectedToBeNodeId: null,
+                }));
+                return id;
+            },
+
+            loadProject: (id) => {
+                const state = get();
+                const project = state.projects.find((p) => p.id === id);
+                if (project) {
+                    set({
+                        currentProjectId: id,
+                        context: project.context,
+                        asIsNodes: project.asIsNodes,
+                        asIsEdges: project.asIsEdges,
+                        toBeNodes: project.toBeNodes,
+                        toBeEdges: project.toBeEdges,
+                        strategy: project.strategy,
+                        drilldownPath: [],
+                        viewMode: 'asis',
+                        strategyScope: 'full',
+                        selectedToBeNodeId: null,
+                    });
+                }
+            },
+
+            updateCurrentProject: () => {
+                const state = get();
+                if (!state.currentProjectId) return;
+                
+                set((s) => ({
+                    projects: s.projects.map((p) =>
+                        p.id === s.currentProjectId
+                            ? {
+                                  ...p,
+                                  updatedAt: new Date().toISOString(),
+                                  context: s.context,
+                                  asIsNodes: s.asIsNodes,
+                                  asIsEdges: s.asIsEdges,
+                                  toBeNodes: s.toBeNodes,
+                                  toBeEdges: s.toBeEdges,
+                                  strategy: s.strategy,
+                              }
+                            : p
+                    ),
+                }));
+            },
+
+            deleteProject: (id) => {
+                set((state) => {
+                    const newProjects = state.projects.filter((p) => p.id !== id);
+                    // 현재 프로젝트가 삭제되면 초기화
+                    if (state.currentProjectId === id) {
+                        return {
+                            projects: newProjects,
+                            currentProjectId: null,
+                            context: null,
+                            asIsNodes: [],
+                            asIsEdges: [],
+                            toBeNodes: [],
+                            toBeEdges: [],
+                            strategy: null,
+                            drilldownPath: [],
+                            viewMode: 'asis',
+                        };
+                    }
+                    return { projects: newProjects };
+                });
+            },
+
+            renameProject: (id, name) => {
+                set((state) => ({
+                    projects: state.projects.map((p) =>
+                        p.id === id ? { ...p, name, updatedAt: new Date().toISOString() } : p
+                    ),
+                }));
+            },
+
+            getCurrentProject: () => {
+                const state = get();
+                return state.projects.find((p) => p.id === state.currentProjectId) || null;
+            },
 
             // 기본 액션
             setContext: (context) => set({ context }),
@@ -249,6 +386,7 @@ export const useAppStore = create<AppState>()(
                     viewMode: 'asis',
                     strategyScope: 'full',
                     selectedToBeNodeId: null,
+                    currentProjectId: null,
                 }),
         }),
         {
@@ -266,6 +404,8 @@ export const useAppStore = create<AppState>()(
             }),
             // 저장할 필드만 선택 (isGenerating은 제외)
             partialize: (state) => ({
+                projects: state.projects,
+                currentProjectId: state.currentProjectId,
                 context: state.context,
                 strategy: state.strategy,
                 asIsNodes: state.asIsNodes,
