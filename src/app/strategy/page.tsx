@@ -39,7 +39,14 @@ interface StrategyResult {
 }
 
 export default function StrategyPage() {
-    const { context, setStrategy } = useAppStore();
+    const { 
+        context, 
+        setStrategy, 
+        toBeNodes,
+        strategyScope,
+        selectedToBeNodeId,
+        setStrategyScope,
+    } = useAppStore();
     const { isLoading, error, generateChangeStrategy } = useAIGeneration();
     const [selectedFramework, setSelectedFramework] = useState<FrameworkType | null>(null);
     const [generatedPhases, setGeneratedPhases] = useState<Phase[] | null>(null);
@@ -52,16 +59,41 @@ export default function StrategyPage() {
     const [roleAssignments, setRoleAssignments] = useState<Record<string, string>>({});
     const [expandedApproach, setExpandedApproach] = useState<number | null>(null);
 
+    // To-Be 플로우 요약 계산
+    const agentNodes = toBeNodes.filter(n => n.type === 'agent');
+    const selectedNode = selectedToBeNodeId 
+        ? toBeNodes.find(n => n.id === selectedToBeNodeId) 
+        : null;
+    const hasToBeFlow = toBeNodes.length > 0;
+    const canSelectNode = !!selectedNode;
+
+    // 협업 유형별 집계
+    const collaborationSummary = {
+        copilot: agentNodes.filter(n => n.collaborationType === 'copilot').length,
+        monitor: agentNodes.filter(n => n.collaborationType === 'monitor').length,
+        autonomous: agentNodes.filter(n => n.collaborationType === 'autonomous').length,
+    };
+
     const handleGenerateStrategy = async () => {
         if (!selectedFramework || !context) return;
 
-        const result = await generateChangeStrategy(
-            {
+        // 전략 범위에 따라 다른 context 전달
+        const scopeContext = strategyScope === 'selected' && selectedNode
+            ? {
+                industry: context.industry,
+                role: context.role,
+                task: `[${selectedNode.label}] ${selectedNode.description || selectedNode.label} (${selectedNode.collaborationType} 협업)`,
+                timeScale: context.timeScale,
+            }
+            : {
                 industry: context.industry,
                 role: context.role,
                 task: context.task,
                 timeScale: context.timeScale,
-            },
+            };
+
+        const result = await generateChangeStrategy(
+            scopeContext,
             selectedFramework
         ) as StrategyResult | null;
 
@@ -148,6 +180,157 @@ export default function StrategyPage() {
                         </CardContent>
                     </Card>
                 )}
+
+                {/* Step 0: 전략 범위 선택 */}
+                <Card className="bg-white border-[#E2E4E9] mb-6 shadow-sm">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base font-medium text-[#18181B]">
+                            <span className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs px-2 py-1 rounded font-bold">
+                                0
+                            </span>
+                            전략 범위 선택
+                            {!hasToBeFlow && (
+                                <span className="text-xs font-normal text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full ml-2">
+                                    To-Be 플로우 필요
+                                </span>
+                            )}
+                        </CardTitle>
+                        <p className="text-sm text-[#71717A] mt-1">
+                            전체 To-Be 플로우를 대상으로 할지, 특정 AI 에이전트 노드만 대상으로 할지 선택하세요.
+                        </p>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* 전체 플로우 옵션 */}
+                            <div
+                                className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                    strategyScope === 'full'
+                                        ? 'border-indigo-500 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-md'
+                                        : 'border-[#E2E4E9] bg-white hover:border-indigo-300 hover:shadow-sm'
+                                } ${!hasToBeFlow ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                onClick={() => hasToBeFlow && setStrategyScope('full')}
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                        strategyScope === 'full' ? 'bg-indigo-500 text-white' : 'bg-indigo-100 text-indigo-600'
+                                    }`}>
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className={`font-semibold ${strategyScope === 'full' ? 'text-indigo-900' : 'text-[#18181B]'}`}>
+                                            전체 To-Be 플로우
+                                        </h3>
+                                        <p className="text-xs text-[#71717A] mt-1">
+                                            모든 변화 대상을 포함한 종합 전략
+                                        </p>
+                                        {hasToBeFlow && (
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                                                    🤖 AI 에이전트 {agentNodes.length}개
+                                                </span>
+                                                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">
+                                                    📊 총 {toBeNodes.length}개 노드
+                                                </span>
+                                            </div>
+                                        )}
+                                        {hasToBeFlow && agentNodes.length > 0 && (
+                                            <div className="mt-2 flex flex-wrap gap-1">
+                                                {collaborationSummary.copilot > 0 && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600">
+                                                        Copilot {collaborationSummary.copilot}
+                                                    </span>
+                                                )}
+                                                {collaborationSummary.monitor > 0 && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600">
+                                                        Monitor {collaborationSummary.monitor}
+                                                    </span>
+                                                )}
+                                                {collaborationSummary.autonomous > 0 && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600">
+                                                        Autonomous {collaborationSummary.autonomous}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {strategyScope === 'full' && (
+                                        <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
+                                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* 선택된 노드 옵션 */}
+                            <div
+                                className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                    strategyScope === 'selected'
+                                        ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 shadow-md'
+                                        : 'border-[#E2E4E9] bg-white hover:border-purple-300 hover:shadow-sm'
+                                } ${!canSelectNode ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                onClick={() => canSelectNode && setStrategyScope('selected')}
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                        strategyScope === 'selected' ? 'bg-purple-500 text-white' : 'bg-purple-100 text-purple-600'
+                                    }`}>
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className={`font-semibold ${strategyScope === 'selected' ? 'text-purple-900' : 'text-[#18181B]'}`}>
+                                            선택된 AI 에이전트
+                                        </h3>
+                                        <p className="text-xs text-[#71717A] mt-1">
+                                            특정 노드에 집중한 상세 전략
+                                        </p>
+                                        {selectedNode ? (
+                                            <div className="mt-3 p-2 bg-white/60 rounded-lg border border-purple-100">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm">🤖</span>
+                                                    <span className="text-sm font-medium text-purple-800">{selectedNode.label}</span>
+                                                </div>
+                                                {selectedNode.collaborationType && (
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded mt-1 inline-block ${
+                                                        selectedNode.collaborationType === 'copilot' ? 'bg-emerald-50 text-emerald-600' :
+                                                        selectedNode.collaborationType === 'monitor' ? 'bg-amber-50 text-amber-600' :
+                                                        'bg-purple-50 text-purple-600'
+                                                    }`}>
+                                                        {selectedNode.collaborationType}
+                                                    </span>
+                                                )}
+                                                {selectedNode.description && (
+                                                    <p className="text-[10px] text-[#71717A] mt-1 line-clamp-2">{selectedNode.description}</p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="mt-3 p-2 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                                                <p className="text-xs text-gray-400 text-center">
+                                                    <Link href="/flow" className="text-purple-500 hover:underline">
+                                                        Flow 캔버스
+                                                    </Link>
+                                                    에서 노드를 선택하세요
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {strategyScope === 'selected' && canSelectNode && (
+                                        <div className="w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center">
+                                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
 
                 {/* Step 1: Framework Selection */}
                 <Card className="bg-white border-[#E2E4E9] mb-6 shadow-sm">

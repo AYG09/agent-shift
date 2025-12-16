@@ -43,6 +43,7 @@ type AgentNodeData = {
     collaborationType?: 'copilot' | 'monitor' | 'autonomous';
     agentDescription?: string;
     shape?: ShapeType;
+    isSelectedForStrategy?: boolean;
 };
 
 // ============================================
@@ -420,17 +421,26 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
     const collab = data.collaborationType || 'copilot';
     const hasDescription = !!data.agentDescription;
     const shape = data.shape || 'hexagon';
+    const isStrategySelected = data.isSelectedForStrategy;
 
     return (
         <NodeShapeWrapper
             shape={shape}
             selected={selected}
-            className={`flex items-center justify-center cursor-pointer ${expanded ? 'w-[260px] h-auto min-h-[160px]' : 'w-[180px] h-[140px]'}`}
+            className={`flex items-center justify-center cursor-pointer ${expanded ? 'w-[260px] h-auto min-h-[160px]' : 'w-[180px] h-[140px]'} ${isStrategySelected ? 'ring-4 ring-purple-500/70 ring-offset-2 ring-offset-white shadow-lg shadow-purple-200' : ''}`}
             onClick={(e) => {
                 e.stopPropagation();
                 if (hasDescription) setExpanded(!expanded);
             }}
         >
+            {/* 전략 선택 뱃지 */}
+            {isStrategySelected && (
+                <div className="absolute -top-3 -right-3 w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-md z-20 animate-pulse">
+                    <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+            )}
             <div className="text-center p-4 space-y-2 w-full">
                 <span className="text-3xl">🤖</span>
                 <div className="font-semibold text-sm text-slate-800">{data.label}</div>

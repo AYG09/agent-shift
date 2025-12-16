@@ -96,6 +96,12 @@ interface AppState {
     isGenerating: boolean;
     setIsGenerating: (loading: boolean) => void;
 
+    // 전략 범위 선택
+    strategyScope: 'full' | 'selected';
+    selectedToBeNodeId: string | null;
+    setStrategyScope: (scope: 'full' | 'selected') => void;
+    setSelectedToBeNodeId: (nodeId: string | null) => void;
+
     // 노드 CRUD 액션
     addNode: (node: FlowNode, target: 'asis' | 'tobe') => void;
     updateNode: (id: string, updates: Partial<FlowNode>, target: 'asis' | 'tobe') => void;
@@ -128,6 +134,8 @@ export const useAppStore = create<AppState>()(
             drilldownPath: [],
             viewMode: 'asis',
             isGenerating: false,
+            strategyScope: 'full',
+            selectedToBeNodeId: null,
 
             // 기본 액션
             setContext: (context) => set({ context }),
@@ -148,6 +156,8 @@ export const useAppStore = create<AppState>()(
             resetDrilldown: () => set({ drilldownPath: [] }),
             setViewMode: (mode) => set({ viewMode: mode }),
             setIsGenerating: (loading) => set({ isGenerating: loading }),
+            setStrategyScope: (scope) => set({ strategyScope: scope }),
+            setSelectedToBeNodeId: (nodeId) => set({ selectedToBeNodeId: nodeId }),
 
             // 노드 추가
             addNode: (node, target) =>
@@ -237,6 +247,8 @@ export const useAppStore = create<AppState>()(
                     toBeEdges: [],
                     drilldownPath: [],
                     viewMode: 'asis',
+                    strategyScope: 'full',
+                    selectedToBeNodeId: null,
                 }),
         }),
         {
@@ -261,6 +273,8 @@ export const useAppStore = create<AppState>()(
                 toBeNodes: state.toBeNodes,
                 toBeEdges: state.toBeEdges,
                 viewMode: state.viewMode,
+                strategyScope: state.strategyScope,
+                selectedToBeNodeId: state.selectedToBeNodeId,
             }),
         }
     )
