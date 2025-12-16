@@ -398,9 +398,9 @@ ${graphContext ? `- 위의 이전/다음 단계와의 **데이터 흐름**을 �
      - automationLevel: "full"(완전자동), "partial"(부분자동), "assisted"(AI보조)
    - **resources**: 학습 자료 1~2개 (필수!)
      - type: "youtube", "docs", "article", "tutorial" 중 택일
-     - title: 자료 제목 (예: "Power Automate로 이메일 자동 분류하기")
-     - url: 검색 키워드 또는 추천 검색어 (예: "Power Automate email classification tutorial")
-     - description: 이 자료가 도움이 되는 이유
+     - title: 자료 제목 (100자 이내, 예: "Power Automate로 이메일 자동 분류하기")
+     - url: ⚠️ **반드시 50자 이내의 짧은 검색 키워드만!** (예: "Power Automate email classification") - 긴 문장 절대 금지!
+     - description: 이 자료가 도움이 되는 이유 (200자 이내)
 
 3. **summary**: AI 도입으로 인한 효율성 향상 요약
 4. **automationOverview**: 전체 자동화 개요
@@ -562,6 +562,7 @@ export async function POST(request: NextRequest) {
             model,
             schema,
             prompt,
+            maxTokens: 4096, // 토큰 제한으로 JSON 잘림 방지
         });
 
         // 숫자 필드 정규화 후 반환
@@ -569,6 +570,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(normalizedObject);
     } catch (error) {
         console.error('AI API Error:', error);
+        
+        // finishReason: 'length' 에러 특별 처리
+        if (error instanceof Error && error.message.includes('No object generated')) {
+            return NextResponse.json({ 
+                error: 'AI 응답이 너무 길어 잘렸습니다. 다시 시도해주세요.' 
+            }, { status: 500 });
+        }
+        
         const errorMessage =
             error instanceof Error ? error.message : 'AI 생성 중 오류가 발생했습니다.';
         return NextResponse.json({ error: errorMessage }, { status: 500 });

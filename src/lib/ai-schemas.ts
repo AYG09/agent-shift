@@ -111,41 +111,41 @@ export type AsIsFlowResponse = z.infer<typeof AsIsFlowResponseSchema>;
 export type ToBeFlowResponse = z.infer<typeof ToBeFlowResponseSchema>;
 export type ChangeStrategyResponse = z.infer<typeof ChangeStrategyResponseSchema>;
 
-// 드릴다운 응답 스키마 (AS-IS/TO-BE 분리)
+// 드릴다운 응답 스키마 (AS-IS/TO-BE 분리) - 모든 문자열에 길이 제한 적용
 export const DrilldownResponseSchema = z.object({
     parentNodeId: z.string(),
     flowType: z.enum(['asis', 'tobe']).optional(), // 어떤 플로우인지 명시
     subSteps: z.array(
         z.object({
-            id: z.string(),
-            label: z.string(),
-            description: z.string(),
-            duration: z.string().optional(),
-            tools: z.array(z.string()).optional(),
+            id: z.string().max(50),
+            label: z.string().max(100),
+            description: z.string().max(500), // 설명은 500자 이내
+            duration: z.string().max(50).optional(),
+            tools: z.array(z.string().max(50)).optional(),
             // AS-IS 전용: 인간이 겪는 어려움/비효율
-            painPoints: z.string().optional(),
+            painPoints: z.string().max(300).optional(),
             // TO-BE 전용: AI 구현 방법 상세
             aiImplementation: z.object({
-                method: z.string(), // AI가 어떻게 처리하는지 상세 설명
-                technology: z.array(z.string()), // 사용 기술 (LLM, RPA, OCR 등)
-                platforms: z.array(z.string()).optional(), // MS365 Copilot, Google AI 등
+                method: z.string().max(500), // AI 처리 방법 (500자 이내)
+                technology: z.array(z.string().max(50)), // 사용 기술 (LLM, RPA, OCR 등)
+                platforms: z.array(z.string().max(50)).optional(), // MS365 Copilot, Google AI 등
                 automationLevel: z.enum(['full', 'partial', 'assisted']).optional(),
             }).optional(),
             // TO-BE 전용: 학습 리소스
             resources: z.array(z.object({
                 type: z.enum(['youtube', 'docs', 'article', 'tutorial']),
-                title: z.string(),
-                url: z.string().optional(), // 실제 URL 또는 검색 키워드
-                description: z.string().optional(),
-            })).optional(),
+                title: z.string().max(100), // 자료 제목 (100자 이내)
+                url: z.string().max(100).optional(), // 짧은 검색 키워드만! (100자 이내)
+                description: z.string().max(200).optional(), // 설명 (200자 이내)
+            })).max(3).optional(), // 리소스는 최대 3개
         })
-    ),
-    summary: z.string(),
+    ).max(6), // subSteps 최대 6개
+    summary: z.string().max(500),
     // TO-BE 전용: 전체 자동화 개요
     automationOverview: z.object({
-        totalTimeReduction: z.string().optional(),
-        keyBenefits: z.array(z.string()).optional(),
-        implementationTips: z.array(z.string()).optional(),
+        totalTimeReduction: z.string().max(100).optional(),
+        keyBenefits: z.array(z.string().max(200)).max(5).optional(),
+        implementationTips: z.array(z.string().max(200)).max(5).optional(),
     }).optional(),
 });
 
