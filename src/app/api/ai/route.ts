@@ -165,11 +165,7 @@ function getToBePrompt(
 ) {
     // 사용자 선택 플랫폼 컨텍스트
     const platformsContext = context.platforms && context.platforms.length > 0
-        ? `\n## 사용자 선택 AI 플랫폼 🎯
-${context.platforms.join(', ')}
-
-**중요**: 위 플랫폼들의 기능과 제품 위주로 AI Agent를 설계하세요!
-`
+        ? `- 사용 AI 플랫폼: ${context.platforms.join(', ')}`
         : '';
 
     const scenarioGuide = {
@@ -308,12 +304,7 @@ function getDrilldownPromptToBe(
     
     // 사용자 선택 플랫폼 컨텍스트
     const platformsContext = context.platforms && context.platforms.length > 0
-        ? `\n## 사용자 선택 플랫폼 🎯
-사용자가 선택한 플랫폼: ${context.platforms.join(', ')}
-
-**중요**: 위 플랫폼들의 기능과 제품 위주로 도구를 추천하세요!
-플랫폼 외 도구는 꼭 필요한 경우만 제시하세요.
-`
+        ? `- 사용 AI 플랫폼: ${context.platforms.join(', ')} (이 플랫폼 위주로 tools/platforms 추천)`
         : '';
     
     // AS-IS 노드 정보 포맷팅 (시간 포함)

@@ -386,6 +386,7 @@ export default function FlowPage() {
                 teamSize: context.teamSize,
                 tooling: context.tooling,
                 painPoints: context.painPoints,
+                platforms: context.platforms,  // 사용자 선택 AI 플랫폼
             },
             asIsNodes.map((n) => ({
                 id: n.id,
@@ -433,7 +434,7 @@ export default function FlowPage() {
         if (!node || !context) return null;
 
         const result = await generateNodeSplit(
-            { industry: context.industry, role: context.role, task: context.task },
+            { industry: context.industry, role: context.role, task: context.task, platforms: context.platforms },
             { id: node.id, label: node.label, description: node.description, type: node.type },
             flowType
         );
@@ -505,7 +506,7 @@ export default function FlowPage() {
         }));
 
         const result = await generateDrilldown(
-            { industry: context.industry, role: context.role, task: context.task },
+            { industry: context.industry, role: context.role, task: context.task, platforms: context.platforms },
             { 
                 id: node.id, 
                 label: node.label, 

@@ -33,11 +33,12 @@ interface WorkContext {
     industry: string;
     role: string;
     task: string;
-    timeScale: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'project';
+    timeScale?: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'project';
     teamSize?: string;
     budget?: string;
     tooling?: string;
     painPoints?: string;
+    platforms?: string[];  // 사용자가 선택한 AI 플랫폼
 }
 
 const API_KEY_STORAGE_KEY = 'agent-shift-api-key';
@@ -306,7 +307,7 @@ export function useAIGeneration() {
 
     const generateDrilldown = useCallback(
         async (
-            context: { industry: string; role: string; task: string },
+            context: WorkContext,
             node: { id: string; label: string; description?: string; type: string; collaborationType?: string; metrics?: { timeMinutes?: number } },
             flowType: 'as-is' | 'to-be',
             allNodes?: FlowNodeBasic[],
@@ -386,7 +387,7 @@ export function useAIGeneration() {
     // 노드 분할 (세분화) - 해당 노드를 4~5개 하위 노드로 분할
     const generateNodeSplit = useCallback(
         async (
-            context: { industry: string; role: string; task: string },
+            context: WorkContext,
             node: { id: string; label: string; description?: string; type: string },
             flowType: 'asis' | 'tobe'
         ): Promise<{
