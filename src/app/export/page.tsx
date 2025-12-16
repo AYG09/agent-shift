@@ -122,7 +122,7 @@ export default function ExportPage() {
         setIsExportingExcel(true);
         setExportStatus(null);
         try {
-            generateExcelWBS({
+            await generateExcelWBS({
                 asIsNodes: exportAsIsNodes,
                 toBeNodes: exportToBeNodes,
                 asIsEdges: asIsEdges.map(e => ({ id: e.id, source: e.source, target: e.target })),
