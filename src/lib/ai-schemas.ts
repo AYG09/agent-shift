@@ -120,12 +120,12 @@ export const DrilldownResponseSchema = z.object({
             label: z.string().max(40).describe('단계명 (40자 이내, 핵심만)'),
             description: z.string().max(150).describe('설명 (150자 이내, 간결하게)'),
             duration: z.string().max(20).optional().describe('소요 시간 (예: 30초, 2분)'),
-            tools: z.array(z.string().max(25)).max(3).optional().describe('도구 1~3개 (구체적 제품명만)'),
+            tools: z.array(z.string().max(35)).max(3).optional().describe('도구명 1~3개 (35자 이내)'),
             painPoints: z.string().max(100).optional().describe('AS-IS: 인간이 겪는 어려움 (100자)'),
             aiImplementation: z.object({
                 method: z.string().max(150).describe('AI 처리 방법 (150자 이내)'),
-                technology: z.array(z.string().max(30)).max(3).describe('기술 1~3개'),
-                platforms: z.array(z.string().max(30)).max(2).optional().describe('플랫폼 1~2개'),
+                technology: z.array(z.string().max(35)).max(3).describe('기술명 1~3개 (35자 이내)'),
+                platforms: z.array(z.string().max(35)).max(2).optional().describe('플랫폼명 1~2개 (35자 이내)'),
                 automationLevel: z.enum(['full', 'partial', 'assisted']).optional(),
             }).optional().describe('TO-BE AI 노드 전용'),
             resources: z.array(z.object({
