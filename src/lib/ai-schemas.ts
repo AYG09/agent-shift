@@ -116,7 +116,7 @@ export const DrilldownResponseSchema = z.object({
     flowType: z.enum(['asis', 'tobe']).optional().describe('플로우 유형'),
     subSteps: z.array(
         z.object({
-            id: z.string().max(30).describe('단계 ID'),
+            id: z.string().max(50).describe('단계 ID (snake_case, 간결하게)'),
             label: z.string().max(40).describe('단계명 (40자 이내, 핵심만)'),
             description: z.string().max(150).describe('설명 (150자 이내, 간결하게)'),
             duration: z.string().max(20).optional().describe('소요 시간 (예: 30초, 2분)'),

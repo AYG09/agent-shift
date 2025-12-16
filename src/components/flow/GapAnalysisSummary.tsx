@@ -23,8 +23,35 @@ const SKILL_LABELS: Record<SkillLevel, string> = {
     senior: '🟢 고역량 (0.7x)',
 };
 
+// 시간 단위
+type DurationUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
+
+// 분 단위로 변환하는 헬퍼 함수
+const DURATION_TO_MINUTES: Record<DurationUnit, number> = {
+    minutes: 1,
+    hours: 60,
+    days: 480,     // 8시간 근무일 기준
+    weeks: 2400,   // 5일 × 8시간
+    months: 9600,  // 4주 × 5일 × 8시간
+};
+
+function getTimeInMinutes(metrics?: NodeMetrics): number {
+    if (!metrics) return 0;
+    
+    // 새 형식 우선 (duration + durationUnit)
+    if (metrics.duration !== undefined && metrics.duration > 0) {
+        const unit = metrics.durationUnit || 'minutes';
+        return metrics.duration * DURATION_TO_MINUTES[unit];
+    }
+    
+    // 하위 호환 (timeMinutes)
+    return metrics.timeMinutes || 0;
+}
+
 interface NodeMetrics {
     timeMinutes?: number;
+    duration?: number;
+    durationUnit?: DurationUnit;
 }
 
 interface FlowNodeData {
@@ -121,7 +148,7 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
         // Calculate As-Is totals with skill multiplier
         const asIsTotals = asIsNodes.reduce(
             (acc, node) => ({
-                time: acc.time + Math.round((node.metrics?.timeMinutes || 0) * multiplier),
+                time: acc.time + Math.round(getTimeInMinutes(node.metrics) * multiplier),
             }),
             { time: 0 }
         );
@@ -129,7 +156,7 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
         // Calculate To-Be totals with skill multiplier
         const toBeTotals = toBeNodes.reduce(
             (acc, node) => ({
-                time: acc.time + Math.round((node.metrics?.timeMinutes || 0) * multiplier),
+                time: acc.time + Math.round(getTimeInMinutes(node.metrics) * multiplier),
             }),
             { time: 0 }
         );
