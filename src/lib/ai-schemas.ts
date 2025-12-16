@@ -121,7 +121,7 @@ export const DrilldownResponseSchema = z.object({
             label: z.string().max(100),
             description: z.string().max(500), // 설명은 500자 이내
             duration: z.string().max(50).optional(),
-            tools: z.array(z.string().max(50)).optional(),
+            tools: z.array(z.string().max(30)).max(3).optional(), // 핵심 도구 1-3개만 (토큰 오버플로우 방지)
             // AS-IS 전용: 인간이 겪는 어려움/비효율
             painPoints: z.string().max(300).optional(),
             // TO-BE 전용: AI 구현 방법 상세

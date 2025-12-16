@@ -160,10 +160,20 @@ function getToBePrompt(
         teamSize?: string;
         tooling?: string;
         painPoints?: string;
+        platforms?: string[];
     },
     asIsNodes: unknown[],
     scenario: 'conservative' | 'balanced' | 'aggressive' = 'balanced'
 ) {
+    // 사용자 선택 플랫폼 컨텍스트
+    const platformsContext = context.platforms && context.platforms.length > 0
+        ? `\n## 사용자 선택 AI 플랫폼 🎯
+${context.platforms.join(', ')}
+
+**중요**: 위 플랫폼들의 기능과 제품 위주로 AI Agent를 설계하세요!
+`
+        : '';
+
     const scenarioGuide = {
         conservative: `## 시나리오: Conservative (보수적)
 - AI는 보조 역할만 수행, 인간이 최종 의사결정
@@ -195,7 +205,7 @@ function getToBePrompt(
 ${context.teamSize ? `- 팀 규모: ${context.teamSize}` : ''}
 ${context.tooling ? `- 현재 사용 도구: ${context.tooling}` : ''}
 ${context.painPoints ? `- 주요 고충: ${context.painPoints}` : ''}
-
+${platformsContext}
 ${scenarioGuide[scenario]}
 
 ## 현재 As-Is 프로세스
@@ -316,11 +326,21 @@ ${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞�
 // 단, 노드 타입이 'agent'가 아니면 인간 작업으로 분석
 function getDrilldownPromptToBe(
     node: { id: string; label: string; description?: string; type: string; collaborationType?: string; metrics?: { timeMinutes?: number } },
-    context: { industry: string; role: string; task: string },
+    context: { industry: string; role: string; task: string; platforms?: string[] },
     graphContext: GraphContext | null = null,
     asIsNodes?: GraphNode[]  // AS-IS 원본 노드들 (시간 비교용)
 ) {
     const graphContextText = formatGraphContextForPrompt(graphContext);
+    
+    // 사용자 선택 플랫폼 컨텍스트
+    const platformsContext = context.platforms && context.platforms.length > 0
+        ? `\n## 사용자 선택 플랫폼 🎯
+사용자가 선택한 플랫폼: ${context.platforms.join(', ')}
+
+**중요**: 위 플랫폼들의 기능과 제품 위주로 도구를 추천하세요!
+플랫폼 외 도구는 꼭 필요한 경우만 제시하세요.
+`
+        : '';
     
     // AS-IS 노드 정보 포맷팅 (시간 포함)
     const asIsInfo = asIsNodes && asIsNodes.length > 0 
@@ -389,7 +409,7 @@ ${graphContext ? `- 위의 이전/다음 단계(일부는 AI 에이전트)와의
 - 산업: ${context.industry}
 - 직무: ${context.role}  
 - 전체 업무: ${context.task}
-
+${platformsContext}
 ## 분석 대상 노드 (AI 자동화 단계)
 - ID: ${node.id}
 - 이름: ${node.label}
@@ -435,7 +455,10 @@ ${asIsNodes && asIsNodes.length > 0 ? `- **반드시** 위 AS-IS 단계들 중 �
    - **label**: 단계 이름 (**50자 이내**, 간결하게!)
    - **description**: AI 작업 설명 (**200자 이내**, 핵심만!)
    - **duration**: 처리 시간 (예: "30초", "2분")
-   - **tools**: AI 도구 (**최대 3개만!**, 예: ["Power Automate", "Python"])
+   - **tools**: ⚠️ **정확히 1-3개만! 4개 이상 절대 금지!**
+     - 구체적 제품명만 (예: "Power Automate", "Zapier", "Excel VBA")
+     - 일반 카테고리 금지 (예: "AI Tool", "Automation Tool", "AI for..." 금지!)
+     - 사용자 선택 플랫폼 우선 (있는 경우)
    - **aiImplementation**: (객체)
      - method: AI 처리 방법 (**200자 이내**)
      - technology: 기술 (**최대 3개**, 예: ["RPA", "NLP"])
@@ -478,7 +501,7 @@ ${asIsNodes && asIsNodes.length > 0 ? `- **반드시** 위 AS-IS 단계들 중 �
 
 function getDrilldownPrompt(
     node: { id: string; label: string; description?: string; type: string; collaborationType?: string; metrics?: { timeMinutes?: number } },
-    context: { industry: string; role: string; task: string },
+    context: { industry: string; role: string; task: string; platforms?: string[] },
     flowType: string,
     allNodes?: GraphNode[],
     allEdges?: GraphEdge[],

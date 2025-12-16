@@ -135,6 +135,7 @@ export interface UserContext {
     budget?: string;
     tooling?: string; // e.g. "Jira, Slack, Excel"
     painPoints?: string; // User input text
+    platforms?: string[]; // 선택된 AI 플랫폼 value 배열 (신규)
 }
 
 // 프로젝트 정보

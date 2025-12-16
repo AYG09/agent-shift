@@ -14,14 +14,26 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from '@/components/ui/command';
+import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
 import { ShareDialog } from '@/components/collaboration/ShareDialog';
 import { Spinner } from '@/components/ui/spinner';
-import { Sparkles, Bot, Shield, Scale, Rocket, TrendingUp, Upload, FolderOpen, Save, Building2, Briefcase, FileText, Users, Clock, Wrench, AlertCircle, CheckCircle2, Layers, Zap, Settings2, ChevronRight, Eye, GitCompare, ArrowLeft } from 'lucide-react';
+import { Sparkles, Bot, Shield, Scale, Rocket, TrendingUp, Upload, FolderOpen, Save, Building2, Briefcase, FileText, Users, Clock, Wrench, AlertCircle, CheckCircle2, Layers, Zap, Settings2, ChevronRight, Eye, GitCompare, ArrowLeft, Check, ChevronsUpDown, X } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ENTERPRISE_PLATFORMS, PLATFORM_CATEGORIES, PLATFORM_CATEGORY_ORDER, type Platform, type PlatformCategory } from '@/lib/platforms';
+import { cn } from '@/lib/utils';
 
 // Collapsible Section Component
 const CollapsibleSection = ({ 
@@ -207,6 +219,8 @@ export default function FlowPage() {
     const [teamSize, setTeamSize] = useState('');
     const [tooling, setTooling] = useState('');
     const [painPoints, setPainPoints] = useState('');
+    const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+    const [platformsOpen, setPlatformsOpen] = useState(false);
     const [timeScale, setTimeScale] = useState<
         'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'project'
     >('weekly');
@@ -245,6 +259,7 @@ export default function FlowPage() {
             setTeamSize(context.teamSize || '');
             setTooling(context.tooling || '');
             setPainPoints(context.painPoints || '');
+            setSelectedPlatforms(context.platforms || []);
             setTimeScale(context.timeScale || 'weekly');
 
             // 이전 작업이 있으면 canvas 단계로 바로 이동
@@ -318,6 +333,7 @@ export default function FlowPage() {
                 teamSize,
                 tooling,
                 painPoints,
+                platforms: selectedPlatforms,
             });
             setStep('canvas');
         }
@@ -892,6 +908,150 @@ export default function FlowPage() {
                                             className="bg-white/70 border-2 border-[#E2E4E9] hover:border-blue-300 transition-all duration-200 text-[#18181B] placeholder:text-[#A1A1AA]"
                                         />
                                     </div>
+                                </motion.div>
+
+                                {/* AI 에이전트 플랫폼 선택 (복수) */}
+                                <motion.div 
+                                    className="space-y-3"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.55 }}
+                                >
+                                    <div className="space-y-2">
+                                        <label className="text-sm text-[#525252] font-medium flex items-center gap-2">
+                                            <Bot className="w-4 h-4 text-blue-500" />
+                                            AI 에이전트 플랫폼 <span className="text-xs text-gray-400">(복수 선택 가능)</span>
+                                        </label>
+                                        <p className="text-xs text-gray-400">
+                                            조직에서 사용 중이거나 도입 예정인 플랫폼을 선택하면 맞춤 도구를 추천해드립니다
+                                        </p>
+                                    </div>
+                                    
+                                    <Popover open={platformsOpen} onOpenChange={setPlatformsOpen}>
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                role="combobox"
+                                                aria-expanded={platformsOpen}
+                                                className={cn(
+                                                    "w-full justify-between bg-white/70 border-2 transition-all duration-200 min-h-[42px] h-auto",
+                                                    selectedPlatforms.length > 0
+                                                        ? "border-blue-300 bg-blue-50/50"
+                                                        : "border-[#E2E4E9] hover:border-blue-300"
+                                                )}
+                                            >
+                                                {selectedPlatforms.length === 0 ? (
+                                                    <span className="text-gray-400">플랫폼 선택...</span>
+                                                ) : (
+                                                    <div className="flex flex-wrap gap-1 py-1">
+                                                        {selectedPlatforms.slice(0, 3).map((value) => {
+                                                            const platform = ENTERPRISE_PLATFORMS.find(p => p.value === value);
+                                                            return platform ? (
+                                                                <Badge
+                                                                    key={value}
+                                                                    variant="secondary"
+                                                                    className="bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-0.5 text-xs"
+                                                                >
+                                                                    {platform.label}
+                                                                    <button
+                                                                        type="button"
+                                                                        className="ml-1 hover:text-blue-900"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setSelectedPlatforms(prev => prev.filter(v => v !== value));
+                                                                        }}
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                </Badge>
+                                                            ) : null;
+                                                        })}
+                                                        {selectedPlatforms.length > 3 && (
+                                                            <Badge variant="outline" className="text-xs">
+                                                                +{selectedPlatforms.length - 3}개
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[400px] p-0" align="start">
+                                            <Command>
+                                                <CommandInput placeholder="플랫폼 검색..." className="h-10" />
+                                                <CommandList className="max-h-[300px]">
+                                                    <CommandEmpty>검색 결과가 없습니다.</CommandEmpty>
+                                                    {PLATFORM_CATEGORY_ORDER.map((category) => {
+                                                        const platformsInCategory = ENTERPRISE_PLATFORMS.filter(
+                                                            p => p.category === category
+                                                        );
+                                                        if (platformsInCategory.length === 0) return null;
+                                                        
+                                                        return (
+                                                            <CommandGroup 
+                                                                key={category} 
+                                                                heading={PLATFORM_CATEGORIES[category]}
+                                                            >
+                                                                {platformsInCategory.map((platform) => {
+                                                                    const isSelected = selectedPlatforms.includes(platform.value);
+                                                                    return (
+                                                                        <CommandItem
+                                                                            key={platform.value}
+                                                                            value={platform.label}
+                                                                            onSelect={() => {
+                                                                                setSelectedPlatforms(prev =>
+                                                                                    isSelected
+                                                                                        ? prev.filter(v => v !== platform.value)
+                                                                                        : [...prev, platform.value]
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            <div className={cn(
+                                                                                "mr-2 flex h-4 w-4 items-center justify-center rounded border",
+                                                                                isSelected
+                                                                                    ? "bg-blue-500 border-blue-500 text-white"
+                                                                                    : "border-gray-300"
+                                                                            )}>
+                                                                                {isSelected && <Check className="h-3 w-3" />}
+                                                                            </div>
+                                                                            {platform.label}
+                                                                        </CommandItem>
+                                                                    );
+                                                                })}
+                                                            </CommandGroup>
+                                                        );
+                                                    })}
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
+                                    
+                                    {/* 선택된 플랫폼 전체 표시 (3개 초과 시) */}
+                                    {selectedPlatforms.length > 3 && (
+                                        <div className="flex flex-wrap gap-1 mt-2">
+                                            {selectedPlatforms.map((value) => {
+                                                const platform = ENTERPRISE_PLATFORMS.find(p => p.value === value);
+                                                return platform ? (
+                                                    <Badge
+                                                        key={value}
+                                                        variant="secondary"
+                                                        className="bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-0.5 text-xs"
+                                                    >
+                                                        {platform.label}
+                                                        <button
+                                                            type="button"
+                                                            className="ml-1 hover:text-blue-900"
+                                                            onClick={() => {
+                                                                setSelectedPlatforms(prev => prev.filter(v => v !== value));
+                                                            }}
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    </Badge>
+                                                ) : null;
+                                            })}
+                                        </div>
+                                    )}
                                 </motion.div>
 
                                 {/* 시작 버튼 */}
