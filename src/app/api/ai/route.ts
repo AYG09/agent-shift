@@ -301,17 +301,12 @@ ${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞�
 
 ## 요구사항
 1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
-2. 각 하위 단계에 대해:
-   - **description**: 담당자가 수행하는 구체적인 활동 (2~3문장)
-   - **duration**: 예상 소요 시간
-   - **tools**: 사용되는 도구 (엑셀, 이메일, 워드 등)
-   - **painPoints**: 이 단계에서 겪는 어려움, 비효율, 실수 가능성 (1~2문장)
-3. **summary**: 전체 과정 요약과 주요 병목점
+2. 각 하위 단계: description, duration, tools, painPoints
+3. summary: 전체 과정 요약과 주요 병목점
 
 ## 응답 형식
 - flowType: "asis"
-- subSteps 배열에 각 하위 단계
-- aiImplementation, resources 필드는 **생략** (null 또는 undefined)`;
+- aiImplementation, resources 필드는 **생략**`;
 }
 
 // TO-BE 전용 드릴다운 프롬프트: AI 자동화 구현 방법 상세 안내
@@ -380,17 +375,12 @@ ${graphContext ? `- 위의 이전/다음 단계(일부는 AI 에이전트)와의
 
 ## 요구사항
 1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
-2. 각 하위 단계에 대해:
-   - **description**: 담당자가 수행하는 구체적인 활동 (2~3문장)
-   - **duration**: 예상 소요 시간
-   - **tools**: 사용되는 도구 (엑셀, 이메일, 워드 등)
-   - **painPoints**: 이 단계에서 겪는 어려움, 비효율, 실수 가능성 (1~2문장)
-3. **summary**: 전체 과정 요약과 AI 에이전트와의 협업 포인트
+2. 각 하위 단계: description, duration, tools, painPoints
+3. summary: 전체 과정 요약과 AI 에이전트와의 협업 포인트
 
 ## 응답 형식
 - flowType: "tobe"
-- subSteps 배열에 각 하위 단계
-- aiImplementation, resources 필드는 **생략** (null 또는 undefined)`;
+- aiImplementation, resources 필드는 **생략**`;
     }
     
     // 노드 타입이 'agent'인 경우: AI 자동화 분석
@@ -410,85 +400,29 @@ ${platformsContext}
 - 협업 유형: ${node.collaborationType || 'copilot'} (copilot=인간+AI 협력, autonomous=AI 독립 수행, monitor=인간 감독)
 ${graphContextText}
 ${asIsInfo}
-## 중요 지침 ⚠️
-이것은 **To-Be (AI 도입 후)** 분석입니다.
-- 이 단계는 이미 AI가 처리하는 것으로 계획되어 있습니다
-- **AI가 구체적으로 어떻게 이 작업을 수행하는지** 설명하세요
-- 비전문가도 이해할 수 있게 쉽게 설명하세요
-- 실제로 구현 가능한 방법을 제시하세요
-${graphContext ? `- 위의 이전/다음 단계와의 **데이터 흐름**을 고려하세요` : ''}
-${asIsNodes && asIsNodes.length > 0 ? `- **반드시** 위 AS-IS 단계들 중 이 AI가 대체하는 단계들을 식별하고, 역량별 시간 절감을 계산하세요!` : ''}
+## 중요 지침
+- AI가 어떻게 이 작업을 수행하는지 **구체적으로** 설명
+- 비전문가도 이해할 수 있게 쉽게 설명
+${graphContext ? `- 이전/다음 단계와의 데이터 흐름 고려` : ''}
+${asIsNodes && asIsNodes.length > 0 ? `- AS-IS 단계 중 이 AI가 대체하는 단계 식별 + 역량별 시간 절감 계산` : ''}
 
-## 요구사항
-1. 이 단계를 **3~5개**의 세부 하위 단계로 분해하세요. (**최대 5개, 절대 초과 금지!**)
+## 요구사항 (스키마가 길이를 강제함)
+1. 3~5개 세부 하위 단계 (subSteps)
+2. 각 subStep 내부에 aiImplementation 객체 포함
+3. tools: 구체적 제품명만 (예: Power Automate, Zapier)
+4. automationOverview.skillBasedReduction: 역량별 시간 절감
 
-2. ⚠️ **매우 중요: JSON 구조를 정확히 따르세요!**
-   - aiImplementation은 각 subStep **내부의 객체**입니다
-   - aiImplementation을 **별도의 subStep으로 만들지 마세요!**
-   
-   **올바른 구조 예시 (subSteps 배열 내 각 항목):**
-   {
-     "id": "step1",
-     "label": "단계 이름",
-     "description": "설명...",
-     "duration": "30초",
-     "tools": ["Power Automate"],
-     "aiImplementation": { ← 이것은 subStep 내부의 객체!
-       "method": "AI 처리 방법",
-       "technology": ["RPA", "NLP"],
-       "platforms": ["Microsoft 365"],
-       "automationLevel": "full"
-     },
-     "resources": [{"type": "docs", "title": "제목", "url": "검색키워드"}]
-   }
-
-3. 각 하위 단계의 필드 (**⚠️ 길이 제한 엄격 준수!**):
-   - **id**: 고유 ID (예: "node1_1")
-   - **label**: 단계 이름 (**50자 이내**, 간결하게!)
-   - **description**: AI 작업 설명 (**200자 이내**, 핵심만!)
-   - **duration**: 처리 시간 (예: "30초", "2분")
-   - **tools**: ⚠️ **정확히 1-3개만! 4개 이상 절대 금지!**
-     - 구체적 제품명만 (예: "Power Automate", "Zapier", "Excel VBA")
-     - 일반 카테고리 금지 (예: "AI Tool", "Automation Tool", "AI for..." 금지!)
-     - 사용자 선택 플랫폼 우선 (있는 경우)
-   - **aiImplementation**: (객체)
-     - method: AI 처리 방법 (**200자 이내**)
-     - technology: 기술 (**최대 3개**, 예: ["RPA", "NLP"])
-     - platforms: 플랫폼 (**최대 2개**)
-     - automationLevel: "full" | "partial" | "assisted"
-   - **resources**: 학습 자료 (**최대 2개만!**)
-     - type: "youtube" | "docs" | "article" | "tutorial"
-     - title: 자료 제목 (**50자 이내**)
-     - url: **검색 키워드만! 30자 이내** (예: "Power Automate RPA")
-     - description: 설명 (**100자 이내**)
-
-4. **summary**: 효율성 요약 (**300자 이내**, 핵심만!)
-5. **automationOverview**: 자동화 개요 (**⚠️ 필수!**)
-   - **replacedAsIsSteps**: 이 AI가 대체/압축하는 AS-IS 단계 이름들 (최대 5개)
-   - **skillBasedReduction** (**필수!**): 역량별 시간 절감 분석
-     - asIsTotal: AS-IS 대체 단계들의 총 소요 시간(분, 중역량 기준)
-     - junior: "90분→5분 (94% 절감)" 형식 (**80자 이내**)
-     - mid: "60분→5분 (92% 절감)" 형식 (**80자 이내**)
-     - senior: "42분→5분 (88% 절감)" 형식 (**80자 이내**)
-   - totalTimeReduction: 전체 요약 (**⚠️ 50자 이내 필수!**, 예: "저역량 94%/중역량 92%/고역량 88% 절감" - 이런 짧은 형식만!)
-   - keyBenefits: 핵심 이점 3가지 (각 **200자 이내**)
-   - implementationTips: 실무 구현 시 유의사항 2~3가지 (각 **200자 이내**)
-
-⚠️ **중요: 반복 금지!** 같은 내용을 반복하거나 "데이터 기반으로..." 같은 문구를 여러 번 쓰지 마세요.
-모든 필드는 **간결하고 실용적**으로 작성하세요. 토큰 제한에 도달하지 않도록 핵심만 포함!
-
-## 실제 기업 AI 도구 예시 (참고)
-- **Microsoft 365 Copilot**: Word/Excel/Outlook/Teams에서 AI 지원
-- **Power Automate**: 워크플로우 자동화, AI Builder 포함
-- **Google Workspace + Gemini**: 문서/이메일/스프레드시트 AI 지원
-- **Zapier + AI**: 앱 간 자동화 + AI 처리
-- **ChatGPT API / Claude API**: 커스텀 AI 에이전트 구축
+## JSON 구조 예시
+{
+  "id": "step1", "label": "단계명", "description": "설명",
+  "tools": ["Power Automate"],
+  "aiImplementation": { "method": "처리방법", "technology": ["RPA"] }
+}
 
 ## 응답 형식
 - flowType: "tobe"
-- subSteps 배열에 각 하위 단계 (aiImplementation, resources 필수!)
-- painPoints 필드는 **생략**
-- automationOverview.skillBasedReduction은 **필수!**`;
+- subSteps + aiImplementation + resources
+- automationOverview.skillBasedReduction 필수`;
 }
 
 function getDrilldownPrompt(
