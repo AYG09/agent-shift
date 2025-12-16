@@ -28,6 +28,76 @@ export interface FlowEdge {
     animated?: boolean;
 }
 
+// 유효한 target handle ID인지 확인 (신규 체계: xxx-target 형식)
+function isValidTargetHandle(handle: string | undefined): boolean {
+    if (!handle) return false;
+    // 새 체계의 target handle은 -target suffix를 가짐
+    return handle.endsWith('-target');
+}
+
+// 노드 위치 기반으로 최적의 연결점(handle) 자동 계산
+function normalizeEdgeHandlesInStore(nodes: FlowNode[], edges: FlowEdge[]): FlowEdge[] {
+    const nodeMap = new Map(nodes.map(n => [n.id, n.position]));
+    
+    return edges.map(edge => {
+        // 새 체계의 handle이 제대로 지정되어 있으면 그대로 사용
+        // (sourceHandle은 top/bottom/left/right, targetHandle은 xxx-target 형식)
+        if (edge.sourceHandle && isValidTargetHandle(edge.targetHandle)) {
+            return edge;
+        }
+        
+        const sourcePos = nodeMap.get(edge.source);
+        const targetPos = nodeMap.get(edge.target);
+        
+        if (!sourcePos || !targetPos) {
+            // 노드를 찾을 수 없으면 기본값 (위→아래 흐름)
+            return {
+                ...edge,
+                sourceHandle: 'bottom',
+                targetHandle: 'top-target',
+            };
+        }
+        
+        const dx = targetPos.x - sourcePos.x;
+        const dy = targetPos.y - sourcePos.y;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        
+        let sourceHandle: string;
+        let targetHandle: string;
+        
+        // 수직 이동이 더 큰 경우
+        if (absDy > absDx * 0.5) {
+            if (dy > 0) {
+                // target이 아래에 있음: source의 bottom → target의 top
+                sourceHandle = 'bottom';
+                targetHandle = 'top-target';
+            } else {
+                // target이 위에 있음: source의 top → target의 bottom
+                sourceHandle = 'top';
+                targetHandle = 'bottom-target';
+            }
+        } else {
+            // 수평 이동이 더 큰 경우
+            if (dx > 0) {
+                // target이 오른쪽: source의 right → target의 left
+                sourceHandle = 'right';
+                targetHandle = 'left-target';
+            } else {
+                // target이 왼쪽: source의 left → target의 right
+                sourceHandle = 'left';
+                targetHandle = 'right-target';
+            }
+        }
+        
+        return {
+            ...edge,
+            sourceHandle,
+            targetHandle,
+        };
+    });
+}
+
 // 액션 아이템 정보
 export interface ActionItem {
     action: string;
@@ -144,6 +214,7 @@ interface AppState {
     addEdge: (edge: FlowEdge, target: 'asis' | 'tobe') => void;
     deleteEdge: (id: string, target: 'asis' | 'tobe') => void;
     updateEdge: (id: string, updates: Partial<FlowEdge>, target: 'asis' | 'tobe') => void;
+    reverseEdge: (id: string, target: 'asis' | 'tobe') => void;
 
     // 초기화
     clearAll: () => void;
@@ -205,13 +276,17 @@ export const useAppStore = create<AppState>()(
                 const state = get();
                 const project = state.projects.find((p) => p.id === id);
                 if (project) {
+                    // 기존 저장된 엣지의 handle을 노드 위치 기반으로 재계산
+                    const normalizedAsIsEdges = normalizeEdgeHandlesInStore(project.asIsNodes, project.asIsEdges);
+                    const normalizedToBeEdges = normalizeEdgeHandlesInStore(project.toBeNodes, project.toBeEdges);
+                    
                     set({
                         currentProjectId: id,
                         context: project.context,
                         asIsNodes: project.asIsNodes,
-                        asIsEdges: project.asIsEdges,
+                        asIsEdges: normalizedAsIsEdges,
                         toBeNodes: project.toBeNodes,
-                        toBeEdges: project.toBeEdges,
+                        toBeEdges: normalizedToBeEdges,
                         strategy: project.strategy,
                         drilldownPath: [],
                         viewMode: 'asis',
@@ -281,8 +356,16 @@ export const useAppStore = create<AppState>()(
             // 기본 액션
             setContext: (context) => set({ context }),
             setStrategy: (strategy) => set({ strategy }),
-            setAsIsFlow: (nodes, edges) => set({ asIsNodes: nodes, asIsEdges: edges }),
-            setToBeFlow: (nodes, edges) => set({ toBeNodes: nodes, toBeEdges: edges }),
+            
+            // 엣지에 handle이 없으면 노드 위치 기반으로 최적 handle 자동 계산
+            setAsIsFlow: (nodes, edges) => {
+                const normalizedEdges = normalizeEdgeHandlesInStore(nodes, edges);
+                set({ asIsNodes: nodes, asIsEdges: normalizedEdges });
+            },
+            setToBeFlow: (nodes, edges) => {
+                const normalizedEdges = normalizeEdgeHandlesInStore(nodes, edges);
+                set({ toBeNodes: nodes, toBeEdges: normalizedEdges });
+            },
 
             pushDrilldown: (nodeId) =>
                 set((state) => ({
@@ -374,6 +457,28 @@ export const useAppStore = create<AppState>()(
                         [target === 'asis' ? 'asIsEdges' : 'toBeEdges']: edges.map((edge) =>
                             edge.id === id ? { ...edge, ...updates } : edge
                         ),
+                    };
+                }),
+
+            // 엣지 방향 뒤집기 (source ↔ target 교환)
+            reverseEdge: (id, target) =>
+                set((state) => {
+                    const edges = target === 'asis' ? state.asIsEdges : state.toBeEdges;
+                    return {
+                        [target === 'asis' ? 'asIsEdges' : 'toBeEdges']: edges.map((edge) => {
+                            if (edge.id !== id) return edge;
+                            
+                            // source와 target을 교환, handle도 적절히 교환
+                            const newId = `edge-${edge.target}-${edge.source}${edge.targetHandle && edge.sourceHandle ? `-${edge.targetHandle}-${edge.sourceHandle}` : ''}`;
+                            return {
+                                ...edge,
+                                id: newId,
+                                source: edge.target,
+                                target: edge.source,
+                                sourceHandle: edge.targetHandle,
+                                targetHandle: edge.sourceHandle,
+                            };
+                        }),
                     };
                 }),
 

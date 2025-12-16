@@ -138,19 +138,21 @@ const NodeShapeWrapper = ({
 
     return (
         <div className={baseStyle} onClick={onClick}>
-            {/* 4-way Handles - 각 방향별로 source/target 모두 지원 */}
+            {/* 4-way Handles - 모든 방향에서 드래그 시작 시 해당 노드가 source가 되도록 설정 */}
             {handles.top && (
                 <>
+                    {/* 드래그 시작용 source handle (기본 보임) */}
                     <Handle
-                        type="target"
+                        type="source"
                         position={Position.Top}
                         id="top"
                         className="!bg-slate-400 w-4 h-4 border-2 border-white hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                     />
+                    {/* 연결 받기용 target handle (같은 위치에 겹침) */}
                     <Handle
-                        type="source"
+                        type="target"
                         position={Position.Top}
-                        id="top-source"
+                        id="top-target"
                         className="!bg-slate-400 w-4 h-4 border-2 border-white !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all pointer-events-auto cursor-crosshair"
                         style={{ top: 0 }}
                     />
@@ -192,16 +194,18 @@ const NodeShapeWrapper = ({
             )}
             {handles.left && (
                 <>
+                    {/* 드래그 시작용 source handle (기본 보임) */}
                     <Handle
-                        type="target"
+                        type="source"
                         position={Position.Left}
                         id="left"
                         className="!bg-slate-400 w-4 h-4 border-2 border-white hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                     />
+                    {/* 연결 받기용 target handle (같은 위치에 겹침) */}
                     <Handle
-                        type="source"
+                        type="target"
                         position={Position.Left}
-                        id="left-source"
+                        id="left-target"
                         className="!bg-slate-400 w-4 h-4 border-2 border-white !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all pointer-events-auto cursor-crosshair"
                         style={{ left: 0 }}
                     />

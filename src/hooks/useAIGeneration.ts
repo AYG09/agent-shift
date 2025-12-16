@@ -50,15 +50,77 @@ function safeGetStorageItem(key: string): string | null {
     }
 }
 
-// 수직 플로우를 위한 엣지 핸들 보정 (AI가 handle 누락 시 기본값 적용)
-function normalizeEdgeHandles<T extends { edges: Array<{ id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }> }>(data: T): T {
+// 유효한 target handle ID인지 확인 (신규 체계: xxx-target 형식)
+function isValidTargetHandle(handle: string | undefined): boolean {
+    if (!handle) return false;
+    return handle.endsWith('-target');
+}
+
+// 수직 플로우를 위한 엣지 핸들 보정 - 노드 위치 기반으로 최적의 연결점 계산
+function normalizeEdgeHandles<T extends { 
+    nodes: Array<{ id: string; position: { x: number; y: number } }>; 
+    edges: Array<{ id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }> 
+}>(data: T): T {
+    const nodeMap = new Map(data.nodes.map(n => [n.id, n.position]));
+    
     return {
         ...data,
-        edges: data.edges.map(edge => ({
-            ...edge,
-            sourceHandle: edge.sourceHandle || 'bottom',
-            targetHandle: edge.targetHandle || 'top',
-        })),
+        edges: data.edges.map(edge => {
+            // 새 체계의 handle이 제대로 지정되어 있으면 그대로 사용
+            if (edge.sourceHandle && isValidTargetHandle(edge.targetHandle)) {
+                return edge;
+            }
+            
+            const sourcePos = nodeMap.get(edge.source);
+            const targetPos = nodeMap.get(edge.target);
+            
+            if (!sourcePos || !targetPos) {
+                // 노드를 찾을 수 없으면 기본값 (위→아래 흐름)
+                return {
+                    ...edge,
+                    sourceHandle: 'bottom',
+                    targetHandle: 'top-target',
+                };
+            }
+            
+            const dx = targetPos.x - sourcePos.x;
+            const dy = targetPos.y - sourcePos.y;
+            const absDx = Math.abs(dx);
+            const absDy = Math.abs(dy);
+            
+            let sourceHandle: string;
+            let targetHandle: string;
+            
+            // 수직 이동이 더 큰 경우
+            if (absDy > absDx * 0.5) {
+                if (dy > 0) {
+                    // target이 아래에 있음: source의 bottom → target의 top
+                    sourceHandle = 'bottom';
+                    targetHandle = 'top-target';
+                } else {
+                    // target이 위에 있음: source의 top → target의 bottom
+                    sourceHandle = 'top';
+                    targetHandle = 'bottom-target';
+                }
+            } else {
+                // 수평 이동이 더 큰 경우
+                if (dx > 0) {
+                    // target이 오른쪽: source의 right → target의 left
+                    sourceHandle = 'right';
+                    targetHandle = 'left-target';
+                } else {
+                    // target이 왼쪽: source의 left → target의 right
+                    sourceHandle = 'left';
+                    targetHandle = 'right-target';
+                }
+            }
+            
+            return {
+                ...edge,
+                sourceHandle,
+                targetHandle,
+            };
+        }),
     };
 }
 

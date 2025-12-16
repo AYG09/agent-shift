@@ -55,6 +55,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
         setToBeFlow,
         deleteEdge: storeDeleteEdge,
         updateEdge: storeUpdateEdge,
+        reverseEdge: storeReverseEdge,
         selectedToBeNodeId,
         setSelectedToBeNodeId,
     } = useAppStore();
@@ -183,7 +184,8 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
             const targetNode = sourceNodes.find(n => n.id === targetId);
 
             if (!sourceNode || !targetNode) {
-                return { sourceHandle: 'bottom', targetHandle: 'top' };
+                // sourceHandle은 source 타입, targetHandle은 target 타입 (suffix: -target)
+                return { sourceHandle: 'bottom', targetHandle: 'top-target' };
             }
 
             const dx = targetNode.position.x - sourceNode.position.x;
@@ -198,26 +200,25 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
             if (absDy > absDx * 0.5) {
                 if (dy > 0) {
                     // target이 아래에 있음: source의 bottom → target의 top
-                    return { sourceHandle: 'bottom', targetHandle: 'top' };
+                    return { sourceHandle: 'bottom', targetHandle: 'top-target' };
                 } else {
                     // target이 위에 있음 (역방향): source의 top → target의 bottom
-                    return { sourceHandle: 'top', targetHandle: 'bottom' };
+                    return { sourceHandle: 'top', targetHandle: 'bottom-target' };
                 }
             }
             
             // 수평 이동이 더 큰 경우 (분기)
             if (dx > 0) {
                 // target이 오른쪽: source의 right → target의 left
-                // 마름모에서 나가는 분기일 경우 right 사용
                 return { 
                     sourceHandle: isSourceDecision ? 'right' : 'right', 
-                    targetHandle: 'left' 
+                    targetHandle: 'left-target' 
                 };
             } else {
                 // target이 왼쪽: source의 left → target의 right
                 return { 
                     sourceHandle: isSourceDecision ? 'left' : 'left', 
-                    targetHandle: 'right' 
+                    targetHandle: 'right-target' 
                 };
             }
         },
@@ -321,17 +322,50 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
         closeEdgeContextMenu();
     }, [selectedEdgeId, storeEdges, storeUpdateEdge, target, setEdges, closeEdgeContextMenu]);
 
+    // Edge 방향 뒤집기 핸들러
+    const handleReverseEdgeDirection = useCallback(() => {
+        if (!selectedEdgeId) return;
+        
+        const currentEdge = storeEdges.find((e) => e.id === selectedEdgeId);
+        if (!currentEdge) return;
+        
+        // Store에서 방향 뒤집기
+        storeReverseEdge(selectedEdgeId, target);
+        
+        // 로컬 상태도 업데이트 (source ↔ target 교환)
+        setEdges((eds) => eds.map((e) => {
+            if (e.id !== selectedEdgeId) return e;
+            
+            const newId = `edge-${e.target}-${e.source}${e.targetHandle && e.sourceHandle ? `-${e.targetHandle}-${e.sourceHandle}` : ''}`;
+            return {
+                ...e,
+                id: newId,
+                source: e.target as string,
+                target: e.source as string,
+                sourceHandle: e.targetHandle,
+                targetHandle: e.sourceHandle,
+            };
+        }));
+        
+        setSelectedEdgeId(null);
+        closeEdgeContextMenu();
+    }, [selectedEdgeId, storeEdges, storeReverseEdge, target, setEdges, closeEdgeContextMenu]);
+
     // 선택된 Edge의 animated 상태
     const selectedEdgeAnimated = useMemo(() => {
         if (!selectedEdgeId) return false;
         return storeEdges.find((e) => e.id === selectedEdgeId)?.animated ?? false;
     }, [selectedEdgeId, storeEdges]);
 
-    // Delete 키로 선택된 Edge 삭제
+    // Delete 키로 선택된 Edge 삭제, R 키로 방향 뒤집기
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Delete' && selectedEdgeId) {
                 handleDeleteEdge();
+            }
+            if ((e.key === 'r' || e.key === 'R') && selectedEdgeId) {
+                e.preventDefault();
+                handleReverseEdgeDirection();
             }
             if (e.key === 'Escape') {
                 setSelectedEdgeId(null);
@@ -341,7 +375,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedEdgeId, handleDeleteEdge, closeEdgeContextMenu]);
+    }, [selectedEdgeId, handleDeleteEdge, handleReverseEdgeDirection, closeEdgeContextMenu]);
 
     // 좌클릭 = 선택 (To-Be 모드에서 agent 타입 노드만 전략 페이지용 선택 가능)
     const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
@@ -734,6 +768,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                     onDelete={handleDeleteEdge}
                     onToggleAnimation={handleToggleEdgeAnimation}
                     isAnimated={selectedEdgeAnimated}
+                    onReverseDirection={handleReverseEdgeDirection}
                 />
             )}
 

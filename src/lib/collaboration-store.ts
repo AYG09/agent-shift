@@ -12,6 +12,67 @@ import {
     StrategyData,
 } from './store';
 
+// 유효한 target handle ID인지 확인 (신규 체계: xxx-target 형식)
+function isValidTargetHandle(handle: string | undefined): boolean {
+    if (!handle) return false;
+    return handle.endsWith('-target');
+}
+
+// 노드 위치 기반으로 최적의 연결점(handle) 자동 계산
+function normalizeEdgeHandlesInStore(nodes: FlowNode[], edges: FlowEdge[]): FlowEdge[] {
+    const nodeMap = new Map(nodes.map(n => [n.id, n.position]));
+    
+    return edges.map(edge => {
+        // 새 체계의 handle이 제대로 지정되어 있으면 그대로 사용
+        if (edge.sourceHandle && isValidTargetHandle(edge.targetHandle)) {
+            return edge;
+        }
+        
+        const sourcePos = nodeMap.get(edge.source);
+        const targetPos = nodeMap.get(edge.target);
+        
+        if (!sourcePos || !targetPos) {
+            return {
+                ...edge,
+                sourceHandle: 'bottom',
+                targetHandle: 'top-target',
+            };
+        }
+        
+        const dx = targetPos.x - sourcePos.x;
+        const dy = targetPos.y - sourcePos.y;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        
+        let sourceHandle: string;
+        let targetHandle: string;
+        
+        if (absDy > absDx * 0.5) {
+            if (dy > 0) {
+                sourceHandle = 'bottom';
+                targetHandle = 'top-target';
+            } else {
+                sourceHandle = 'top';
+                targetHandle = 'bottom-target';
+            }
+        } else {
+            if (dx > 0) {
+                sourceHandle = 'right';
+                targetHandle = 'left-target';
+            } else {
+                sourceHandle = 'left';
+                targetHandle = 'right-target';
+            }
+        }
+        
+        return {
+            ...edge,
+            sourceHandle,
+            targetHandle,
+        };
+    });
+}
+
 // 협업 Store 상태 타입
 interface CollabState {
     // Storage (Liveblocks 동기화)
@@ -90,8 +151,14 @@ export const useCollabStore = create<WithLiveblocks<CollabState, Presence>>()(
             // 기본 액션
             setContext: (context) => set({ context }),
             setStrategy: (strategy) => set({ strategy }),
-            setAsIsFlow: (nodes, edges) => set({ asIsNodes: nodes, asIsEdges: edges }),
-            setToBeFlow: (nodes, edges) => set({ toBeNodes: nodes, toBeEdges: edges }),
+            setAsIsFlow: (nodes, edges) => {
+                const normalizedEdges = normalizeEdgeHandlesInStore(nodes, edges);
+                set({ asIsNodes: nodes, asIsEdges: normalizedEdges });
+            },
+            setToBeFlow: (nodes, edges) => {
+                const normalizedEdges = normalizeEdgeHandlesInStore(nodes, edges);
+                set({ toBeNodes: nodes, toBeEdges: normalizedEdges });
+            },
             setViewMode: (mode) => set({ viewMode: mode }),
             setIsGenerating: (loading) => set({ isGenerating: loading }),
 

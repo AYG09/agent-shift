@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Palette, Zap, ZapOff } from 'lucide-react';
+import { Trash2, Palette, Zap, ZapOff, ArrowLeftRight } from 'lucide-react';
 
 interface EdgeContextMenuProps {
     x: number;
@@ -12,6 +12,7 @@ interface EdgeContextMenuProps {
     onDelete: () => void;
     onToggleAnimation?: () => void;
     isAnimated?: boolean;
+    onReverseDirection?: () => void;
 }
 
 export default function EdgeContextMenu({
@@ -22,6 +23,7 @@ export default function EdgeContextMenu({
     onDelete,
     onToggleAnimation,
     isAnimated = false,
+    onReverseDirection,
 }: EdgeContextMenuProps) {
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +74,23 @@ export default function EdgeContextMenu({
 
                 {/* 메뉴 아이템들 */}
                 <div className="py-1">
+                    {/* 방향 뒤집기 */}
+                    {onReverseDirection && (
+                        <button
+                            onClick={() => {
+                                onReverseDirection();
+                                onClose();
+                            }}
+                            className="w-full px-3 py-2.5 flex items-center gap-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors group"
+                        >
+                            <ArrowLeftRight size={16} className="text-gray-400 group-hover:text-indigo-500" />
+                            <span>방향 뒤집기</span>
+                            <span className="ml-auto text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                                R
+                            </span>
+                        </button>
+                    )}
+
                     {/* 애니메이션 토글 */}
                     {onToggleAnimation && (
                         <>
