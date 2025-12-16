@@ -20,6 +20,64 @@ interface ReportNode {
     metrics?: { timeMinutes?: number };
 }
 
+// 엣지 타입
+interface ReportEdge {
+    id: string;
+    source: string;
+    target: string;
+}
+
+// 위상 정렬: 엣지 기반으로 노드를 플로우 순서대로 정렬
+function topologicalSort<T extends { id: string }>(nodes: T[], edges: ReportEdge[]): T[] {
+    if (edges.length === 0) return nodes; // 엣지 없으면 원본 반환
+
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const inDegree = new Map<string, number>();
+    const adjList = new Map<string, string[]>();
+
+    // 초기화
+    nodes.forEach(n => {
+        inDegree.set(n.id, 0);
+        adjList.set(n.id, []);
+    });
+
+    // 엣지 기반 그래프 구성
+    edges.forEach(e => {
+        if (nodeMap.has(e.source) && nodeMap.has(e.target)) {
+            adjList.get(e.source)?.push(e.target);
+            inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
+        }
+    });
+
+    // 진입 차수가 0인 노드들로 시작 (Kahn's Algorithm)
+    const queue: string[] = [];
+    inDegree.forEach((deg, id) => {
+        if (deg === 0) queue.push(id);
+    });
+
+    const result: T[] = [];
+    while (queue.length > 0) {
+        const nodeId = queue.shift()!;
+        const node = nodeMap.get(nodeId);
+        if (node) result.push(node);
+
+        adjList.get(nodeId)?.forEach(neighbor => {
+            inDegree.set(neighbor, (inDegree.get(neighbor) || 0) - 1);
+            if (inDegree.get(neighbor) === 0) {
+                queue.push(neighbor);
+            }
+        });
+    }
+
+    // 사이클이 있거나 누락된 노드가 있으면 원본에서 보충
+    const resultIds = new Set(result.map(n => n.id));
+    nodes.forEach(n => {
+        if (!resultIds.has(n.id)) result.push(n);
+    });
+
+    return result;
+}
+
 // 전략 Phase 타입
 interface StrategyPhase {
     name: string;
@@ -61,12 +119,18 @@ export async function generateWordReport(data: {
     context: { industry: string; role: string; task: string };
     asIsNodes: ReportNode[];
     toBeNodes: ReportNode[];
+    asIsEdges?: ReportEdge[];
+    toBeEdges?: ReportEdge[];
     strategy?: {
         framework: string;
         phases: StrategyPhase[];
     };
     drilldownResults?: Record<string, DrilldownResponse>;
 }) {
+    // 엣지 기반 위상 정렬 (플로우 순서대로 정렬)
+    const sortedAsIsNodes = topologicalSort(data.asIsNodes, data.asIsEdges || []);
+    const sortedToBeNodes = topologicalSort(data.toBeNodes, data.toBeEdges || []);
+
     // AS-IS 플로우 테이블
     const asIsTableRows = [
         new TableRow({
@@ -77,7 +141,7 @@ export async function generateWordReport(data: {
                 createHeaderCell('소요시간(분)'),
             ],
         }),
-        ...data.asIsNodes.map((node, idx) =>
+        ...sortedAsIsNodes.map((node, idx) =>
             new TableRow({
                 children: [
                     createCell(String(idx + 1), AlignmentType.CENTER),
@@ -100,7 +164,7 @@ export async function generateWordReport(data: {
                 createHeaderCell('소요시간(분)'),
             ],
         }),
-        ...data.toBeNodes.map((node, idx) =>
+        ...sortedToBeNodes.map((node, idx) =>
             new TableRow({
                 children: [
                     createCell(String(idx + 1), AlignmentType.CENTER),
@@ -138,8 +202,8 @@ export async function generateWordReport(data: {
     ] : [];
 
     // 총 소요시간 계산
-    const asIsTotalTime = data.asIsNodes.reduce((sum, n) => sum + (n.metrics?.timeMinutes || 0), 0);
-    const toBeTotalTime = data.toBeNodes.reduce((sum, n) => sum + (n.metrics?.timeMinutes || 0), 0);
+    const asIsTotalTime = sortedAsIsNodes.reduce((sum, n) => sum + (n.metrics?.timeMinutes || 0), 0);
+    const toBeTotalTime = sortedToBeNodes.reduce((sum, n) => sum + (n.metrics?.timeMinutes || 0), 0);
     const timeSaved = asIsTotalTime - toBeTotalTime;
 
     const doc = new Document({
@@ -234,12 +298,12 @@ export async function generateWordReport(data: {
                             .filter(([key]) => key.startsWith('to-be-'))
                             .flatMap(([key, result]) => {
                                 const nodeId = key.replace('to-be-', '');
-                                const node = data.toBeNodes.find(n => n.id === nodeId);
+                                const node = sortedToBeNodes.find(n => n.id === nodeId);
                                 if (!node) return [];
                                 
                                 const paragraphs: Paragraph[] = [
                                     new Paragraph({
-                                        text: `5.${data.toBeNodes.indexOf(node) + 1}. ${node.label}`,
+                                        text: `5.${sortedToBeNodes.indexOf(node) + 1}. ${node.label}`,
                                         heading: HeadingLevel.HEADING_2,
                                     }),
                                 ];
@@ -313,6 +377,8 @@ export async function generateWordReport(data: {
 export function generateExcelWBS(data: {
     asIsNodes?: ReportNode[];
     toBeNodes?: ReportNode[];
+    asIsEdges?: ReportEdge[];
+    toBeEdges?: ReportEdge[];
     strategy: {
         phases: Array<{
             name: string;
@@ -329,11 +395,15 @@ export function generateExcelWBS(data: {
     const workbook = XLSX.utils.book_new();
     const totalWeeks = data.totalWeeks || 12;
 
+    // 엣지 기반 위상 정렬 (플로우 순서대로 정렬)
+    const sortedAsIsNodes = data.asIsNodes ? topologicalSort(data.asIsNodes, data.asIsEdges || []) : [];
+    const sortedToBeNodes = data.toBeNodes ? topologicalSort(data.toBeNodes, data.toBeEdges || []) : [];
+
     // 시트 1: AS-IS Flow
-    if (data.asIsNodes && data.asIsNodes.length > 0) {
+    if (sortedAsIsNodes.length > 0) {
         const asIsData = [
             ['순번', '업무', '설명', '소요시간(분)'],
-            ...data.asIsNodes.map((node, idx) => [
+            ...sortedAsIsNodes.map((node, idx) => [
                 idx + 1,
                 node.label,
                 node.description || '-',
@@ -346,10 +416,10 @@ export function generateExcelWBS(data: {
     }
 
     // 시트 2: TO-BE Flow
-    if (data.toBeNodes && data.toBeNodes.length > 0) {
+    if (sortedToBeNodes.length > 0) {
         const toBeData = [
             ['순번', '업무', '유형', '설명', '소요시간(분)'],
-            ...data.toBeNodes.map((node, idx) => [
+            ...sortedToBeNodes.map((node, idx) => [
                 idx + 1,
                 node.label,
                 node.type === 'agent' ? '🤖 AI Agent' : '📋 일반업무',
@@ -405,8 +475,8 @@ export function generateExcelWBS(data: {
     XLSX.utils.book_append_sheet(workbook, wbsSheet, 'Strategy WBS');
 
     // 시트 4: ROI Summary
-    const asIsTotalTime = data.asIsNodes?.reduce((sum, n) => sum + (n.metrics?.timeMinutes || 0), 0) || 0;
-    const toBeTotalTime = data.toBeNodes?.reduce((sum, n) => sum + (n.metrics?.timeMinutes || 0), 0) || 0;
+    const asIsTotalTime = sortedAsIsNodes.reduce((sum, n) => sum + (n.metrics?.timeMinutes || 0), 0);
+    const toBeTotalTime = sortedToBeNodes.reduce((sum, n) => sum + (n.metrics?.timeMinutes || 0), 0);
     const timeSaved = asIsTotalTime - toBeTotalTime;
     const efficiencyRate = asIsTotalTime > 0 ? Math.round((timeSaved / asIsTotalTime) * 100) : 0;
 
@@ -438,7 +508,7 @@ export function generateExcelWBS(data: {
             .filter(([key]) => key.startsWith('to-be-'))
             .forEach(([key, result]) => {
                 const nodeId = key.replace('to-be-', '');
-                const node = data.toBeNodes?.find(n => n.id === nodeId);
+                const node = sortedToBeNodes.find(n => n.id === nodeId);
                 if (!node) return;
 
                 const subStepsText = result.subSteps

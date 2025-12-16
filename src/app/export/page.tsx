@@ -9,7 +9,7 @@ import { useAppStore } from '@/lib/store';
 import Link from 'next/link';
 
 export default function ExportPage() {
-    const { context, asIsNodes, toBeNodes, strategy, drilldownResults } = useAppStore();
+    const { context, asIsNodes, toBeNodes, asIsEdges, toBeEdges, strategy, drilldownResults } = useAppStore();
     const [isExportingWord, setIsExportingWord] = useState(false);
     const [isExportingExcel, setIsExportingExcel] = useState(false);
     const [exportStatus, setExportStatus] = useState<string | null>(null);
@@ -104,6 +104,8 @@ export default function ExportPage() {
                 context: exportContext,
                 asIsNodes: exportAsIsNodes,
                 toBeNodes: exportToBeNodes,
+                asIsEdges: asIsEdges.map(e => ({ id: e.id, source: e.source, target: e.target })),
+                toBeEdges: toBeEdges.map(e => ({ id: e.id, source: e.source, target: e.target })),
                 strategy: exportStrategy,
                 drilldownResults,
             });
@@ -123,6 +125,8 @@ export default function ExportPage() {
             generateExcelWBS({
                 asIsNodes: exportAsIsNodes,
                 toBeNodes: exportToBeNodes,
+                asIsEdges: asIsEdges.map(e => ({ id: e.id, source: e.source, target: e.target })),
+                toBeEdges: toBeEdges.map(e => ({ id: e.id, source: e.source, target: e.target })),
                 strategy: exportStrategy,
                 totalWeeks: strategy?.totalWeeks || 12,
                 drilldownResults,
