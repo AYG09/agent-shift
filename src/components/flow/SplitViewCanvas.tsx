@@ -178,21 +178,6 @@ export default function SplitViewCanvas({
                     <Controls className="!bg-white !border-slate-200 !shadow-md" />
                 </ReactFlow>
             </div>
-
-            {/* Speed Legend - Always visible */}
-            <Panel
-                position="bottom-center"
-                className="bg-white/95 backdrop-blur-sm px-4 py-2 rounded-lg border border-slate-200 shadow-md flex gap-6"
-            >
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-                    <span className="text-xs text-slate-600">As-Is (느림)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                    <span className="text-xs text-slate-600">To-Be (빠름)</span>
-                </div>
-            </Panel>
             </div>
 
             {/* Right Sidebar - ROI Summary Panel */}
@@ -202,6 +187,21 @@ export default function SplitViewCanvas({
                         asIsNodes={extractMetrics(asIsNodes)}
                         toBeNodes={extractMetrics(toBeNodes)}
                     />
+                </div>
+                
+                {/* 시뮬레이션 속도 안내 */}
+                <div className="flex-shrink-0 bg-white/95 backdrop-blur-sm px-4 py-3 rounded-lg border border-slate-200 shadow-sm">
+                    <div className="text-xs font-medium text-slate-700 mb-2">시뮬레이션 속도</div>
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                            <span className="text-xs text-slate-600">As-Is (느림)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                            <span className="text-xs text-slate-600">To-Be (빠름)</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
