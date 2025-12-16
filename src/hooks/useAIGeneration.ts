@@ -17,6 +17,9 @@ interface FlowNodeBasic {
     description?: string;
     type: string;
     collaborationType?: string;
+    metrics?: {
+        timeMinutes?: number;
+    };
 }
 
 interface FlowEdgeBasic {
@@ -303,10 +306,11 @@ export function useAIGeneration() {
     const generateDrilldown = useCallback(
         async (
             context: { industry: string; role: string; task: string },
-            node: { id: string; label: string; description?: string; type: string; collaborationType?: string },
+            node: { id: string; label: string; description?: string; type: string; collaborationType?: string; metrics?: { timeMinutes?: number } },
             flowType: 'as-is' | 'to-be',
             allNodes?: FlowNodeBasic[],
-            allEdges?: FlowEdgeBasic[]
+            allEdges?: FlowEdgeBasic[],
+            asIsNodes?: FlowNodeBasic[]  // AS-IS 원본 노드들 (시간 비교용)
         ) => {
             setIsLoading(true);
             setError(null);
@@ -317,7 +321,8 @@ export function useAIGeneration() {
                     nodeId: node.id, 
                     flowType,
                     nodeCount: allNodes?.length ?? 0,
-                    edgeCount: allEdges?.length ?? 0
+                    edgeCount: allEdges?.length ?? 0,
+                    asIsNodeCount: asIsNodes?.length ?? 0
                 });
                 const cached = getCachedData<DrilldownResponse>(cacheKey);
                 if (cached) {
@@ -335,6 +340,7 @@ export function useAIGeneration() {
                         flowType,
                         allNodes,
                         allEdges,
+                        asIsNodes,  // AS-IS 원본 노드들 (시간 비교용)
                         apiKey: apiKey || undefined,
                     }),
                 });

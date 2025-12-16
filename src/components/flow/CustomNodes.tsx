@@ -44,6 +44,9 @@ type AgentNodeData = {
     agentDescription?: string;
     shape?: ShapeType;
     isSelectedForStrategy?: boolean;
+    metrics?: {
+        timeMinutes?: number;
+    };
 };
 
 // ============================================
@@ -253,6 +256,15 @@ export const TerminalNode = memo(({ data, selected }: NodeProps<Node<TerminalNod
 TerminalNode.displayName = 'TerminalNode';
 
 // ============================================
+// 스킬 레벨 상수 (Manhour 계산용)
+// ============================================
+const SKILL_MULTIPLIERS = {
+    junior: 1.5,
+    mid: 1.0,
+    senior: 0.7,
+};
+
+// ============================================
 // Process Node (직사각형 - 처리) - 아코디언 확장
 // ============================================
 // ============================================
@@ -260,6 +272,7 @@ TerminalNode.displayName = 'TerminalNode';
 // ============================================
 export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeData>>) => {
     const [expanded, setExpanded] = useState(false);
+    const [skillExpanded, setSkillExpanded] = useState(false);
 
     const stress = data.stressLevel || 'low';
     const metrics = data.metrics;
@@ -268,13 +281,20 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
     // Default shape for Process is 'rectangle' if not specified
     const shape = data.shape || 'rectangle';
 
+    const handleTimeClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (metrics?.timeMinutes) {
+            setSkillExpanded(!skillExpanded);
+        }
+    };
+
     return (
         <NodeShapeWrapper
             shape={shape}
             stress={stress}
             isHeatmapMode={isHeatmapMode}
             selected={selected}
-            className={`min-w-[150px] ${expanded ? 'max-w-[300px]' : 'max-w-[200px]'}`}
+            className={`min-w-[150px] ${expanded || skillExpanded ? 'max-w-[300px]' : 'max-w-[200px]'}`}
             onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();
                 if (hasDescription) setExpanded(!expanded);
@@ -307,10 +327,40 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
                     </div>
                 )}
 
-                {metrics && (metrics.timeMinutes || metrics.costKRW || metrics.peopleCount) && (
-                    <div className="flex gap-2 pt-2 mt-2 border-t border-slate-200 text-xs text-slate-500">
-                        {metrics.timeMinutes && <span>⏱️{metrics.timeMinutes}</span>}
-                        {metrics.costKRW && <span>💰{formatNumber(metrics.costKRW)}</span>}
+                {metrics?.timeMinutes && (
+                    <div className="pt-2 mt-2 border-t border-slate-200">
+                        <div 
+                            className="flex items-center gap-1 text-xs text-slate-500 cursor-pointer hover:text-slate-700 transition-colors"
+                            onClick={handleTimeClick}
+                        >
+                            <span>⏱️ {metrics.timeMinutes}분</span>
+                            <span 
+                                className="text-[10px] transition-transform"
+                                style={{ transform: skillExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                            >
+                                ▼
+                            </span>
+                        </div>
+                        {/* 스킬별 시간 표시 */}
+                        {skillExpanded && (
+                            <div className="mt-2 space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                                <div className="flex items-center gap-2 text-[10px]">
+                                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                                    <span className="text-slate-600">저역량:</span>
+                                    <span className="font-medium text-red-600">{Math.round(metrics.timeMinutes * SKILL_MULTIPLIERS.junior)}분</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px]">
+                                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                    <span className="text-slate-600">중역량:</span>
+                                    <span className="font-medium text-amber-600">{metrics.timeMinutes}분</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px]">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                    <span className="text-slate-600">고역량:</span>
+                                    <span className="font-medium text-emerald-600">{Math.round(metrics.timeMinutes * SKILL_MULTIPLIERS.senior)}분</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -479,6 +529,7 @@ IONode.displayName = 'IONode';
 // ============================================
 export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>>) => {
     const [expanded, setExpanded] = useState(false);
+    const [skillExpanded, setSkillExpanded] = useState(false);
 
     const collabLabels = {
         copilot: '🤝 Co-pilot',
@@ -490,12 +541,20 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
     const hasDescription = !!data.agentDescription;
     const shape = data.shape || 'hexagon';
     const isStrategySelected = data.isSelectedForStrategy;
+    const metrics = data.metrics;
+
+    const handleTimeClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (metrics?.timeMinutes) {
+            setSkillExpanded(!skillExpanded);
+        }
+    };
 
     return (
         <NodeShapeWrapper
             shape={shape}
             selected={selected}
-            className={`flex items-center justify-center cursor-pointer ${expanded ? 'w-[260px] h-auto min-h-[160px]' : 'w-[180px] h-[140px]'} ${isStrategySelected ? 'ring-4 ring-purple-500/70 ring-offset-2 ring-offset-white shadow-lg shadow-purple-200' : ''}`}
+            className={`flex items-center justify-center cursor-pointer ${expanded || skillExpanded ? 'w-[260px] h-auto min-h-[160px]' : 'w-[180px] h-[140px]'} ${isStrategySelected ? 'ring-4 ring-purple-500/70 ring-offset-2 ring-offset-white shadow-lg shadow-purple-200' : ''}`}
             onClick={(e) => {
                 e.stopPropagation();
                 if (hasDescription) setExpanded(!expanded);
@@ -525,6 +584,44 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
                         </span>
                     )}
                 </div>
+
+                {/* 시간 메트릭 표시 (스킬별 시간 토글) */}
+                {metrics?.timeMinutes && (
+                    <div className="border-t border-slate-200 pt-2 mt-2">
+                        <div 
+                            className="text-xs text-slate-500 flex items-center justify-center gap-1 cursor-pointer hover:text-slate-700 transition-colors"
+                            onClick={handleTimeClick}
+                        >
+                            <span>⏱️ {metrics.timeMinutes}분</span>
+                            <span 
+                                className="text-[10px] transition-transform"
+                                style={{ transform: skillExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                            >
+                                ▼
+                            </span>
+                        </div>
+                        {/* 스킬별 시간 표시 */}
+                        {skillExpanded && (
+                            <div className="mt-2 space-y-1 animate-in fade-in slide-in-from-top-1 duration-200 text-left mx-auto max-w-[140px]">
+                                <div className="flex items-center gap-2 text-[10px]">
+                                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                                    <span className="text-slate-600">저역량:</span>
+                                    <span className="font-medium text-red-600">{Math.round(metrics.timeMinutes * SKILL_MULTIPLIERS.junior)}분</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px]">
+                                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                    <span className="text-slate-600">중역량:</span>
+                                    <span className="font-medium text-amber-600">{metrics.timeMinutes}분</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px]">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                    <span className="text-slate-600">고역량:</span>
+                                    <span className="font-medium text-emerald-600">{Math.round(metrics.timeMinutes * SKILL_MULTIPLIERS.senior)}분</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* 축소 상태: 미리보기 */}
                 {!expanded && hasDescription && (

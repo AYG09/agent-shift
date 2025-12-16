@@ -464,13 +464,14 @@ export default function FlowPage() {
 
         const flowType = viewMode === 'tobe' ? 'to-be' : 'as-is';
 
-        // 전체 노드/엣지를 API에 전달하여 플로우 컨텍스트 파악
+        // 전체 노드/엣지를 API에 전달하여 플로우 컨텍스트 파악 (metrics 포함)
         const allNodesForContext = nodes.map(n => ({
             id: n.id,
             label: n.label,
             description: n.description,
             type: n.type,
             collaborationType: n.collaborationType,
+            metrics: n.metrics,  // 시간 정보 포함
         }));
         const allEdgesForContext = edges.map(e => ({
             id: e.id,
@@ -478,12 +479,29 @@ export default function FlowPage() {
             target: e.target,
         }));
 
+        // AS-IS 원본 노드들 (TO-BE 분석 시 시간 비교용)
+        const asIsNodesForContext = asIsNodes.map(n => ({
+            id: n.id,
+            label: n.label,
+            description: n.description,
+            type: n.type,
+            metrics: n.metrics,  // 시간 정보 포함!
+        }));
+
         const result = await generateDrilldown(
             { industry: context.industry, role: context.role, task: context.task },
-            { id: node.id, label: node.label, description: node.description, type: node.type, collaborationType: node.collaborationType },
+            { 
+                id: node.id, 
+                label: node.label, 
+                description: node.description, 
+                type: node.type, 
+                collaborationType: node.collaborationType,
+                metrics: node.metrics,  // 현재 노드의 시간 정보
+            },
             flowType,
             allNodesForContext,
-            allEdgesForContext
+            allEdgesForContext,
+            viewMode === 'tobe' ? asIsNodesForContext : undefined  // TO-BE일 때만 AS-IS 전달
         );
 
         if (result) {

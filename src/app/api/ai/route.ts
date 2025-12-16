@@ -315,11 +315,30 @@ ${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞�
 // TO-BE 전용 드릴다운 프롬프트: AI 자동화 구현 방법 상세 안내
 // 단, 노드 타입이 'agent'가 아니면 인간 작업으로 분석
 function getDrilldownPromptToBe(
-    node: { id: string; label: string; description?: string; type: string; collaborationType?: string },
+    node: { id: string; label: string; description?: string; type: string; collaborationType?: string; metrics?: { timeMinutes?: number } },
     context: { industry: string; role: string; task: string },
-    graphContext: GraphContext | null = null
+    graphContext: GraphContext | null = null,
+    asIsNodes?: GraphNode[]  // AS-IS 원본 노드들 (시간 비교용)
 ) {
     const graphContextText = formatGraphContextForPrompt(graphContext);
+    
+    // AS-IS 노드 정보 포맷팅 (시간 포함)
+    const asIsInfo = asIsNodes && asIsNodes.length > 0 
+        ? `\n## AS-IS 원본 프로세스 (비교 기준) 📊
+아래는 AI 도입 전 인간이 수행하던 단계들입니다. 이 AI가 어떤 단계들을 대체/압축하는지 분석하세요.
+
+${asIsNodes.map(n => {
+    const time = (n as { metrics?: { timeMinutes?: number } }).metrics?.timeMinutes;
+    const timeInfo = time ? `소요시간: ${time}분 (저역량: ${Math.round(time * 1.5)}분, 중역량: ${time}분, 고역량: ${Math.round(time * 0.7)}분)` : '시간 미정';
+    return `- **${n.label}** (${n.type}): ${n.description || '설명 없음'} [${timeInfo}]`;
+}).join('\n')}
+
+**역량별 시간 승수 (SKILL_MULTIPLIERS)**:
+- 저역량(junior): 기준시간 × 1.5
+- 중역량(mid): 기준시간 × 1.0  
+- 고역량(senior): 기준시간 × 0.7
+`
+        : '';
     
     // 노드 타입이 'agent'가 아니면 인간 작업으로 분석 (TO-BE에서도 인간이 수행하는 단계)
     const isHumanTask = node.type !== 'agent';
@@ -375,8 +394,10 @@ ${graphContext ? `- 위의 이전/다음 단계(일부는 AI 에이전트)와의
 - ID: ${node.id}
 - 이름: ${node.label}
 - 설명: ${node.description || '없음'}
+- AI 처리 예상 시간: ${node.metrics?.timeMinutes ? `${node.metrics.timeMinutes}분` : '미정'}
 - 협업 유형: ${node.collaborationType || 'copilot'} (copilot=인간+AI 협력, autonomous=AI 독립 수행, monitor=인간 감독)
 ${graphContextText}
+${asIsInfo}
 ## 중요 지침 ⚠️
 이것은 **To-Be (AI 도입 후)** 분석입니다.
 - 이 단계는 이미 AI가 처리하는 것으로 계획되어 있습니다
@@ -384,6 +405,7 @@ ${graphContextText}
 - 비전문가도 이해할 수 있게 쉽게 설명하세요
 - 실제로 구현 가능한 방법을 제시하세요
 ${graphContext ? `- 위의 이전/다음 단계와의 **데이터 흐름**을 고려하세요` : ''}
+${asIsNodes && asIsNodes.length > 0 ? `- **반드시** 위 AS-IS 단계들 중 이 AI가 대체하는 단계들을 식별하고, 역량별 시간 절감을 계산하세요!` : ''}
 
 ## 요구사항
 1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
@@ -402,11 +424,20 @@ ${graphContext ? `- 위의 이전/다음 단계와의 **데이터 흐름**을 �
      - url: ⚠️ **반드시 50자 이내의 짧은 검색 키워드만!** (예: "Power Automate email classification") - 긴 문장 절대 금지!
      - description: 이 자료가 도움이 되는 이유 (200자 이내)
 
-3. **summary**: AI 도입으로 인한 효율성 향상 요약
-4. **automationOverview**: 전체 자동화 개요
-   - totalTimeReduction: 예상 시간 절감률 (예: "기존 60분 → 5분, 92% 절감")
-   - keyBenefits: 핵심 이점 3가지
-   - implementationTips: 실무 구현 시 유의사항 2~3가지
+3. **summary**: AI 도입으로 인한 효율성 향상 요약 (**500자 이내**, 핵심만 간결하게)
+4. **automationOverview**: 전체 자동화 개요 (**⚠️ 필수! AS-IS 대비 역량별 시간 절감 분석**)
+   - **replacedAsIsSteps**: 이 AI가 대체/압축하는 AS-IS 단계 이름들 (최대 5개)
+   - **skillBasedReduction** (**필수!**): 역량별 시간 절감 분석
+     - asIsTotal: AS-IS 대체 단계들의 총 소요 시간(분, 중역량 기준)
+     - junior: "90분→5분 (94% 절감)" 형식 (**80자 이내**)
+     - mid: "60분→5분 (92% 절감)" 형식 (**80자 이내**)
+     - senior: "42분→5분 (88% 절감)" 형식 (**80자 이내**)
+   - totalTimeReduction: 전체 요약 (**150자 이내**, 예: "저역량 94%/중역량 92%/고역량 88% 절감")
+   - keyBenefits: 핵심 이점 3가지 (각 **200자 이내**)
+   - implementationTips: 실무 구현 시 유의사항 2~3가지 (각 **200자 이내**)
+
+⚠️ **중요: 반복 금지!** 같은 내용을 반복하거나 "데이터 기반으로..." 같은 문구를 여러 번 쓰지 마세요.
+모든 필드는 **간결하고 실용적**으로 작성하세요. 토큰 제한에 도달하지 않도록 핵심만 포함!
 
 ## 실제 기업 AI 도구 예시 (참고)
 - **Microsoft 365 Copilot**: Word/Excel/Outlook/Teams에서 AI 지원
@@ -418,22 +449,24 @@ ${graphContext ? `- 위의 이전/다음 단계와의 **데이터 흐름**을 �
 ## 응답 형식
 - flowType: "tobe"
 - subSteps 배열에 각 하위 단계 (aiImplementation, resources 필수!)
-- painPoints 필드는 **생략**`;
+- painPoints 필드는 **생략**
+- automationOverview.skillBasedReduction은 **필수!**`;
 }
 
 function getDrilldownPrompt(
-    node: { id: string; label: string; description?: string; type: string; collaborationType?: string },
+    node: { id: string; label: string; description?: string; type: string; collaborationType?: string; metrics?: { timeMinutes?: number } },
     context: { industry: string; role: string; task: string },
     flowType: string,
     allNodes?: GraphNode[],
-    allEdges?: GraphEdge[]
+    allEdges?: GraphEdge[],
+    asIsNodes?: GraphNode[]  // AS-IS 원본 노드들 (시간 비교용)
 ) {
     // 그래프 컨텍스트 추출 (인접 노드 정보)
     const graphContext = extractGraphContext(node.id, allNodes, allEdges);
     
     // flowType에 따라 완전히 다른 프롬프트 반환
     if (flowType === 'tobe' || flowType === 'to-be') {
-        return getDrilldownPromptToBe(node, context, graphContext);
+        return getDrilldownPromptToBe(node, context, graphContext, asIsNodes);
     }
     return getDrilldownPromptAsIs(node, context, graphContext);
 }
@@ -521,7 +554,8 @@ export async function POST(request: NextRequest) {
                 }
                 schema = DrilldownResponseSchema;
                 // allNodes, allEdges는 선택적 - 전체 플로우 컨텍스트 전달용
-                prompt = getDrilldownPrompt(node, context, flowType, body.allNodes, body.allEdges);
+                // asIsNodes는 TO-BE 분석 시 시간 비교용
+                prompt = getDrilldownPrompt(node, context, flowType, body.allNodes, body.allEdges, body.asIsNodes);
                 break;
 
             case 'generateNodeSplit':
@@ -562,7 +596,7 @@ export async function POST(request: NextRequest) {
             model,
             schema,
             prompt,
-            maxTokens: 4096, // 토큰 제한으로 JSON 잘림 방지
+            maxOutputTokens: 4096, // AI SDK V5: maxTokens → maxOutputTokens
         });
 
         // 숫자 필드 정규화 후 반환

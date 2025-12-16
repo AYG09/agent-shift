@@ -143,7 +143,17 @@ export const DrilldownResponseSchema = z.object({
     summary: z.string().max(500),
     // TO-BE 전용: 전체 자동화 개요
     automationOverview: z.object({
-        totalTimeReduction: z.string().max(100).optional(),
+        // 대체된 AS-IS 단계들 (ID 또는 이름)
+        replacedAsIsSteps: z.array(z.string().max(100)).max(5).optional(),
+        // 역량별 시간 절감 (필수!)
+        skillBasedReduction: z.object({
+            asIsTotal: z.number().int().optional(), // AS-IS 기준 총 시간(분)
+            junior: z.string().max(80), // 예: "90분→5분 (94% 절감)"
+            mid: z.string().max(80),    // 예: "60분→5분 (92% 절감)"
+            senior: z.string().max(80), // 예: "42분→5분 (88% 절감)"
+        }).optional(),
+        // 기존 필드 (역량별로 분리되면서 간단한 요약)
+        totalTimeReduction: z.string().max(150).optional(),
         keyBenefits: z.array(z.string().max(200)).max(5).optional(),
         implementationTips: z.array(z.string().max(200)).max(5).optional(),
     }).optional(),

@@ -30,8 +30,6 @@ interface NodeData {
     collaborationType?: 'copilot' | 'monitor' | 'autonomous';
     metrics?: {
         timeMinutes?: number;
-        costKRW?: number;
-        peopleCount?: number;
     };
 }
 
@@ -62,8 +60,6 @@ export default function NodeEditor({
     const [collaborationType, setCollaborationType] =
         useState<NodeData['collaborationType']>('copilot');
     const [timeMinutes, setTimeMinutes] = useState<number | undefined>(undefined);
-    const [costKRW, setCostKRW] = useState<number | undefined>(undefined);
-    const [peopleCount, setPeopleCount] = useState<number | undefined>(undefined);
 
     const resetForm = () => {
         setLabel('');
@@ -73,8 +69,6 @@ export default function NodeEditor({
         setStressLevel('low');
         setCollaborationType('copilot');
         setTimeMinutes(undefined);
-        setCostKRW(undefined);
-        setPeopleCount(undefined);
     };
 
     useEffect(() => {
@@ -87,8 +81,6 @@ export default function NodeEditor({
             setStressLevel(initialData.stressLevel || 'low');
             setCollaborationType(initialData.collaborationType || 'copilot');
             setTimeMinutes(initialData.metrics?.timeMinutes);
-            setCostKRW(initialData.metrics?.costKRW);
-            setPeopleCount(initialData.metrics?.peopleCount);
         } else {
             resetForm();
         }
@@ -106,8 +98,6 @@ export default function NodeEditor({
             collaborationType: type === 'agent' ? collaborationType : undefined,
             metrics: {
                 timeMinutes,
-                costKRW,
-                peopleCount,
             },
         });
         onClose();
@@ -186,9 +176,9 @@ export default function NodeEditor({
                     {/* Metrics Section */}
                     <div className="space-y-3 p-3 bg-[#F4F4F5]/50 rounded-lg border border-[#E2E4E9]">
                         <Label className="text-[#71717A] font-medium">📊 노드 메트릭 (선택 사항)</Label>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="space-y-3">
                             <div className="space-y-1">
-                                <Label className="text-[#A1A1AA] text-xs">⏱️ 소요시간 (분)</Label>
+                                <Label className="text-[#A1A1AA] text-xs">⏱️ 기준 소요시간 (분)</Label>
                                 <Input
                                     type="number"
                                     min={0}
@@ -198,28 +188,26 @@ export default function NodeEditor({
                                     className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#D4D4D8] h-8 text-sm"
                                 />
                             </div>
-                            <div className="space-y-1">
-                                <Label className="text-[#A1A1AA] text-xs">💰 비용 (원)</Label>
-                                <Input
-                                    type="number"
-                                    min={0}
-                                    value={costKRW ?? ''}
-                                    onChange={(e) => setCostKRW(e.target.value ? Number(e.target.value) : undefined)}
-                                    placeholder="50000"
-                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#D4D4D8] h-8 text-sm"
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-[#A1A1AA] text-xs">👥 인원 (명)</Label>
-                                <Input
-                                    type="number"
-                                    min={1}
-                                    value={peopleCount ?? ''}
-                                    onChange={(e) => setPeopleCount(e.target.value ? Number(e.target.value) : undefined)}
-                                    placeholder="2"
-                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#D4D4D8] h-8 text-sm"
-                                />
-                            </div>
+                            {/* 스킬 레벨별 예상 시간 (읽기 전용) */}
+                            {timeMinutes && timeMinutes > 0 && (
+                                <div className="bg-white/80 rounded-md p-2 border border-[#E2E4E9]">
+                                    <Label className="text-[#A1A1AA] text-xs mb-2 block">📈 스킬 레벨별 예상 시간</Label>
+                                    <div className="grid grid-cols-3 gap-2 text-center">
+                                        <div className="bg-red-50 rounded px-2 py-1">
+                                            <div className="text-[10px] text-red-600">저역량</div>
+                                            <div className="text-sm font-medium text-red-700">{Math.round(timeMinutes * 1.5)}분</div>
+                                        </div>
+                                        <div className="bg-amber-50 rounded px-2 py-1">
+                                            <div className="text-[10px] text-amber-600">중역량</div>
+                                            <div className="text-sm font-medium text-amber-700">{timeMinutes}분</div>
+                                        </div>
+                                        <div className="bg-emerald-50 rounded px-2 py-1">
+                                            <div className="text-[10px] text-emerald-600">고역량</div>
+                                            <div className="text-sm font-medium text-emerald-700">{Math.round(timeMinutes * 0.7)}분</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 

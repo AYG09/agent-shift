@@ -2,6 +2,26 @@
 
 import { useMemo, useEffect, useState } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+
+// 스킬 레벨 상수
+type SkillLevel = 'junior' | 'mid' | 'senior';
+const SKILL_MULTIPLIERS: Record<SkillLevel, number> = {
+    junior: 1.5,
+    mid: 1.0,
+    senior: 0.7,
+};
+const SKILL_LABELS: Record<SkillLevel, string> = {
+    junior: '🔴 저역량 (1.5x)',
+    mid: '🟡 중역량 (1.0x)',
+    senior: '🟢 고역량 (0.7x)',
+};
 
 interface NodeMetrics {
     timeMinutes?: number;
@@ -93,19 +113,23 @@ function ComparisonBar({ asIs, toBe, label }: { asIs: number; toBe: number; labe
 }
 
 export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysisSummaryProps) {
+    const [skillLevel, setSkillLevel] = useState<SkillLevel>('mid');
+
     const metrics = useMemo(() => {
-        // Calculate As-Is totals
+        const multiplier = SKILL_MULTIPLIERS[skillLevel];
+
+        // Calculate As-Is totals with skill multiplier
         const asIsTotals = asIsNodes.reduce(
             (acc, node) => ({
-                time: acc.time + (node.metrics?.timeMinutes || 0),
+                time: acc.time + Math.round((node.metrics?.timeMinutes || 0) * multiplier),
             }),
             { time: 0 }
         );
 
-        // Calculate To-Be totals
+        // Calculate To-Be totals with skill multiplier
         const toBeTotals = toBeNodes.reduce(
             (acc, node) => ({
-                time: acc.time + (node.metrics?.timeMinutes || 0),
+                time: acc.time + Math.round((node.metrics?.timeMinutes || 0) * multiplier),
             }),
             { time: 0 }
         );
@@ -117,7 +141,7 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
                 time: asIsTotals.time - toBeTotals.time,
             },
         };
-    }, [asIsNodes, toBeNodes]);
+    }, [asIsNodes, toBeNodes, skillLevel]);
 
     const hasData = metrics.asIs.time > 0;
 
@@ -125,7 +149,7 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
         return (
             <div className="bg-white/95 backdrop-blur-xl rounded-xl p-4 border border-gray-200/80 shadow-lg shadow-gray-200/50">
                 <div className="text-sm text-gray-500 text-center">
-                    📊 메트릭 데이터가 있으면 ROI 분석이 표시됩니다
+                    📊 메트릭 데이터가 있으면 생산성 분석이 표시됩니다
                 </div>
             </div>
         );
@@ -140,27 +164,39 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
         >
             <div className="flex items-center justify-between mb-4">
                 <div className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                    📊 ROI 분석
+                    📊 생산성 분석
                 </div>
-                {/* 총 절감률 뱃지 */}
-                {metrics.asIs.time > 0 && metrics.savings.time > 0 && (
-                    <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ delay: 0.8, type: 'spring', stiffness: 200 }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full shadow-lg"
-                    >
-                        <span className="text-white text-xs font-medium">효율성</span>
-                        <span className="text-white text-sm font-bold">
-                            {Math.round(((metrics.asIs.time - metrics.toBe.time) / metrics.asIs.time) * 100)}%↑
-                        </span>
-                    </motion.div>
-                )}
+                {/* 스킬 레벨 선택 */}
+                <Select value={skillLevel} onValueChange={(v) => setSkillLevel(v as SkillLevel)}>
+                    <SelectTrigger className="w-[140px] h-7 text-xs bg-white/80 border-gray-200">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="junior">{SKILL_LABELS.junior}</SelectItem>
+                        <SelectItem value="mid">{SKILL_LABELS.mid}</SelectItem>
+                        <SelectItem value="senior">{SKILL_LABELS.senior}</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
+            
+            {/* 총 절감률 뱃지 */}
+            {metrics.asIs.time > 0 && metrics.savings.time > 0 && (
+                <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.8, type: 'spring', stiffness: 200 }}
+                    className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full shadow-lg mb-4"
+                >
+                    <span className="text-white text-xs font-medium">생산성 향상</span>
+                    <span className="text-white text-sm font-bold">
+                        {Math.round(((metrics.asIs.time - metrics.toBe.time) / metrics.asIs.time) * 100)}%↑
+                    </span>
+                </motion.div>
+            )}
 
-            {/* 비교 바 차트 - 시간만 표시 */}
+            {/* 비교 바 차트 - 맨아워 표시 */}
             <div className="space-y-4">
-                <ComparisonBar asIs={metrics.asIs.time} toBe={metrics.toBe.time} label="⏱️ 소요 시간 (분)" />
+                <ComparisonBar asIs={metrics.asIs.time} toBe={metrics.toBe.time} label="⏱️ 맨아워 (분)" />
             </div>
 
             {/* 절감 요약 */}
@@ -175,7 +211,7 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
                         <div className="text-xl font-bold text-emerald-600">
                             <AnimatedNumber value={metrics.savings.time} suffix="분" />
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">시간 절감</div>
+                        <div className="text-xs text-gray-500 mt-1">맨아워 절감</div>
                     </div>
                 )}
             </motion.div>

@@ -37,7 +37,11 @@ export default function SplitViewCanvas({
     const [nodesLeft, setNodesLeft, onNodesChangeLeft] = useNodesState(asIsNodes);
     const [edgesLeft, setEdgesLeft, onEdgesChangeLeft] = useEdgesState(
         asIsEdges.map((e) => ({
-            ...e,
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            sourceHandle: e.sourceHandle,
+            targetHandle: e.targetHandle,
             type: 'tokenFlow',
             data: { speed: 'slow' },
         }))
@@ -46,7 +50,11 @@ export default function SplitViewCanvas({
     const [nodesRight, setNodesRight, onNodesChangeRight] = useNodesState(toBeNodes);
     const [edgesRight, setEdgesRight, onEdgesChangeRight] = useEdgesState(
         toBeEdges.map((e) => ({
-            ...e,
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            sourceHandle: e.sourceHandle,
+            targetHandle: e.targetHandle,
             type: 'tokenFlow',
             data: { speed: 'fast' },
         }))
@@ -69,7 +77,11 @@ export default function SplitViewCanvas({
 
     useEffect(() => {
         setEdgesLeft(asIsEdges.map((e) => ({
-            ...e,
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            sourceHandle: e.sourceHandle,
+            targetHandle: e.targetHandle,
             type: 'tokenFlow',
             data: { speed: 'slow' },
         })));
@@ -77,7 +89,11 @@ export default function SplitViewCanvas({
 
     useEffect(() => {
         setEdgesRight(toBeEdges.map((e) => ({
-            ...e,
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            sourceHandle: e.sourceHandle,
+            targetHandle: e.targetHandle,
             type: 'tokenFlow',
             data: { speed: 'fast' },
         })));
@@ -93,32 +109,34 @@ export default function SplitViewCanvas({
 
     return (
         <div className="w-full h-full flex">
-            {/* Before (As-Is) */}
-            <div className="flex-1 border-r border-slate-700 relative">
-                <div className="absolute top-4 left-4 z-10 bg-red-500/20 text-red-400 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm border border-red-500/30">
-                    📊 Before (As-Is)
-                </div>
+            {/* Main Canvas Area */}
+            <div className="flex-1 flex">
+                {/* Before (As-Is) */}
+                <div className="flex-1 border-r border-slate-200 relative">
+                    <div className="absolute top-4 left-4 z-10 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-sm font-semibold shadow-sm border border-red-200">
+                        📊 Before (As-Is)
+                    </div>
 
-                <ReactFlow
-                    nodes={nodesLeft}
-                    edges={edgesLeft}
-                    onNodesChange={onNodesChangeLeft}
-                    onEdgesChange={onEdgesChangeLeft}
-                    nodeTypes={nodeTypes}
-                    edgeTypes={edgeTypes}
-                    fitView
-                    className="bg-slate-950"
-                    defaultEdgeOptions={{ type: 'tokenFlow' }}
-                >
-                    <Background
-                        variant={BackgroundVariant.Dots}
-                        gap={20}
-                        size={1}
-                        color="#334155"
-                    />
-                    <Controls className="!bg-slate-800 !border-slate-700" />
-                </ReactFlow>
-            </div>
+                    <ReactFlow
+                        nodes={nodesLeft}
+                        edges={edgesLeft}
+                        onNodesChange={onNodesChangeLeft}
+                        onEdgesChange={onEdgesChangeLeft}
+                        nodeTypes={nodeTypes}
+                        edgeTypes={edgeTypes}
+                        fitView
+                        className="bg-slate-50"
+                        defaultEdgeOptions={{ type: 'tokenFlow' }}
+                    >
+                        <Background
+                            variant={BackgroundVariant.Dots}
+                            gap={20}
+                            size={1}
+                            color="#cbd5e1"
+                        />
+                        <Controls className="!bg-white !border-slate-200 !shadow-md" />
+                    </ReactFlow>
+                </div>
 
             {/* Center Controls - Heatmap toggle only */}
             <div className="absolute left-1/2 top-4 -translate-x-1/2 z-40 flex gap-2">
@@ -126,9 +144,9 @@ export default function SplitViewCanvas({
                     onClick={() => setIsHeatmapMode(!isHeatmapMode)}
                     className={`${
                         isHeatmapMode
-                            ? 'bg-red-600 hover:bg-red-500'
-                            : 'bg-slate-700 hover:bg-slate-600'
-                    } shadow-lg transition-colors duration-300`}
+                            ? 'bg-red-500 hover:bg-red-600 text-white'
+                            : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+                    } shadow-md transition-colors duration-300`}
                 >
                     {isHeatmapMode ? '🔥 Heatmap ON' : '🌡️ Heatmap OFF'}
                 </Button>
@@ -136,7 +154,7 @@ export default function SplitViewCanvas({
 
             {/* After (To-Be) */}
             <div className="flex-1 relative">
-                <div className="absolute top-4 left-4 z-10 bg-green-500/20 text-green-400 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm border border-green-500/30">
+                <div className="absolute top-4 left-4 z-10 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg text-sm font-semibold shadow-sm border border-emerald-200">
                     🤖 After (To-Be)
                 </div>
 
@@ -148,40 +166,58 @@ export default function SplitViewCanvas({
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}
                     fitView
-                    className="bg-slate-950"
+                    className="bg-slate-50"
                     defaultEdgeOptions={{ type: 'tokenFlow' }}
                 >
                     <Background
                         variant={BackgroundVariant.Dots}
                         gap={20}
                         size={1}
-                        color="#334155"
+                        color="#cbd5e1"
                     />
-                    <Controls className="!bg-slate-800 !border-slate-700" />
+                    <Controls className="!bg-white !border-slate-200 !shadow-md" />
                 </ReactFlow>
             </div>
 
             {/* Speed Legend - Always visible */}
             <Panel
                 position="bottom-center"
-                className="bg-slate-800/90 px-4 py-2 rounded-lg border border-slate-700 flex gap-6"
+                className="bg-white/95 backdrop-blur-sm px-4 py-2 rounded-lg border border-slate-200 shadow-md flex gap-6"
             >
                 <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-                    <span className="text-xs text-slate-400">As-Is (느림)</span>
+                    <span className="text-xs text-slate-600">As-Is (느림)</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-green-500" />
-                    <span className="text-xs text-slate-400">To-Be (빠름)</span>
+                    <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                    <span className="text-xs text-slate-600">To-Be (빠름)</span>
                 </div>
             </Panel>
+            </div>
 
-            {/* ROI Summary Panel - positioned higher to avoid overlap with ReactFlow Controls */}
-            <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-30 w-[600px] pointer-events-auto">
-                <GapAnalysisSummary
-                    asIsNodes={extractMetrics(asIsNodes)}
-                    toBeNodes={extractMetrics(toBeNodes)}
-                />
+            {/* Right Sidebar - ROI Summary Panel */}
+            <div className="w-80 border-l border-slate-200 bg-slate-50/50 p-4 overflow-y-auto flex flex-col gap-4">
+                <div className="flex-shrink-0">
+                    <GapAnalysisSummary
+                        asIsNodes={extractMetrics(asIsNodes)}
+                        toBeNodes={extractMetrics(toBeNodes)}
+                    />
+                </div>
+                
+                {/* Speed Legend in sidebar */}
+                <div className="flex-shrink-0 bg-white/95 backdrop-blur-sm px-4 py-3 rounded-lg border border-slate-200 shadow-sm">
+                    <div className="text-xs font-medium text-slate-700 mb-2">시뮬레이션 속도</div>
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                            <span className="text-xs text-slate-600">As-Is (느림)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                            <span className="text-xs text-slate-600">To-Be (빠름)</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
