@@ -14,12 +14,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Copy, Share2, Users, Check, ExternalLink } from 'lucide-react';
+import { useAppStore } from '@/lib/store';
 
 export function ShareDialog() {
     const router = useRouter();
     const [open, setOpen] = useState(false);
     const [copied, setCopied] = useState(false);
     const [joinRoomId, setJoinRoomId] = useState('');
+
+    // 로컬 스토어에서 현재 작업 데이터 가져오기
+    const { asIsNodes, asIsEdges, toBeNodes, toBeEdges, context, strategy } = useAppStore();
 
     // 새 Room ID 생성 (8자리 랜덤 문자열)
     const [roomId] = useState(() => {
@@ -47,6 +51,14 @@ export function ShareDialog() {
 
     // 새 협업 세션 시작
     const startNewSession = () => {
+        // 로컬 스토어 데이터를 sessionStorage에 저장 (room 페이지에서 로드)
+        if (typeof window !== 'undefined') {
+            const hasData = asIsNodes.length > 0 || toBeNodes.length > 0 || context;
+            if (hasData) {
+                const localData = { asIsNodes, asIsEdges, toBeNodes, toBeEdges, context, strategy };
+                sessionStorage.setItem('collab-initial-data', JSON.stringify(localData));
+            }
+        }
         router.push(`/room/${roomId}`);
         setOpen(false);
     };

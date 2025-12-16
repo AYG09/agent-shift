@@ -19,9 +19,25 @@ export function RoomProvider({ roomId, children }: RoomProviderProps) {
     const enterRoom = useCollabStore((state) => state.liveblocks.enterRoom);
     const leaveRoom = useCollabStore((state) => state.liveblocks.leaveRoom);
     const setUser = useCollabStore((state) => state.setUser);
+    const syncFromLocalStore = useCollabStore((state) => state.syncFromLocalStore);
 
     useEffect(() => {
-        // 사용자 정보 초기화 (랜덤 이름 및 색상)
+        // 1. sessionStorage에서 초기 데이터 로드 (새 세션 시작 시)
+        if (typeof window !== 'undefined') {
+            const savedData = sessionStorage.getItem('collab-initial-data');
+            if (savedData) {
+                try {
+                    const parsed = JSON.parse(savedData);
+                    syncFromLocalStore(parsed);
+                    sessionStorage.removeItem('collab-initial-data'); // 일회용
+                    console.log('[RoomProvider] 로컬 데이터 동기화 완료');
+                } catch (e) {
+                    console.error('[RoomProvider] 초기 데이터 파싱 실패:', e);
+                }
+            }
+        }
+
+        // 2. 사용자 정보 초기화 (랜덤 이름 및 색상)
         const userName = localStorage.getItem('collab-user-name') || getRandomUserName();
         const userColor = localStorage.getItem('collab-user-color') || getRandomUserColor();
         
@@ -48,7 +64,7 @@ export function RoomProvider({ roomId, children }: RoomProviderProps) {
         return () => {
             leaveRoom();
         };
-    }, [roomId, enterRoom, leaveRoom, setUser]);
+    }, [roomId, enterRoom, leaveRoom, setUser, syncFromLocalStore]);
 
     // 연결 중 상태
     if (status === 'connecting') {

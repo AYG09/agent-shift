@@ -126,6 +126,16 @@ interface CollabState {
     setSelectedNodeId: (nodeId: string | null) => void;
     setUser: (user: { name: string; color: string }) => void;
 
+    // 로컬 스토어에서 데이터 일괄 동기화
+    syncFromLocalStore: (localData: {
+        asIsNodes: FlowNode[];
+        asIsEdges: FlowEdge[];
+        toBeNodes: FlowNode[];
+        toBeEdges: FlowEdge[];
+        context: UserContext | null;
+        strategy: StrategyData | null;
+    }) => void;
+
     // 초기화
     clearAll: () => void;
 }
@@ -254,6 +264,20 @@ export const useCollabStore = create<WithLiveblocks<CollabState, Presence>>()(
             setCursor: (cursor) => set({ cursor }),
             setSelectedNodeId: (nodeId) => set({ selectedNodeId: nodeId }),
             setUser: (user) => set({ user }),
+
+            // 로컬 스토어에서 데이터 일괄 동기화 (협업 세션 시작 시)
+            syncFromLocalStore: (localData) => {
+                const normalizedAsIsEdges = normalizeEdgeHandlesInStore(localData.asIsNodes, localData.asIsEdges);
+                const normalizedToBeEdges = normalizeEdgeHandlesInStore(localData.toBeNodes, localData.toBeEdges);
+                set({
+                    asIsNodes: localData.asIsNodes,
+                    asIsEdges: normalizedAsIsEdges,
+                    toBeNodes: localData.toBeNodes,
+                    toBeEdges: normalizedToBeEdges,
+                    context: localData.context,
+                    strategy: localData.strategy,
+                });
+            },
 
             // 초기화
             clearAll: () =>
