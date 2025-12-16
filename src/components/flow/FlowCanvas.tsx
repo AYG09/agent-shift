@@ -562,8 +562,10 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
             label: string;
             description?: string;
             type: 'task' | 'decision' | 'subprocess' | 'agent';
+            shape?: 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
             stressLevel?: 'low' | 'medium' | 'high';
             collaborationType?: 'copilot' | 'monitor' | 'autonomous';
+            metrics?: { timeMinutes?: number };
         }) => {
             if (editorMode === 'create') {
                 const newNode: FlowNode = {
@@ -571,8 +573,10 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                     label: data.label,
                     description: data.description,
                     type: data.type,
+                    shape: data.shape,
                     stressLevel: data.stressLevel,
                     collaborationType: data.collaborationType,
+                    metrics: data.metrics,
                     position: newNodePosition,
                 };
                 addNode(newNode, target);
@@ -583,8 +587,10 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                         label: data.label,
                         description: data.description,
                         type: data.type,
+                        shape: data.shape,
                         stressLevel: data.stressLevel,
                         collaborationType: data.collaborationType,
+                        metrics: data.metrics,
                     },
                     target
                 );

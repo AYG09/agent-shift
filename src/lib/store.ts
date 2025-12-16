@@ -12,6 +12,7 @@ export interface FlowNode {
     type: 'task' | 'decision' | 'subprocess' | 'agent';
     label: string;
     description?: string;
+    shape?: 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
     stressLevel?: 'low' | 'medium' | 'high';
     position: { x: number; y: number };
     children?: FlowNode[];
