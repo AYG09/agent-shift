@@ -2,6 +2,7 @@
 
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType } from 'docx';
 import * as XLSX from 'xlsx';
+import type { DrilldownResponse } from './ai-schemas';
 
 // 액션 아이템 타입
 interface ActionItem {
@@ -64,6 +65,7 @@ export async function generateWordReport(data: {
         framework: string;
         phases: StrategyPhase[];
     };
+    drilldownResults?: Record<string, DrilldownResponse>;
 }) {
     // AS-IS 플로우 테이블
     const asIsTableRows = [
@@ -220,6 +222,84 @@ export async function generateWordReport(data: {
                             width: { size: 100, type: WidthType.PERCENTAGE },
                         }),
                     ] : []),
+
+                    // Drilldown Details Section
+                    ...(data.drilldownResults && Object.keys(data.drilldownResults).length > 0 ? [
+                        new Paragraph({ text: '' }),
+                        new Paragraph({
+                            text: '5. AI 에이전트 상세분석',
+                            heading: HeadingLevel.HEADING_1,
+                        }),
+                        ...Object.entries(data.drilldownResults)
+                            .filter(([key]) => key.startsWith('to-be-'))
+                            .flatMap(([key, result]) => {
+                                const nodeId = key.replace('to-be-', '');
+                                const node = data.toBeNodes.find(n => n.id === nodeId);
+                                if (!node) return [];
+                                
+                                const paragraphs: Paragraph[] = [
+                                    new Paragraph({
+                                        text: `5.${data.toBeNodes.indexOf(node) + 1}. ${node.label}`,
+                                        heading: HeadingLevel.HEADING_2,
+                                    }),
+                                ];
+
+                                // Time Reduction (from automationOverview)
+                                if (result.automationOverview?.totalTimeReduction) {
+                                    paragraphs.push(new Paragraph({
+                                        children: [
+                                            new TextRun({ text: '예상 시간 절감: ', bold: true }),
+                                            new TextRun({ text: result.automationOverview.totalTimeReduction, color: '10B981' }),
+                                        ],
+                                    }));
+                                }
+
+                                // Sub Steps
+                                if (result.subSteps && result.subSteps.length > 0) {
+                                    paragraphs.push(new Paragraph({
+                                        children: [new TextRun({ text: '세부 단계:', bold: true })],
+                                    }));
+                                    result.subSteps.forEach((step, idx) => {
+                                        const toolsStr = step.tools?.length ? ` [${step.tools.join(', ')}]` : '';
+                                        paragraphs.push(new Paragraph({
+                                            text: `  ${idx + 1}. ${step.label}${step.description ? ` - ${step.description}` : ''}${step.duration ? ` (${step.duration})` : ''}${toolsStr}`,
+                                        }));
+                                    });
+                                }
+
+                                // Key Benefits (from automationOverview)
+                                if (result.automationOverview?.keyBenefits && result.automationOverview.keyBenefits.length > 0) {
+                                    paragraphs.push(new Paragraph({
+                                        children: [new TextRun({ text: '주요 효과: ', bold: true })],
+                                    }));
+                                    result.automationOverview.keyBenefits.forEach(benefit => {
+                                        paragraphs.push(new Paragraph({
+                                            text: `  • ${benefit}`,
+                                        }));
+                                    });
+                                }
+
+                                // Skill-based Reduction
+                                if (result.automationOverview?.skillBasedReduction) {
+                                    const sr = result.automationOverview.skillBasedReduction;
+                                    paragraphs.push(new Paragraph({
+                                        children: [new TextRun({ text: '역량별 시간 절감:', bold: true })],
+                                    }));
+                                    paragraphs.push(new Paragraph({
+                                        text: `  Junior: ${sr.junior}`,
+                                    }));
+                                    paragraphs.push(new Paragraph({
+                                        text: `  Mid: ${sr.mid}`,
+                                    }));
+                                    paragraphs.push(new Paragraph({
+                                        text: `  Senior: ${sr.senior}`,
+                                    }));
+                                }
+
+                                paragraphs.push(new Paragraph({ text: '' }));
+                                return paragraphs;
+                            }),
+                    ] : []),
                 ],
             },
         ],
@@ -229,7 +309,7 @@ export async function generateWordReport(data: {
     downloadBlob(blob, 'agent-shift-report.docx');
 }
 
-// Excel WBS 생성 (4개 시트: AS-IS Flow, TO-BE Flow, Strategy WBS, ROI Summary)
+// Excel WBS 생성 (5개 시트: AS-IS Flow, TO-BE Flow, Strategy WBS, ROI Summary, 상세분석)
 export function generateExcelWBS(data: {
     asIsNodes?: ReportNode[];
     toBeNodes?: ReportNode[];
@@ -244,6 +324,7 @@ export function generateExcelWBS(data: {
         }>;
     };
     totalWeeks?: number;
+    drilldownResults?: Record<string, DrilldownResponse>;
 }) {
     const workbook = XLSX.utils.book_new();
     const totalWeeks = data.totalWeeks || 12;
@@ -346,6 +427,58 @@ export function generateExcelWBS(data: {
     const roiSheet = XLSX.utils.aoa_to_sheet(roiData);
     roiSheet['!cols'] = [{ wch: 25 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(workbook, roiSheet, 'ROI Summary');
+
+    // 시트 5: 상세분석 (Drilldown Results)
+    if (data.drilldownResults && Object.keys(data.drilldownResults).length > 0) {
+        const drilldownData: (string | number)[][] = [
+            ['노드ID', '노드명', '유형', '세부단계', '주요효과', '시간절감', '역량별절감'],
+        ];
+
+        Object.entries(data.drilldownResults)
+            .filter(([key]) => key.startsWith('to-be-'))
+            .forEach(([key, result]) => {
+                const nodeId = key.replace('to-be-', '');
+                const node = data.toBeNodes?.find(n => n.id === nodeId);
+                if (!node) return;
+
+                const subStepsText = result.subSteps
+                    ? result.subSteps.map((s, i) => {
+                        const toolsStr = s.tools?.length ? ` [${s.tools.join(', ')}]` : '';
+                        return `${i + 1}. ${s.label}${s.duration ? ` (${s.duration})` : ''}${toolsStr}`;
+                    }).join('\n')
+                    : '-';
+                
+                const benefitsText = result.automationOverview?.keyBenefits
+                    ? result.automationOverview.keyBenefits.join(', ')
+                    : '-';
+                
+                const skillReductionText = result.automationOverview?.skillBasedReduction
+                    ? `Junior: ${result.automationOverview.skillBasedReduction.junior}, Mid: ${result.automationOverview.skillBasedReduction.mid}, Senior: ${result.automationOverview.skillBasedReduction.senior}`
+                    : '-';
+
+                drilldownData.push([
+                    nodeId,
+                    node.label,
+                    node.type === 'agent' ? 'AI Agent' : '일반업무',
+                    subStepsText,
+                    benefitsText,
+                    result.automationOverview?.totalTimeReduction || '-',
+                    skillReductionText,
+                ]);
+            });
+
+        const drilldownSheet = XLSX.utils.aoa_to_sheet(drilldownData);
+        drilldownSheet['!cols'] = [
+            { wch: 15 }, // 노드ID
+            { wch: 20 }, // 노드명
+            { wch: 10 }, // 유형
+            { wch: 50 }, // 세부단계
+            { wch: 35 }, // 주요효과
+            { wch: 25 }, // 시간절감
+            { wch: 50 }, // 역량별절감
+        ];
+        XLSX.utils.book_append_sheet(workbook, drilldownSheet, '상세분석');
+    }
 
     // Generate and download
     const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });

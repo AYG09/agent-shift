@@ -430,25 +430,25 @@ ${asIsNodes && asIsNodes.length > 0 ? `- **반드시** 위 AS-IS 단계들 중 �
      "resources": [{"type": "docs", "title": "제목", "url": "검색키워드"}]
    }
 
-3. 각 하위 단계의 필드:
+3. 각 하위 단계의 필드 (**⚠️ 길이 제한 엄격 준수!**):
    - **id**: 고유 ID (예: "node1_1")
-   - **label**: 단계 이름 (100자 이내)
-   - **description**: AI가 수행하는 구체적인 작업 설명 (2~3문장, 500자 이내)
-   - **duration**: AI 처리 예상 시간 (예: "30초", "2분")
-   - **tools**: 사용되는 AI 도구 배열
-   - **aiImplementation**: (객체) 아래 필드 포함
-     - method: AI 처리 방법 (500자 이내)
-     - technology: 기술 배열 ["LLM", "NLP", "OCR", "RPA"]
-     - platforms: 플랫폼 배열 ["Microsoft 365 Copilot", "Power Automate"]
+   - **label**: 단계 이름 (**50자 이내**, 간결하게!)
+   - **description**: AI 작업 설명 (**200자 이내**, 핵심만!)
+   - **duration**: 처리 시간 (예: "30초", "2분")
+   - **tools**: AI 도구 (**최대 3개만!**, 예: ["Power Automate", "Python"])
+   - **aiImplementation**: (객체)
+     - method: AI 처리 방법 (**200자 이내**)
+     - technology: 기술 (**최대 3개**, 예: ["RPA", "NLP"])
+     - platforms: 플랫폼 (**최대 2개**)
      - automationLevel: "full" | "partial" | "assisted"
-   - **resources**: 학습 자료 배열 (최대 3개)
+   - **resources**: 학습 자료 (**최대 2개만!**)
      - type: "youtube" | "docs" | "article" | "tutorial"
-     - title: 자료 제목 (100자 이내)
-     - url: **검색 키워드만! 50자 이내** (예: "Power Automate RPA tutorial")
-     - description: 설명 (200자 이내)
+     - title: 자료 제목 (**50자 이내**)
+     - url: **검색 키워드만! 30자 이내** (예: "Power Automate RPA")
+     - description: 설명 (**100자 이내**)
 
-3. **summary**: AI 도입으로 인한 효율성 향상 요약 (**500자 이내**, 핵심만 간결하게)
-4. **automationOverview**: 전체 자동화 개요 (**⚠️ 필수! AS-IS 대비 역량별 시간 절감 분석**)
+4. **summary**: 효율성 요약 (**300자 이내**, 핵심만!)
+5. **automationOverview**: 자동화 개요 (**⚠️ 필수!**)
    - **replacedAsIsSteps**: 이 AI가 대체/압축하는 AS-IS 단계 이름들 (최대 5개)
    - **skillBasedReduction** (**필수!**): 역량별 시간 절감 분석
      - asIsTotal: AS-IS 대체 단계들의 총 소요 시간(분, 중역량 기준)
@@ -619,7 +619,7 @@ export async function POST(request: NextRequest) {
             model,
             schema,
             prompt,
-            maxOutputTokens: 4096, // AI SDK V5: maxTokens → maxOutputTokens
+            maxOutputTokens: 8192, // Gemini 2.5 Flash 지원 (최대 65535)
         });
 
         // 숫자 필드 정규화 후 반환

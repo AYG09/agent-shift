@@ -9,7 +9,7 @@ import { useAppStore } from '@/lib/store';
 import Link from 'next/link';
 
 export default function ExportPage() {
-    const { context, asIsNodes, toBeNodes, strategy } = useAppStore();
+    const { context, asIsNodes, toBeNodes, strategy, drilldownResults } = useAppStore();
     const [isExportingWord, setIsExportingWord] = useState(false);
     const [isExportingExcel, setIsExportingExcel] = useState(false);
     const [exportStatus, setExportStatus] = useState<string | null>(null);
@@ -105,6 +105,7 @@ export default function ExportPage() {
                 asIsNodes: exportAsIsNodes,
                 toBeNodes: exportToBeNodes,
                 strategy: exportStrategy,
+                drilldownResults,
             });
             setExportStatus('✅ Word 보고서가 다운로드되었습니다!');
         } catch (error) {
@@ -124,6 +125,7 @@ export default function ExportPage() {
                 toBeNodes: exportToBeNodes,
                 strategy: exportStrategy,
                 totalWeeks: strategy?.totalWeeks || 12,
+                drilldownResults,
             });
             setExportStatus('✅ Excel 보고서가 다운로드되었습니다!');
         } catch (error) {

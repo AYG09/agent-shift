@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import type { DrilldownResponse } from './ai-schemas';
 
 // 노드 타입 정의 - 시간만 관리 (비용/인원은 제거됨)
 export interface NodeMetrics {
@@ -216,6 +217,12 @@ interface AppState {
     updateEdge: (id: string, updates: Partial<FlowEdge>, target: 'asis' | 'tobe') => void;
     reverseEdge: (id: string, target: 'asis' | 'tobe') => void;
 
+    // 상세분석(Drilldown) 캐싱
+    drilldownResults: Record<string, DrilldownResponse>;
+    setDrilldownResult: (nodeId: string, result: DrilldownResponse) => void;
+    getDrilldownResult: (nodeId: string) => DrilldownResponse | undefined;
+    clearDrilldownResults: () => void;
+
     // 초기화
     clearAll: () => void;
 }
@@ -237,6 +244,7 @@ export const useAppStore = create<AppState>()(
             isGenerating: false,
             strategyScope: 'full',
             selectedToBeNodeId: null,
+            drilldownResults: {},
 
             // 프로젝트 CRUD 액션
             createProject: (name) => {
@@ -482,6 +490,14 @@ export const useAppStore = create<AppState>()(
                     };
                 }),
 
+            // 상세분석(Drilldown) 캐싱 함수들
+            setDrilldownResult: (nodeId, result) =>
+                set((state) => ({
+                    drilldownResults: { ...state.drilldownResults, [nodeId]: result },
+                })),
+            getDrilldownResult: (nodeId) => get().drilldownResults[nodeId],
+            clearDrilldownResults: () => set({ drilldownResults: {} }),
+
             // 초기화
             clearAll: () =>
                 set({
@@ -496,6 +512,7 @@ export const useAppStore = create<AppState>()(
                     strategyScope: 'full',
                     selectedToBeNodeId: null,
                     currentProjectId: null,
+                    drilldownResults: {},
                 }),
         }),
         {
@@ -548,6 +565,7 @@ export const useAppStore = create<AppState>()(
                 viewMode: state.viewMode,
                 strategyScope: state.strategyScope,
                 selectedToBeNodeId: state.selectedToBeNodeId,
+                drilldownResults: state.drilldownResults,
             }),
         }
     )

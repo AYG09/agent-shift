@@ -11,7 +11,7 @@ import { frameworkPhases } from '@/components/strategy/GanttChart';
 import { useAppStore } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Target, CheckCircle2, AlertTriangle, Layers, Crosshair, Clock, LayoutGrid, Bot, Info, X } from 'lucide-react';
+import { ArrowLeft, Sparkles, Target, CheckCircle2, AlertTriangle, Layers, Crosshair, Clock, LayoutGrid, Bot, Info, X, ChevronDown, Zap, Wrench, Brain } from 'lucide-react';
 
 const GanttChart = dynamic(() => import('@/components/strategy/GanttChart'), { ssr: false });
 
@@ -55,6 +55,7 @@ export default function StrategyPage() {
         selectedToBeNodeId,
         setStrategyScope,
         setSelectedToBeNodeId,
+        drilldownResults,
     } = useAppStore();
     const { isLoading, error, generateChangeStrategy } = useAIGeneration();
     const [selectedFramework, setSelectedFramework] = useState<FrameworkType | null>(null);
@@ -74,6 +75,7 @@ export default function StrategyPage() {
     const [completedActions, setCompletedActions] = useState<Set<string>>(new Set());
     const [roleAssignments, setRoleAssignments] = useState<Record<string, string>>({});
     const [expandedApproach, setExpandedApproach] = useState<number | null>(null);
+    const [expandedDrilldown, setExpandedDrilldown] = useState<string | null>(null);
 
     // Mounted 상태 설정
     useEffect(() => {
@@ -115,6 +117,18 @@ export default function StrategyPage() {
         monitor: agentNodes.filter(n => n.collaborationType === 'monitor').length,
         autonomous: agentNodes.filter(n => n.collaborationType === 'autonomous').length,
     };
+
+    // 캐시된 drilldown 결과 필터링 (TO-BE 노드 전용)
+    const tobeDrilldowns = Object.entries(drilldownResults)
+        .filter(([key]) => key.startsWith('to-be-'))
+        .map(([key, result]) => {
+            const nodeId = key.replace('to-be-', '');
+            const node = toBeNodes.find(n => n.id === nodeId);
+            return { nodeId, node, result };
+        })
+        .filter(item => item.node !== undefined);
+    
+    const hasDrilldowns = tobeDrilldowns.length > 0;
 
     const handleGenerateStrategy = async () => {
         if (!selectedFramework || !context) return;
@@ -691,6 +705,203 @@ export default function StrategyPage() {
                                     위 8가지 접근방법은 학습불안을 감소시켜 심리적 안전감을 높이는 전략입니다.
                                 </p>
                             </div>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Step 2.75: TO-BE 노드 상세분석 결과 (캐시된 drilldown) */}
+                <AnimatePresence>
+                    {hasDrilldowns && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.4 }}
+                        >
+                            <Card className="bg-white/90 backdrop-blur-xl border-gray-200/80 mb-6 shadow-lg shadow-gray-200/50 overflow-hidden">
+                                <CardHeader className="bg-gradient-to-r from-cyan-50/80 to-blue-50/80 border-b border-gray-100">
+                                    <CardTitle className="flex items-center gap-3 text-base font-semibold text-gray-800">
+                                        <span className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold shadow-sm">
+                                            2.8
+                                        </span>
+                                        <span className="flex items-center gap-2">
+                                            AI 에이전트 상세분석 결과
+                                            <span className="text-xs font-medium text-cyan-600 bg-cyan-50 px-2.5 py-1 rounded-full">
+                                                {tobeDrilldowns.length}개 분석 완료
+                                            </span>
+                                        </span>
+                                    </CardTitle>
+                                    <p className="text-sm text-gray-500 mt-1.5">
+                                        Flow 캔버스에서 분석한 AI 에이전트별 세부 단계, 도구, 리소스 정보입니다.
+                                    </p>
+                                </CardHeader>
+                                <CardContent className="pt-5">
+                                    <div className="space-y-3">
+                                        {tobeDrilldowns.map(({ nodeId, node, result }) => {
+                                            const isExpanded = expandedDrilldown === nodeId;
+                                            return (
+                                                <div
+                                                    key={nodeId}
+                                                    className={`rounded-xl border transition-all ${
+                                                        isExpanded
+                                                            ? 'bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-300 shadow-md'
+                                                            : 'bg-white/70 border-gray-200 hover:border-cyan-200 hover:shadow-sm'
+                                                    }`}
+                                                >
+                                                    {/* Header */}
+                                                    <div 
+                                                        className="p-4 cursor-pointer flex items-center gap-3"
+                                                        onClick={() => setExpandedDrilldown(isExpanded ? null : nodeId)}
+                                                    >
+                                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                                                            node?.type === 'agent' 
+                                                                ? 'bg-gradient-to-br from-purple-500 to-indigo-600 text-white' 
+                                                                : 'bg-cyan-100 text-cyan-600'
+                                                        }`}>
+                                                            {node?.type === 'agent' ? <Bot className="w-5 h-5" /> : <Layers className="w-5 h-5" />}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-semibold text-gray-800 truncate">{node?.label}</span>
+                                                                {node?.collaborationType && (
+                                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                                                        node.collaborationType === 'copilot' ? 'bg-emerald-100 text-emerald-700' :
+                                                                        node.collaborationType === 'monitor' ? 'bg-amber-100 text-amber-700' :
+                                                                        'bg-purple-100 text-purple-700'
+                                                                    }`}>
+                                                                        {node.collaborationType}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                                                                {result.subSteps?.length || 0}개 단계
+                                                            </p>
+                                                        </div>
+                                                        {result.automationOverview?.totalTimeReduction && (
+                                                            <div className="text-right">
+                                                                <div className="flex items-center gap-1 text-emerald-600">
+                                                                    <Zap className="w-3.5 h-3.5" />
+                                                                    <span className="text-xs font-medium">시간 절감</span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                                    </div>
+
+                                                    {/* Expanded Content */}
+                                                    <AnimatePresence>
+                                                        {isExpanded && (
+                                                            <motion.div
+                                                                initial={{ height: 0, opacity: 0 }}
+                                                                animate={{ height: 'auto', opacity: 1 }}
+                                                                exit={{ height: 0, opacity: 0 }}
+                                                                transition={{ duration: 0.2 }}
+                                                                className="overflow-hidden"
+                                                            >
+                                                                <div className="px-4 pb-4 space-y-4 border-t border-cyan-100 pt-4">
+                                                                    {/* Time Reduction */}
+                                                                    {result.automationOverview?.totalTimeReduction && (
+                                                                        <div className="p-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-100">
+                                                                            <div className="flex items-center gap-2 text-emerald-700">
+                                                                                <Zap className="w-4 h-4" />
+                                                                                <span className="text-sm font-medium">예상 시간 절감</span>
+                                                                            </div>
+                                                                            <p className="text-sm text-emerald-600 mt-1">{result.automationOverview.totalTimeReduction}</p>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Sub Steps */}
+                                                                    {result.subSteps && result.subSteps.length > 0 && (
+                                                                        <div>
+                                                                            <h4 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                                                                                <Layers className="w-4 h-4 text-cyan-500" />
+                                                                                세부 단계
+                                                                            </h4>
+                                                                            <div className="space-y-2">
+                                                                                {result.subSteps.map((step, idx) => (
+                                                                                    <div key={idx} className="flex items-start gap-2 p-2 bg-white/80 rounded-lg">
+                                                                                        <span className="w-5 h-5 rounded-full bg-cyan-100 text-cyan-700 text-xs flex items-center justify-center font-medium shrink-0">
+                                                                                            {idx + 1}
+                                                                                        </span>
+                                                                                        <div className="flex-1 min-w-0">
+                                                                                            <p className="text-sm font-medium text-gray-700">{step.label}</p>
+                                                                                            {step.description && (
+                                                                                                <p className="text-xs text-gray-500 mt-0.5">{step.description}</p>
+                                                                                            )}
+                                                                                            {step.duration && (
+                                                                                                <span className="text-[10px] text-gray-400 mt-1 inline-flex items-center gap-1">
+                                                                                                    <Clock className="w-3 h-3" />
+                                                                                                    {step.duration}
+                                                                                                </span>
+                                                                                            )}
+                                                                                            {/* Tools from subStep */}
+                                                                                            {step.tools && step.tools.length > 0 && (
+                                                                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                                                                    {step.tools.map((tool, tIdx) => (
+                                                                                                        <span key={tIdx} className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded">
+                                                                                                            {tool}
+                                                                                                        </span>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Key Benefits */}
+                                                                    {result.automationOverview?.keyBenefits && result.automationOverview.keyBenefits.length > 0 && (
+                                                                        <div>
+                                                                            <h4 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                                                                                <Zap className="w-4 h-4 text-emerald-500" />
+                                                                                주요 효과
+                                                                            </h4>
+                                                                            <ul className="space-y-1">
+                                                                                {result.automationOverview.keyBenefits.map((benefit, idx) => (
+                                                                                    <li key={idx} className="text-xs text-gray-600 flex items-start gap-1.5">
+                                                                                        <span className="text-emerald-500 mt-0.5">✓</span>
+                                                                                        {benefit}
+                                                                                    </li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Skill-based Time Reduction */}
+                                                                    {result.automationOverview?.skillBasedReduction && (
+                                                                        <div>
+                                                                            <h4 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                                                                                <Clock className="w-4 h-4 text-blue-500" />
+                                                                                역량별 시간 절감
+                                                                            </h4>
+                                                                            <div className="grid grid-cols-3 gap-2">
+                                                                                <div className="p-2 bg-blue-50 rounded-lg text-center">
+                                                                                    <p className="text-[10px] text-blue-600 font-medium">Junior</p>
+                                                                                    <p className="text-xs text-blue-700">{result.automationOverview.skillBasedReduction.junior}</p>
+                                                                                </div>
+                                                                                <div className="p-2 bg-indigo-50 rounded-lg text-center">
+                                                                                    <p className="text-[10px] text-indigo-600 font-medium">Mid</p>
+                                                                                    <p className="text-xs text-indigo-700">{result.automationOverview.skillBasedReduction.mid}</p>
+                                                                                </div>
+                                                                                <div className="p-2 bg-purple-50 rounded-lg text-center">
+                                                                                    <p className="text-[10px] text-purple-600 font-medium">Senior</p>
+                                                                                    <p className="text-xs text-purple-700">{result.automationOverview.skillBasedReduction.senior}</p>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </CardContent>
                             </Card>
                         </motion.div>

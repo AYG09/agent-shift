@@ -9,6 +9,7 @@ import {
     type NodeSplitResponse,
 } from '@/lib/ai-schemas';
 import { generateCacheKey, getCachedData, setCachedData } from '@/lib/cache-utils';
+import { useAppStore } from '@/lib/store';
 
 // 드릴다운에 전달할 그래프 컨텍스트용 간소화된 타입
 interface FlowNodeBasic {
@@ -315,7 +316,16 @@ export function useAIGeneration() {
             setIsLoading(true);
             setError(null);
             try {
-                // 캐시 키에 그래프 컨텍스트 크기 포함 (노드/엣지 개수가 달라지면 다른 캐시)
+                // 1. Zustand store에서 영구 캐시 확인 (변화관리/내보내기용)
+                const storeNodeId = `${flowType}-${node.id}`;
+                const storedResult = useAppStore.getState().getDrilldownResult(storeNodeId);
+                if (storedResult) {
+                    console.log('⚡ Store Cache Hit: Drilldown', storeNodeId);
+                    setIsLoading(false);
+                    return storedResult;
+                }
+
+                // 2. 세션 캐시 확인
                 const cacheKey = await generateCacheKey('generateDrilldown', { 
                     context, 
                     nodeId: node.id, 
@@ -326,7 +336,9 @@ export function useAIGeneration() {
                 });
                 const cached = getCachedData<DrilldownResponse>(cacheKey);
                 if (cached) {
-                    console.log('⚡ Cache Hit: Drilldown');
+                    console.log('⚡ Session Cache Hit: Drilldown');
+                    // 세션 캐시에서 찾으면 Zustand에도 저장
+                    useAppStore.getState().setDrilldownResult(storeNodeId, cached);
                     return cached;
                 }
 
@@ -351,7 +363,14 @@ export function useAIGeneration() {
                 }
 
                 const data = await response.json();
+                
+                // 세션 캐시 저장
                 setCachedData(cacheKey, data);
+                
+                // Zustand store에 영구 저장 (변화관리/내보내기용)
+                useAppStore.getState().setDrilldownResult(storeNodeId, data);
+                console.log('💾 Drilldown saved to store:', storeNodeId);
+                
                 return data;
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
