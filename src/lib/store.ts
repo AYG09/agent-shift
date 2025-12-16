@@ -2,6 +2,55 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { DrilldownResponse } from './ai-schemas';
 
+// 시나리오 정보 (프론트엔드 + API 공유)
+export const SCENARIO_INFO = {
+    conservative: {
+        label: '보수적',
+        desc: 'AI는 보조 역할만 수행, 인간이 최종 의사결정',
+        details: [
+            'collaborationType: monitor(인간 감독) 또는 copilot(협력)',
+            '자동화 비율: 20~30%',
+            '고위험/고가치 작업은 인간이 수행',
+            'AI는 데이터 수집, 초안 작성, 알림 등 보조 업무',
+        ],
+    },
+    balanced: {
+        label: '균형',
+        desc: 'AI와 인간이 협력하여 업무 수행',
+        details: [
+            'collaborationType 혼합: copilot(주), monitor, autonomous',
+            '자동화 비율: 40~60%',
+            '반복적/규칙적 작업은 autonomous로 자동화',
+            '판단이 필요한 작업은 copilot으로 협력',
+        ],
+    },
+    aggressive: {
+        label: '적극적',
+        desc: 'AI가 대부분의 업무를 자율적으로 수행',
+        details: [
+            '대부분 collaborationType: autonomous(독립 수행)',
+            '자동화 비율: 70~90%',
+            '인간은 예외 처리, 최종 승인, 전략적 의사결정만',
+            'AI가 전체 워크플로우를 오케스트레이션',
+        ],
+    },
+} as const;
+
+export type ScenarioType = keyof typeof SCENARIO_INFO;
+
+// 역량별 시간 승수 (기본값)
+export const DEFAULT_SKILL_MULTIPLIERS = {
+    junior: 1.5,
+    mid: 1.0,
+    senior: 0.7,
+} as const;
+
+export interface SkillMultipliers {
+    junior: number;
+    mid: number;
+    senior: number;
+}
+
 // 노드 타입 정의 - 다양한 시간 단위 지원 (분/시간/일/주/월)
 export type DurationUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
 
@@ -9,6 +58,7 @@ export interface NodeMetrics {
     timeMinutes?: number; // 하위 호환성 (기존 분 단위)
     duration?: number;    // 새 필드: 숫자 값
     durationUnit?: DurationUnit; // 새 필드: 단위
+    skillMultipliers?: SkillMultipliers; // 역량별 시간 승수
 }
 
 export interface FlowNode {

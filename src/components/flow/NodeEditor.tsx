@@ -20,7 +20,8 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog';
 
-import type { DurationUnit } from '@/lib/store';
+import type { DurationUnit, SkillMultipliers } from '@/lib/store';
+import { DEFAULT_SKILL_MULTIPLIERS } from '@/lib/store';
 
 interface NodeData {
     id?: string;
@@ -34,6 +35,7 @@ interface NodeData {
         timeMinutes?: number; // 하위 호환성
         duration?: number;
         durationUnit?: DurationUnit;
+        skillMultipliers?: SkillMultipliers;
     };
 }
 
@@ -66,6 +68,8 @@ export default function NodeEditor({
     const [duration, setDuration] = useState<number | undefined>(undefined);
     const [durationUnit, setDurationUnit] = useState<DurationUnit>('minutes');
     const [timeMinutes, setTimeMinutes] = useState<number | undefined>(undefined); // 하위 호환성
+    const [skillMultipliers, setSkillMultipliers] = useState<SkillMultipliers>({ ...DEFAULT_SKILL_MULTIPLIERS });
+    const [showMultiplierEdit, setShowMultiplierEdit] = useState(false);
 
     const resetForm = () => {
         setLabel('');
@@ -77,6 +81,8 @@ export default function NodeEditor({
         setDuration(undefined);
         setDurationUnit('minutes');
         setTimeMinutes(undefined);
+        setSkillMultipliers({ ...DEFAULT_SKILL_MULTIPLIERS });
+        setShowMultiplierEdit(false);
     };
 
     useEffect(() => {
@@ -103,6 +109,8 @@ export default function NodeEditor({
                 setDurationUnit('minutes');
                 setTimeMinutes(undefined);
             }
+            // 역량 승수 로드
+            setSkillMultipliers(initialData.metrics?.skillMultipliers || { ...DEFAULT_SKILL_MULTIPLIERS });
         } else {
             resetForm();
         }
@@ -122,6 +130,7 @@ export default function NodeEditor({
                 duration,
                 durationUnit,
                 timeMinutes: durationUnit === 'minutes' ? duration : undefined, // 하위 호환성
+                skillMultipliers,
             },
         });
         onClose();
@@ -229,22 +238,75 @@ export default function NodeEditor({
                                     </Select>
                                 </div>
                             </div>
-                            {/* 스킬 레벨별 예상 시간 (읽기 전용) */}
+                            {/* 스킬 레벨별 예상 시간 + 배율 편집 */}
                             {duration && duration > 0 && (
                                 <div className="bg-white/80 rounded-md p-2 border border-[#E2E4E9]">
-                                    <Label className="text-[#A1A1AA] text-xs mb-2 block">📈 스킬 레벨별 예상 시간</Label>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <Label className="text-[#A1A1AA] text-xs">📈 스킬 레벨별 예상 시간</Label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowMultiplierEdit(!showMultiplierEdit)}
+                                            className="text-[10px] text-blue-500 hover:text-blue-600 hover:underline"
+                                        >
+                                            {showMultiplierEdit ? '완료' : '배율 편집'}
+                                        </button>
+                                    </div>
+                                    
+                                    {/* 배율 편집 UI */}
+                                    {showMultiplierEdit && (
+                                        <div className="grid grid-cols-3 gap-2 mb-2">
+                                            <div className="text-center">
+                                                <div className="text-[10px] text-red-600 mb-1">저역량 배율</div>
+                                                <Input
+                                                    type="number"
+                                                    step="0.1"
+                                                    min="0.1"
+                                                    max="5"
+                                                    value={skillMultipliers.junior}
+                                                    onChange={(e) => setSkillMultipliers(prev => ({ ...prev, junior: Number(e.target.value) || 1.5 }))}
+                                                    className="h-7 text-xs text-center bg-red-50 border-red-200"
+                                                />
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-[10px] text-amber-600 mb-1">중역량 배율</div>
+                                                <Input
+                                                    type="number"
+                                                    step="0.1"
+                                                    min="0.1"
+                                                    max="5"
+                                                    value={skillMultipliers.mid}
+                                                    onChange={(e) => setSkillMultipliers(prev => ({ ...prev, mid: Number(e.target.value) || 1.0 }))}
+                                                    className="h-7 text-xs text-center bg-amber-50 border-amber-200"
+                                                />
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-[10px] text-emerald-600 mb-1">고역량 배율</div>
+                                                <Input
+                                                    type="number"
+                                                    step="0.1"
+                                                    min="0.1"
+                                                    max="5"
+                                                    value={skillMultipliers.senior}
+                                                    onChange={(e) => setSkillMultipliers(prev => ({ ...prev, senior: Number(e.target.value) || 0.7 }))}
+                                                    className="h-7 text-xs text-center bg-emerald-50 border-emerald-200"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    {/* 계산된 시간 표시 */}
                                     <div className="grid grid-cols-3 gap-2 text-center">
                                         <div className="bg-red-50 rounded px-2 py-1">
-                                            <div className="text-[10px] text-red-600">저역량</div>
-                                            <div className="text-sm font-medium text-red-700">{(duration * 1.5).toFixed(1)}{durationUnit === 'minutes' ? '분' : durationUnit === 'hours' ? '시간' : durationUnit === 'days' ? '일' : durationUnit === 'weeks' ? '주' : '개월'}</div>
+                                            <div className="text-[10px] text-red-600">저역량 (×{skillMultipliers.junior})</div>
+                                            <div className="text-sm font-medium text-red-700">{(duration * skillMultipliers.junior).toFixed(1)}{durationUnit === 'minutes' ? '분' : durationUnit === 'hours' ? '시간' : durationUnit === 'days' ? '일' : durationUnit === 'weeks' ? '주' : '개월'}</div>
                                         </div>
                                         <div className="bg-amber-50 rounded px-2 py-1">
-                                            <div className="text-[10px] text-amber-600">중역량</div>
-                                            <div className="text-sm font-medium text-amber-700">{duration}{durationUnit === 'minutes' ? '분' : durationUnit === 'hours' ? '시간' : durationUnit === 'days' ? '일' : durationUnit === 'weeks' ? '주' : '개월'}</div>
+                                            <div className="text-[10px] text-amber-600">중역량 (×{skillMultipliers.mid})</div>
+                                            <div className="text-sm font-medium text-amber-700">{(duration * skillMultipliers.mid).toFixed(1)}{durationUnit === 'minutes' ? '분' : durationUnit === 'hours' ? '시간' : durationUnit === 'days' ? '일' : durationUnit === 'weeks' ? '주' : '개월'}</div>
                                         </div>
                                         <div className="bg-emerald-50 rounded px-2 py-1">
-                                            <div className="text-[10px] text-emerald-600">고역량</div>
-                                            <div className="text-sm font-medium text-emerald-700">{(duration * 0.7).toFixed(1)}{durationUnit === 'minutes' ? '분' : durationUnit === 'hours' ? '시간' : durationUnit === 'days' ? '일' : durationUnit === 'weeks' ? '주' : '개월'}</div>
+                                            <div className="text-[10px] text-emerald-600">고역량 (×{skillMultipliers.senior})</div>
+                                            <div className="text-sm font-medium text-emerald-700">{(duration * skillMultipliers.senior).toFixed(1)}{durationUnit === 'minutes' ? '분' : durationUnit === 'hours' ? '시간' : durationUnit === 'days' ? '일' : durationUnit === 'weeks' ? '주' : '개월'}</div>
                                         </div>
                                     </div>
                                 </div>

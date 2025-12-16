@@ -24,7 +24,7 @@ import {
     CommandList,
 } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, SCENARIO_INFO, type ScenarioType } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
 import { ShareDialog } from '@/components/collaboration/ShareDialog';
@@ -1324,10 +1324,12 @@ export default function FlowPage() {
                                 <CollapsibleSection title="AI 자동화 수준" icon={Zap} defaultOpen={true}>
                                     <div className="space-y-1.5 mt-2">
                                         {[
-                                            { value: 'conservative', label: '보수적', desc: '인간 감독 중심', icon: Shield, color: 'amber' },
-                                            { value: 'balanced', label: '균형', desc: 'AI 코파일럿', icon: Scale, color: 'blue' },
-                                            { value: 'aggressive', label: '적극적', desc: '최대 자동화', icon: Rocket, color: 'emerald' },
-                                        ].map((scenario) => (
+                                            { value: 'conservative' as ScenarioType, icon: Shield, color: 'amber' },
+                                            { value: 'balanced' as ScenarioType, icon: Scale, color: 'blue' },
+                                            { value: 'aggressive' as ScenarioType, icon: Rocket, color: 'emerald' },
+                                        ].map((scenario) => {
+                                            const info = SCENARIO_INFO[scenario.value];
+                                            return (
                                             <motion.button
                                                 key={scenario.value}
                                                 onClick={() => setSelectedScenario(scenario.value as typeof selectedScenario)}
@@ -1341,15 +1343,35 @@ export default function FlowPage() {
                                             >
                                                 <scenario.icon className={`w-4 h-4 ${selectedScenario === scenario.value ? `text-${scenario.color}-500` : 'text-gray-400'}`} />
                                                 <div className="flex-1">
-                                                    <div className="font-medium">{scenario.label}</div>
-                                                    <div className="text-xs opacity-70">{scenario.desc}</div>
+                                                    <div className="font-medium">{info.label}</div>
+                                                    <div className="text-xs opacity-70">{info.desc}</div>
                                                 </div>
                                                 {selectedScenario === scenario.value && (
                                                     <CheckCircle2 className={`w-4 h-4 text-${scenario.color}-500`} />
                                                 )}
                                             </motion.button>
-                                        ))}
+                                        )})}
                                     </div>
+                                    {/* 선택된 시나리오 상세 정보 */}
+                                    <AnimatePresence>
+                                        {selectedScenario && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                className="mt-3 p-2.5 bg-gray-50 rounded-lg border border-gray-100"
+                                            >
+                                                <div className="text-xs text-gray-500 space-y-1">
+                                                    {SCENARIO_INFO[selectedScenario as ScenarioType].details.map((detail, idx) => (
+                                                        <div key={idx} className="flex items-start gap-1.5">
+                                                            <span className="text-gray-400 mt-0.5">•</span>
+                                                            <span>{detail}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </CollapsibleSection>
                             </motion.div>
                         )}
