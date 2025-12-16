@@ -109,8 +109,8 @@ export default function SplitViewCanvas({
                 </ReactFlow>
             </div>
 
-            {/* Center Controls */}
-            <div className="absolute left-1/2 top-4 -translate-x-1/2 z-20 flex gap-2">
+            {/* Center Controls - higher z-index for visibility */}
+            <div className="absolute left-1/2 top-4 -translate-x-1/2 z-40 flex gap-2">
                 <Button
                     onClick={() => setIsHeatmapMode(!isHeatmapMode)}
                     className={`${
@@ -177,9 +177,9 @@ export default function SplitViewCanvas({
                 </Panel>
             )}
 
-            {/* ROI Summary Panel */}
+            {/* ROI Summary Panel - positioned higher to avoid overlap with ReactFlow Controls */}
             {!isSimulating && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 w-[600px]">
+                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 w-[600px] pointer-events-auto">
                     <GapAnalysisSummary
                         asIsNodes={extractMetrics(asIsNodes)}
                         toBeNodes={extractMetrics(toBeNodes)}

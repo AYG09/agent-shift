@@ -3,16 +3,14 @@
 import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Spinner } from '@/components/ui/spinner';
 import { FrameworkSelector } from '@/components/strategy/FrameworkCard';
 import { frameworkPhases } from '@/components/strategy/GanttChart';
 import { useAppStore } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Target, ChevronDown, CheckCircle2, AlertTriangle, Layers, Crosshair, Clock, LayoutGrid, Bot } from 'lucide-react';
+import { ArrowLeft, Sparkles, Target, CheckCircle2, AlertTriangle, Layers, Crosshair, Clock, LayoutGrid, Bot, Info } from 'lucide-react';
 
 const GanttChart = dynamic(() => import('@/components/strategy/GanttChart'), { ssr: false });
 
@@ -398,8 +396,8 @@ export default function StrategyPage() {
                                                     </p>
                                                 </div>
                                             )}
-                                    </div>
-                                    {strategyScope === 'selected' && canSelectNode && (
+                                        </div>
+                                        {strategyScope === 'selected' && canSelectNode && (
                                             <motion.div 
                                                 className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center shadow-md"
                                                 initial={{ scale: 0 }}
@@ -572,24 +570,31 @@ export default function StrategyPage() {
                 </AnimatePresence>
 
                 {/* Schein's 8 Approaches (Lewin model) */}
-                {scheinApproaches && scheinApproaches.length > 0 && (
-                    <Card className="bg-white border-[#E2E4E9] mb-6 shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-base font-medium text-[#18181B]">
-                                <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-2 py-1 rounded">
-                                    2.5
-                                </span>
-                                <span className="flex items-center gap-2">
-                                    Schein의 학습불안 감소 전략
-                                    <span className="text-xs font-normal text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
-                                        생존불안 &gt; 학습불안
-                                    </span>
-                                </span>
-                            </CardTitle>
-                            <p className="text-sm text-[#71717A] mt-1">
-                                변화에 대한 저항을 줄이고 새로운 학습을 촉진하는 8가지 접근방법입니다.
-                            </p>
-                        </CardHeader>
+                <AnimatePresence>
+                    {scheinApproaches && scheinApproaches.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.4 }}
+                        >
+                            <Card className="bg-white/90 backdrop-blur-xl border-gray-200/80 mb-6 shadow-lg shadow-gray-200/50 overflow-hidden">
+                                <CardHeader className="bg-gradient-to-r from-purple-50/80 to-pink-50/80 border-b border-gray-100">
+                                    <CardTitle className="flex items-center gap-3 text-base font-semibold text-gray-800">
+                                        <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold shadow-sm">
+                                            2.5
+                                        </span>
+                                        <span className="flex items-center gap-2">
+                                            Schein의 학습불안 감소 전략
+                                            <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2.5 py-1 rounded-full">
+                                                생존불안 &gt; 학습불안
+                                            </span>
+                                        </span>
+                                    </CardTitle>
+                                    <p className="text-sm text-gray-500 mt-1.5">
+                                        변화에 대한 저항을 줄이고 새로운 학습을 촉진하는 8가지 접근방법입니다.
+                                    </p>
+                                </CardHeader>
                         <CardContent>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {scheinApproaches.map((item, idx) => (
@@ -597,26 +602,26 @@ export default function StrategyPage() {
                                         key={idx}
                                         className={`p-4 rounded-xl border transition-all cursor-pointer ${
                                             expandedApproach === idx
-                                                ? 'bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200 shadow-md'
-                                                : 'bg-white/60 border-[#E2E4E9] hover:border-purple-200 hover:shadow-sm'
+                                                ? 'bg-gradient-to-br from-purple-50 to-pink-50 border-purple-300 shadow-md'
+                                                : 'bg-white/70 border-gray-200 hover:border-purple-200 hover:shadow-sm'
                                         }`}
                                         onClick={() => setExpandedApproach(expandedApproach === idx ? null : idx)}
                                     >
                                         <div className="flex items-start gap-3">
-                                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold ${
+                                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold transition-colors ${
                                                 expandedApproach === idx
-                                                    ? 'bg-purple-500 text-white'
+                                                    ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm'
                                                     : 'bg-purple-100 text-purple-600'
                                             }`}>
                                                 {idx + 1}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <h4 className={`font-medium text-sm ${
-                                                    expandedApproach === idx ? 'text-purple-900' : 'text-[#18181B]'
+                                                    expandedApproach === idx ? 'text-purple-900' : 'text-gray-800'
                                                 }`}>
                                                     {item.approach}
                                                 </h4>
-                                                <p className="text-xs text-[#71717A] mt-1 line-clamp-2">
+                                                <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                                                     {item.description}
                                                 </p>
                                                 
@@ -626,7 +631,7 @@ export default function StrategyPage() {
                                                         <p className="text-xs font-medium text-purple-700 mb-2">실행 전술</p>
                                                         <ul className="space-y-1.5">
                                                             {item.tactics.map((tactic, tIdx) => (
-                                                                <li key={tIdx} className="flex items-start gap-2 text-xs text-[#52525B]">
+                                                                <li key={tIdx} className="flex items-start gap-2 text-xs text-gray-600">
                                                                     <span className="text-purple-400 mt-0.5">▸</span>
                                                                     {tactic}
                                                                 </li>
@@ -636,7 +641,7 @@ export default function StrategyPage() {
                                                 )}
                                             </div>
                                             <svg 
-                                                className={`w-4 h-4 text-[#A1A1AA] transition-transform ${expandedApproach === idx ? 'rotate-180' : ''}`} 
+                                                className={`w-4 h-4 text-gray-400 transition-transform ${expandedApproach === idx ? 'rotate-180' : ''}`} 
                                                 fill="none" 
                                                 viewBox="0 0 24 24" 
                                                 stroke="currentColor"
@@ -656,31 +661,40 @@ export default function StrategyPage() {
                                     위 8가지 접근방법은 학습불안을 감소시켜 심리적 안전감을 높이는 전략입니다.
                                 </p>
                             </div>
-                        </CardContent>
-                    </Card>
-                )}
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* Step 3: Interactive Actions */}
-                {selectedFramework && displayPhases.length > 0 && (
-                    <Card className="bg-white/90 backdrop-blur-xl border-[#E2E4E9] shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-base font-medium text-[#18181B]">
-                                <span className="bg-emerald-500 text-white text-xs px-2 py-1 rounded">
-                                    3
-                                </span>
-                                주요 액션 아이템
-                                <span className="text-xs text-[#71717A] ml-auto">
-                                    전체 진행률:{' '}
-                                    {Math.round(
-                                        displayPhases.reduce(
-                                            (acc, p) => acc + getPhaseProgress(p),
-                                            0
-                                        ) / displayPhases.length
-                                    )}
-                                    %
-                                </span>
-                            </CardTitle>
-                        </CardHeader>
+                <AnimatePresence>
+                    {selectedFramework && displayPhases.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.4 }}
+                        >
+                            <Card className="bg-white/90 backdrop-blur-xl border-gray-200/80 shadow-lg shadow-gray-200/50 overflow-hidden">
+                                <CardHeader className="bg-gradient-to-r from-emerald-50/80 to-teal-50/80 border-b border-gray-100">
+                                    <CardTitle className="flex items-center gap-3 text-base font-semibold text-gray-800">
+                                        <span className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold shadow-sm">
+                                            3
+                                        </span>
+                                        주요 액션 아이템
+                                        <span className="text-xs text-gray-500 ml-auto bg-gray-100 px-2.5 py-1 rounded-full font-medium">
+                                            전체 진행률:{' '}
+                                            {Math.round(
+                                                displayPhases.reduce(
+                                                    (acc, p) => acc + getPhaseProgress(p),
+                                                    0
+                                                ) / displayPhases.length
+                                            )}
+                                            %
+                                        </span>
+                                    </CardTitle>
+                                </CardHeader>
                         <CardContent>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {displayPhases.map((phase) => {
@@ -688,26 +702,26 @@ export default function StrategyPage() {
                                     return (
                                         <div
                                             key={phase.id}
-                                            className="p-4 bg-white/60 backdrop-blur-md rounded-xl border border-[#E2E4E9] shadow-sm hover:shadow-md transition-shadow"
+                                            className="p-4 bg-white/70 backdrop-blur-md rounded-xl border border-gray-200/80 shadow-sm hover:shadow-md transition-all duration-300 hover:border-gray-300"
                                         >
                                             {/* Phase Header */}
                                             <div className="flex items-center gap-2 mb-3">
                                                 <div
-                                                    className="w-3 h-3 rounded-full"
+                                                    className="w-3 h-3 rounded-full shadow-sm"
                                                     style={{ backgroundColor: phase.color }}
                                                 />
-                                                <h3 className="font-medium text-[#18181B] flex-1">
+                                                <h3 className="font-medium text-gray-800 flex-1">
                                                     {phase.name}
                                                 </h3>
-                                                <span className="text-xs text-[#71717A]">
+                                                <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
                                                     {progress}%
                                                 </span>
                                             </div>
 
                                             {/* Progress Bar */}
-                                            <div className="h-1.5 bg-[#E2E4E9] rounded-full mb-3 overflow-hidden">
+                                            <div className="h-1.5 bg-gray-100 rounded-full mb-3 overflow-hidden">
                                                 <div
-                                                    className="h-full rounded-full transition-all duration-300"
+                                                    className="h-full rounded-full transition-all duration-500 ease-out"
                                                     style={{
                                                         width: `${progress}%`,
                                                         backgroundColor: phase.color,
@@ -726,7 +740,7 @@ export default function StrategyPage() {
                                                             [phase.id]: e.target.value,
                                                         }))
                                                     }
-                                                    className="bg-white/80 border-[#E2E4E9] text-sm h-8 text-[#18181B] placeholder:text-[#A1A1AA]"
+                                                    className="bg-white/90 border-gray-200 text-sm h-8 text-gray-800 placeholder:text-gray-400 focus:border-emerald-300 focus:ring-emerald-200/50"
                                                 />
                                             </div>
 
@@ -745,11 +759,11 @@ export default function StrategyPage() {
                                                             }
                                                         >
                                                             <div
-                                                                className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors
+                                                                className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200
                                                                 ${
                                                                     isCompleted
-                                                                        ? 'bg-emerald-500 border-emerald-500'
-                                                                        : 'border-[#D4D4D8] group-hover:border-[#A1A1AA]'
+                                                                        ? 'bg-gradient-to-br from-emerald-500 to-teal-500 border-emerald-500 shadow-sm'
+                                                                        : 'border-gray-300 group-hover:border-emerald-400'
                                                                 }`}
                                                             >
                                                                 {isCompleted && (
@@ -771,8 +785,8 @@ export default function StrategyPage() {
                                                             <span
                                                                 className={`text-sm transition-colors ${
                                                                     isCompleted
-                                                                        ? 'text-[#A1A1AA] line-through'
-                                                                        : 'text-[#52525B] group-hover:text-[#18181B]'
+                                                                        ? 'text-gray-400 line-through'
+                                                                        : 'text-gray-600 group-hover:text-gray-800'
                                                                 }`}
                                                             >
                                                                 {action}
@@ -786,8 +800,10 @@ export default function StrategyPage() {
                                 })}
                             </div>
                         </CardContent>
-                    </Card>
-                )}
+                            </Card>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );

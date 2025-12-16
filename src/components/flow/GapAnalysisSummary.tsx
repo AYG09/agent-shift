@@ -53,7 +53,7 @@ function ComparisonBar({ asIs, toBe, label }: { asIs: number; toBe: number; labe
     return (
         <div className="space-y-2">
             <div className="flex justify-between items-center text-xs">
-                <span className="text-[#71717A]">{label}</span>
+                <span className="text-gray-500">{label}</span>
                 {savingsPercent > 0 && (
                     <motion.span
                         initial={{ scale: 0, opacity: 0 }}
@@ -69,7 +69,7 @@ function ComparisonBar({ asIs, toBe, label }: { asIs: number; toBe: number; labe
                 {/* As-Is Bar */}
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] text-red-500 w-10 shrink-0">As-Is</span>
-                    <div className="flex-1 h-4 bg-[#F5F6F8] rounded-full overflow-hidden">
+                    <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
                         <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${asIsPercent}%` }}
@@ -77,14 +77,14 @@ function ComparisonBar({ asIs, toBe, label }: { asIs: number; toBe: number; labe
                             className="h-full bg-gradient-to-r from-red-400 to-red-500 rounded-full"
                         />
                     </div>
-                    <span className="text-[10px] text-[#71717A] w-12 text-right">
+                    <span className="text-[10px] text-gray-500 w-12 text-right">
                         <AnimatedNumber value={asIs} />
                     </span>
                 </div>
                 {/* To-Be Bar */}
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] text-emerald-600 w-10 shrink-0">To-Be</span>
-                    <div className="flex-1 h-4 bg-[#F5F6F8] rounded-full overflow-hidden">
+                    <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
                         <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${toBePercent}%` }}
@@ -92,7 +92,7 @@ function ComparisonBar({ asIs, toBe, label }: { asIs: number; toBe: number; labe
                             className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full"
                         />
                     </div>
-                    <span className="text-[10px] text-[#71717A] w-12 text-right">
+                    <span className="text-[10px] text-gray-500 w-12 text-right">
                         <AnimatedNumber value={toBe} />
                     </span>
                 </div>
@@ -144,8 +144,8 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
 
     if (!hasData) {
         return (
-            <div className="bg-white/90 backdrop-blur-xl rounded-xl p-4 border border-[#E2E4E9] shadow-lg">
-                <div className="text-sm text-[#71717A] text-center">
+            <div className="bg-white/95 backdrop-blur-xl rounded-xl p-4 border border-gray-200/80 shadow-lg shadow-gray-200/50">
+                <div className="text-sm text-gray-500 text-center">
                     📊 메트릭 데이터가 있으면 ROI 분석이 표시됩니다
                 </div>
             </div>
@@ -157,10 +157,10 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
-            className="bg-white/90 backdrop-blur-xl rounded-xl p-5 border border-[#E2E4E9] shadow-xl"
+            className="bg-white/95 backdrop-blur-xl rounded-xl p-5 border border-gray-200/80 shadow-xl shadow-gray-200/50"
         >
             <div className="flex items-center justify-between mb-4">
-                <div className="text-sm font-semibold text-[#18181B] flex items-center gap-2">
+                <div className="text-sm font-semibold text-gray-800 flex items-center gap-2">
                     📊 ROI 분석
                 </div>
                 {/* 총 절감률 뱃지 */}
@@ -191,14 +191,14 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1 }}
-                className="mt-4 pt-4 border-t border-[#E2E4E9] grid grid-cols-3 gap-3"
+                className="mt-4 pt-4 border-t border-gray-200/80 grid grid-cols-3 gap-3"
             >
                 {metrics.savings.time > 0 && (
                     <div className="text-center">
                         <div className="text-lg font-bold text-emerald-600">
                             <AnimatedNumber value={metrics.savings.time} suffix="분" />
                         </div>
-                        <div className="text-[10px] text-[#71717A]">시간 절감</div>
+                        <div className="text-[10px] text-gray-500">시간 절감</div>
                     </div>
                 )}
                 {metrics.savings.cost > 0 && (
@@ -206,7 +206,7 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
                         <div className="text-lg font-bold text-emerald-600">
                             {formatNumber(metrics.savings.cost)}₩
                         </div>
-                        <div className="text-[10px] text-[#71717A]">비용 절감</div>
+                        <div className="text-[10px] text-gray-500">비용 절감</div>
                     </div>
                 )}
                 {metrics.savings.people > 0 && (
@@ -214,7 +214,7 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
                         <div className="text-lg font-bold text-emerald-600">
                             <AnimatedNumber value={metrics.savings.people} suffix="명" />
                         </div>
-                        <div className="text-[10px] text-[#71717A]">인원 절감</div>
+                        <div className="text-[10px] text-gray-500">인원 절감</div>
                     </div>
                 )}
             </motion.div>
