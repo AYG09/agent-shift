@@ -562,7 +562,7 @@ export async function POST(request: NextRequest) {
             model,
             schema,
             prompt,
-            maxTokens: 4096, // 토큰 제한으로 JSON 잘림 방지
+            maxOutputTokens: 4096, // 토큰 제한으로 JSON 잘림 방지
         });
 
         // 숫자 필드 정규화 후 반환
