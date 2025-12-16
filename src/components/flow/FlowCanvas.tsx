@@ -655,8 +655,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                 className="pro-canvas"
                 defaultEdgeOptions={{
                     type: 'selectable',
-                    style: { stroke: '#71717A', strokeWidth: 1.5 },
-                    markerEnd: { type: 'arrowclosed', color: '#71717A', width: 16, height: 16 },
+                    style: { stroke: '#94a3b8', strokeWidth: 1.5 },
                     animated: false,
                 }}
             >
