@@ -87,18 +87,18 @@ export const ChangeStrategyResponseSchema = z.object({
     ).max(3).describe('리스크 2~3개'),
     survivalAnxiety: z.object({
         description: z.string().max(150).describe('변화 필요성 (150자)'),
-        triggers: z.array(z.string().max(60)).max(3).describe('불안 요소 3개'),
+        triggers: z.array(z.string().max(80)).max(3).describe('불안 요소 3개 (각 80자)'),
     }).optional().describe('Schein: 생존불안'),
     learningAnxiety: z.object({
         description: z.string().max(150).describe('변화 두려움 (150자)'),
-        barriers: z.array(z.string().max(60)).max(3).describe('장벽 3개'),
+        barriers: z.array(z.string().max(80)).max(3).describe('장벽 3개 (각 80자)'),
     }).optional().describe('Schein: 학습불안'),
     scheinApproaches: z.array(
         z.object({
             id: z.number().int().describe('1~8'),
-            approach: z.string().max(40).describe('접근방법명'),
+            approach: z.string().max(50).describe('접근방법명 (50자)'),
             description: z.string().max(100).describe('적용 방법 (100자)'),
-            actions: z.array(z.string().max(60)).max(3).describe('실행 항목 3개'),
+            actions: z.array(z.string().max(80)).max(3).describe('실행 항목 3개 (각 80자)'),
         })
     ).max(8).optional().describe('Schein 8가지 접근'),
 });
