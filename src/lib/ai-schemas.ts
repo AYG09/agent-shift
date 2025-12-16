@@ -61,49 +61,46 @@ export const ToBeFlowResponseSchema = z.object({
     ),
 });
 
-// 변화 전략 응답 스키마 (Schein의 8가지 접근방법 통합)
+// 변화 전략 응답 스키마 - .describe()로 모델에 명확한 지시
 export const ChangeStrategyResponseSchema = z.object({
     phases: z.array(
         z.object({
-            id: z.string(),
-            name: z.string(),
-            duration: z.string(),
-            startWeek: z.number(),
-            endWeek: z.number(),
-            // 확장된 액션 스키마: 이유와 가치 포함
+            id: z.string().describe('단계 ID'),
+            name: z.string().max(30).describe('단계명 (30자)'),
+            duration: z.string().max(20).describe('기간 (예: 2주)'),
+            startWeek: z.number().int().describe('시작 주차'),
+            endWeek: z.number().int().describe('종료 주차'),
             actions: z.array(z.object({
-                action: z.string(),
-                rationale: z.string(), // 왜 이 활동이 필요한가
-                value: z.string(), // 어떤 가치를 제공하는가
-            })),
-            color: z.string(),
+                action: z.string().max(80).describe('활동 내용 (80자)'),
+                rationale: z.string().max(100).describe('필요 이유 (100자)'),
+                value: z.string().max(100).describe('제공 가치 (100자)'),
+            })).max(3).describe('액션 2~3개'),
+            color: z.string().max(10).describe('색상 hex'),
         })
-    ),
-    keyMessages: z.array(z.string()),
+    ).max(8).describe('단계 3~8개'),
+    keyMessages: z.array(z.string().max(80)).max(5).describe('핵심 메시지 3~5개 (각 80자)'),
     riskFactors: z.array(
         z.object({
-            risk: z.string(),
-            mitigation: z.string(),
+            risk: z.string().max(80).describe('리스크 (80자)'),
+            mitigation: z.string().max(100).describe('완화 방안 (100자)'),
         })
-    ),
-    // Schein의 심리적 안전 프레임워크 (Lewin 모델과 통합)
+    ).max(3).describe('리스크 2~3개'),
     survivalAnxiety: z.object({
-        description: z.string(), // 왜 변화해야 하는가
-        triggers: z.array(z.string()), // 생존불안을 높이는 요소들
-    }).optional(),
+        description: z.string().max(150).describe('변화 필요성 (150자)'),
+        triggers: z.array(z.string().max(60)).max(3).describe('불안 요소 3개'),
+    }).optional().describe('Schein: 생존불안'),
     learningAnxiety: z.object({
-        description: z.string(), // 변화에 대한 두려움
-        barriers: z.array(z.string()), // 학습불안의 원인들
-    }).optional(),
-    // Schein의 8가지 학습불안 감소 방법 (조직문화와 리더십, 2017)
+        description: z.string().max(150).describe('변화 두려움 (150자)'),
+        barriers: z.array(z.string().max(60)).max(3).describe('장벽 3개'),
+    }).optional().describe('Schein: 학습불안'),
     scheinApproaches: z.array(
         z.object({
-            id: z.number(), // 1-8
-            approach: z.string(), // 접근방법 이름
-            description: z.string(), // 이 업무에 맞는 적용 방법
-            actions: z.array(z.string()), // 구체적 실행 항목
+            id: z.number().int().describe('1~8'),
+            approach: z.string().max(40).describe('접근방법명'),
+            description: z.string().max(100).describe('적용 방법 (100자)'),
+            actions: z.array(z.string().max(60)).max(3).describe('실행 항목 3개'),
         })
-    ).optional(),
+    ).max(8).optional().describe('Schein 8가지 접근'),
 });
 
 // 타입 추출
