@@ -16,6 +16,46 @@ import {
 
 const API_KEY_STORAGE_KEY = 'agent-shift-api-key';
 
+// localStorage 안전 접근 헬퍼
+function safeGetStorageItem(key: string): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        return localStorage.getItem(key);
+    } catch (e) {
+        console.warn('[Storage] Access denied:', e);
+        return null;
+    }
+}
+
+function safeSetStorageItem(key: string, value: string): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+        localStorage.setItem(key, value);
+        return true;
+    } catch (e) {
+        console.warn('[Storage] Write denied:', e);
+        return false;
+    }
+}
+
+function safeRemoveStorageItem(key: string): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+        localStorage.removeItem(key);
+        return true;
+    } catch (e) {
+        console.warn('[Storage] Remove denied:', e);
+        return false;
+    }
+}
+
+// 커스텀 이벤트 발생 함수
+function dispatchApiKeyUpdate() {
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('apikey-updated'));
+    }
+}
+
 interface ApiKeySettingsProps {
     trigger?: React.ReactNode;
 }
@@ -25,26 +65,25 @@ export function useApiKey() {
     const [isLoaded, setIsLoaded] = useState(() => typeof window !== 'undefined');
 
     const loadApiKey = () => {
-        if (typeof window === 'undefined') return null;
-        const stored = localStorage.getItem(API_KEY_STORAGE_KEY);
-        setApiKey(stored ?? null);
+        const stored = safeGetStorageItem(API_KEY_STORAGE_KEY);
+        setApiKey(stored);
         setIsLoaded(true);
         return stored;
     };
 
     const saveApiKey = (key: string) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(API_KEY_STORAGE_KEY, key);
+        if (safeSetStorageItem(API_KEY_STORAGE_KEY, key)) {
             setApiKey(key);
             setIsLoaded(true);
+            dispatchApiKeyUpdate(); // 다른 훅에게 알림
         }
     };
 
     const clearApiKey = () => {
-        if (typeof window !== 'undefined') {
-            localStorage.removeItem(API_KEY_STORAGE_KEY);
+        if (safeRemoveStorageItem(API_KEY_STORAGE_KEY)) {
             setApiKey(null);
             setIsLoaded(true);
+            dispatchApiKeyUpdate(); // 다른 훅에게 알림
         }
     };
 

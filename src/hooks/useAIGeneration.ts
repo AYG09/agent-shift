@@ -23,6 +23,18 @@ interface WorkContext {
 
 const API_KEY_STORAGE_KEY = 'agent-shift-api-key';
 
+// localStorage 안전 접근 헬퍼
+function safeGetStorageItem(key: string): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        return localStorage.getItem(key);
+    } catch (e) {
+        // Vercel/Safari 등 일부 환경에서 storage 접근 차단 시
+        console.warn('[Storage] Access denied:', e);
+        return null;
+    }
+}
+
 export function useAIGeneration() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -30,10 +42,29 @@ export function useAIGeneration() {
 
     // 로컬 스토리지에서 API 키 로드 (클라이언트에서만)
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const stored = localStorage.getItem(API_KEY_STORAGE_KEY);
-            setApiKey(stored);
-        }
+        const stored = safeGetStorageItem(API_KEY_STORAGE_KEY);
+        setApiKey(stored);
+        
+        // storage 이벤트 리스너로 다른 탭/컴포넌트에서 변경 감지
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === API_KEY_STORAGE_KEY) {
+                setApiKey(e.newValue);
+            }
+        };
+        
+        // 커스텀 이벤트로 같은 탭에서 변경 감지
+        const handleApiKeyUpdate = () => {
+            const updated = safeGetStorageItem(API_KEY_STORAGE_KEY);
+            setApiKey(updated);
+        };
+        
+        window.addEventListener('storage', handleStorageChange);
+        window.addEventListener('apikey-updated', handleApiKeyUpdate);
+        
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            window.removeEventListener('apikey-updated', handleApiKeyUpdate);
+        };
     }, []);
 
 

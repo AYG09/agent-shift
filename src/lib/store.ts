@@ -400,7 +400,31 @@ export const useAppStore = create<AppState>()(
                         removeItem: () => {},
                     };
                 }
-                return localStorage;
+                // localStorage 접근 차단 환경 (Vercel/Safari 등) 안전 처리
+                return {
+                    getItem: (name: string) => {
+                        try {
+                            return localStorage.getItem(name);
+                        } catch (e) {
+                            console.warn('[Store] Storage getItem denied:', e);
+                            return null;
+                        }
+                    },
+                    setItem: (name: string, value: string) => {
+                        try {
+                            localStorage.setItem(name, value);
+                        } catch (e) {
+                            console.warn('[Store] Storage setItem denied:', e);
+                        }
+                    },
+                    removeItem: (name: string) => {
+                        try {
+                            localStorage.removeItem(name);
+                        } catch (e) {
+                            console.warn('[Store] Storage removeItem denied:', e);
+                        }
+                    },
+                };
             }),
             // 저장할 필드만 선택 (isGenerating은 제외)
             partialize: (state) => ({
