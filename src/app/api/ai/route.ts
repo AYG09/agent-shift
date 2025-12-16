@@ -143,7 +143,7 @@ ${context.painPoints ? `- 주요 고충/문제점: ${context.painPoints}` : ''}
 - label: 30자 이내 (예: "데이터 수집")
 - description: 60자 이내
 - 모든 숫자는 정수만
-- metrics: { duration: 정수, durationUnit: 'minutes'|'hours'|'days'|'weeks'|'months' }
+- metrics: **모든 노드에 필수** { duration: 정수, durationUnit: 'minutes'|'hours'|'days'|'weeks'|'months' }
 
 ## 노드 배치 (수직 플로우)
 - x=250, y=0부터 120 간격
@@ -218,9 +218,9 @@ ${JSON.stringify(asIsNodes, null, 2)}
 - agentDescription: 100자 이내 (예: "LLM으로 문서 요약 후 인간이 검토")
 - description: 60자 이내
 - 모든 숫자는 정수만
-- metrics: { duration: 정수, durationUnit: 'minutes'|'hours'|'days'|'weeks'|'months' }
-  - AI 자동화 단계는 대폭 단축된 시간 반영
-  - As-Is 대비 절감률을 반영한 현실적 시간 추정
+- metrics: **모든 노드에 필수** { duration: 정수, durationUnit: 'minutes'|'hours'|'days'|'weeks'|'months' }
+  - AI 노드: As-Is 대비 대폭 단축된 시간
+  - 인간 노드(task/process): 실제 수행에 필요한 시간
 
 ## 노드 배치 (수직 플로우)
 - x=250, y=0부터 100 간격
