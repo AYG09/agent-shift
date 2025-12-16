@@ -304,24 +304,6 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
         closeEdgeContextMenu();
     }, [selectedEdgeId, storeDeleteEdge, target, setEdges, closeEdgeContextMenu]);
 
-    // Edge 애니메이션 토글 핸들러
-    const handleToggleEdgeAnimation = useCallback(() => {
-        if (!selectedEdgeId) return;
-        
-        const currentEdge = storeEdges.find((e) => e.id === selectedEdgeId);
-        const newAnimated = !currentEdge?.animated;
-        
-        // Store 업데이트
-        storeUpdateEdge(selectedEdgeId, { animated: newAnimated }, target);
-        
-        // 로컬 상태 업데이트
-        setEdges((eds) => eds.map((e) => 
-            e.id === selectedEdgeId ? { ...e, animated: newAnimated } : e
-        ));
-        
-        closeEdgeContextMenu();
-    }, [selectedEdgeId, storeEdges, storeUpdateEdge, target, setEdges, closeEdgeContextMenu]);
-
     // Edge 방향 뒤집기 핸들러
     const handleReverseEdgeDirection = useCallback(() => {
         if (!selectedEdgeId) return;
@@ -350,12 +332,6 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
         setSelectedEdgeId(null);
         closeEdgeContextMenu();
     }, [selectedEdgeId, storeEdges, storeReverseEdge, target, setEdges, closeEdgeContextMenu]);
-
-    // 선택된 Edge의 animated 상태
-    const selectedEdgeAnimated = useMemo(() => {
-        if (!selectedEdgeId) return false;
-        return storeEdges.find((e) => e.id === selectedEdgeId)?.animated ?? false;
-    }, [selectedEdgeId, storeEdges]);
 
     // Delete 키로 선택된 Edge 삭제, R 키로 방향 뒤집기
     useEffect(() => {
@@ -765,8 +741,6 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                     edgeId={edgeContextMenu.edgeId}
                     onClose={closeEdgeContextMenu}
                     onDelete={handleDeleteEdge}
-                    onToggleAnimation={handleToggleEdgeAnimation}
-                    isAnimated={selectedEdgeAnimated}
                     onReverseDirection={handleReverseEdgeDirection}
                 />
             )}

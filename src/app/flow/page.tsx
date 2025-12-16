@@ -211,7 +211,6 @@ export default function FlowPage() {
         'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'project'
     >('weekly');
     const [step, setStep] = useState<'context' | 'canvas'>('context');
-    const [isSimulating, setIsSimulating] = useState(false);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
     const [selectedScenario, setSelectedScenario] = useState<
         'conservative' | 'balanced' | 'aggressive'
@@ -410,8 +409,6 @@ export default function FlowPage() {
             setViewMode('tobe');
         }
     };
-
-    const toggleSimulation = () => setIsSimulating(!isSimulating);
 
     // 노드 세분화 (우클릭 메뉴에서 호출)
     const handleNodeSplit = async (nodeId: string, flowType: 'asis' | 'tobe') => {
@@ -1246,8 +1243,6 @@ export default function FlowPage() {
                         asIsEdges={displayAsIsEdges}
                         toBeNodes={displayToBeNodes}
                         toBeEdges={displayToBeEdges}
-                        isSimulating={isSimulating}
-                        onToggleSimulation={toggleSimulation}
                     />
                 ) : (
                     <FlowCanvas

@@ -5,12 +5,13 @@ import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FrameworkSelector } from '@/components/strategy/FrameworkCard';
 import { frameworkPhases } from '@/components/strategy/GanttChart';
 import { useAppStore } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Target, CheckCircle2, AlertTriangle, Layers, Crosshair, Clock, LayoutGrid, Bot, Info } from 'lucide-react';
+import { ArrowLeft, Sparkles, Target, CheckCircle2, AlertTriangle, Layers, Crosshair, Clock, LayoutGrid, Bot, Info, X } from 'lucide-react';
 
 const GanttChart = dynamic(() => import('@/components/strategy/GanttChart'), { ssr: false });
 
@@ -53,6 +54,7 @@ export default function StrategyPage() {
         strategyScope,
         selectedToBeNodeId,
         setStrategyScope,
+        setSelectedToBeNodeId,
     } = useAppStore();
     const { isLoading, error, generateChangeStrategy } = useAIGeneration();
     const [selectedFramework, setSelectedFramework] = useState<FrameworkType | null>(null);
@@ -60,6 +62,9 @@ export default function StrategyPage() {
     const [scheinApproaches, setScheinApproaches] = useState<ScheinApproach[] | null>(null);
     const [frameworkExplanation, setFrameworkExplanation] = useState<string | null>(null);
     const [totalWeeks, setTotalWeeks] = useState(12);
+
+    // AI 에이전트 선택 Dialog
+    const [agentSelectOpen, setAgentSelectOpen] = useState(false);
 
     // Hydration 안전 처리
     const [mounted, setMounted] = useState(false);
@@ -101,7 +106,8 @@ export default function StrategyPage() {
         ? toBeNodes.find(n => n.id === selectedToBeNodeId) 
         : null;
     const hasToBeFlow = toBeNodes.length > 0;
-    const canSelectNode = !!selectedNode;
+    const hasAgentNodes = agentNodes.length > 0;
+    const canSelectNode = hasAgentNodes; // 에이전트가 있으면 선택 가능
 
     // 협업 유형별 집계
     const collaborationSummary = {
@@ -357,7 +363,11 @@ export default function StrategyPage() {
                                             ? 'border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg shadow-purple-500/10'
                                             : 'border-gray-200 bg-white hover:border-purple-300 hover:shadow-md'
                                     } ${!canSelectNode ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    onClick={() => canSelectNode && setStrategyScope('selected')}
+                                    onClick={() => {
+                                        if (canSelectNode) {
+                                            setAgentSelectOpen(true);
+                                        }
+                                    }}
                                     whileHover={canSelectNode ? { scale: 1.02, y: -2 } : {}}
                                     whileTap={canSelectNode ? { scale: 0.98 } : {}}
                                 >
@@ -392,6 +402,16 @@ export default function StrategyPage() {
                                                     {selectedNode.description && (
                                                         <p className="text-xs text-gray-500 mt-2 line-clamp-2">{selectedNode.description}</p>
                                                     )}
+                                                    <p className="text-[10px] text-purple-500 mt-2">클릭하여 다른 에이전트 선택</p>
+                                                </div>
+                                            ) : hasAgentNodes ? (
+                                                <div className="mt-4 p-3 bg-purple-50/50 rounded-xl border border-purple-200">
+                                                    <p className="text-xs text-purple-600 text-center font-medium">
+                                                        🤖 클릭하여 AI 에이전트 선택
+                                                    </p>
+                                                    <p className="text-[10px] text-purple-400 text-center mt-1">
+                                                        {agentNodes.length}개의 AI 에이전트 사용 가능
+                                                    </p>
                                                 </div>
                                             ) : (
                                                 <div className="mt-4 p-3 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
@@ -399,15 +419,15 @@ export default function StrategyPage() {
                                                         <Link href="/flow" className="text-purple-500 hover:underline font-medium">
                                                             Flow 캔버스
                                                         </Link>
-                                                        에서 노드를 선택하세요
+                                                        에서 To-Be 플로우를 생성하세요
                                                     </p>
                                                     <p className="text-[10px] text-gray-400 text-center mt-1">
-                                                        💡 To-Be 탭에서 🤖 AI 에이전트를 클릭하면 선택됩니다
+                                                        💡 AI 에이전트가 없습니다
                                                     </p>
                                                 </div>
                                             )}
                                         </div>
-                                        {strategyScope === 'selected' && canSelectNode && (
+                                        {strategyScope === 'selected' && selectedNode && (
                                             <motion.div 
                                                 className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center shadow-md"
                                                 initial={{ scale: 0 }}
@@ -841,6 +861,77 @@ export default function StrategyPage() {
                     )}
                 </AnimatePresence>
             </div>
+
+            {/* AI 에이전트 선택 Dialog */}
+            <Dialog open={agentSelectOpen} onOpenChange={setAgentSelectOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-lg">
+                            <Bot className="w-5 h-5 text-purple-600" />
+                            AI 에이전트 선택
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="mt-4 space-y-3 max-h-[400px] overflow-y-auto">
+                        {agentNodes.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500">
+                                <Bot className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                                <p className="text-sm">생성된 AI 에이전트가 없습니다</p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                    Flow 캔버스에서 To-Be 플로우를 먼저 생성하세요
+                                </p>
+                            </div>
+                        ) : (
+                            agentNodes.map((node) => (
+                                <motion.div
+                                    key={node.id}
+                                    onClick={() => {
+                                        setSelectedToBeNodeId(node.id);
+                                        setStrategyScope('selected');
+                                        setAgentSelectOpen(false);
+                                    }}
+                                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                        selectedToBeNodeId === node.id
+                                            ? 'border-purple-400 bg-purple-50'
+                                            : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/50'
+                                    }`}
+                                    whileHover={{ scale: 1.01 }}
+                                    whileTap={{ scale: 0.99 }}
+                                >
+                                    <div className="flex items-start gap-3">
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                                            selectedToBeNodeId === node.id 
+                                                ? 'bg-purple-500 text-white' 
+                                                : 'bg-purple-100 text-purple-600'
+                                        }`}>
+                                            <Bot className="w-5 h-5" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-semibold text-gray-800 truncate">{node.label}</span>
+                                                {selectedToBeNodeId === node.id && (
+                                                    <CheckCircle2 className="w-4 h-4 text-purple-500 flex-shrink-0" />
+                                                )}
+                                            </div>
+                                            {node.collaborationType && (
+                                                <span className={`text-[10px] px-2 py-0.5 rounded-full mt-1 inline-block font-medium ${
+                                                    node.collaborationType === 'copilot' ? 'bg-emerald-100 text-emerald-700' :
+                                                    node.collaborationType === 'monitor' ? 'bg-amber-100 text-amber-700' :
+                                                    'bg-purple-100 text-purple-700'
+                                                }`}>
+                                                    {node.collaborationType}
+                                                </span>
+                                            )}
+                                            {node.description && (
+                                                <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">{node.description}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            ))
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Palette, Zap, ZapOff, ArrowLeftRight } from 'lucide-react';
+import { Trash2, ArrowLeftRight } from 'lucide-react';
 
 interface EdgeContextMenuProps {
     x: number;
@@ -10,8 +10,6 @@ interface EdgeContextMenuProps {
     edgeId: string;
     onClose: () => void;
     onDelete: () => void;
-    onToggleAnimation?: () => void;
-    isAnimated?: boolean;
     onReverseDirection?: () => void;
 }
 
@@ -21,8 +19,6 @@ export default function EdgeContextMenu({
     edgeId,
     onClose,
     onDelete,
-    onToggleAnimation,
-    isAnimated = false,
     onReverseDirection,
 }: EdgeContextMenuProps) {
     const menuRef = useRef<HTMLDivElement>(null);
@@ -89,29 +85,6 @@ export default function EdgeContextMenu({
                                 R
                             </span>
                         </button>
-                    )}
-
-                    {/* 애니메이션 토글 */}
-                    {onToggleAnimation && (
-                        <>
-                            <button
-                                onClick={() => {
-                                    onToggleAnimation();
-                                    onClose();
-                                }}
-                                className="w-full px-3 py-2.5 flex items-center gap-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors group"
-                            >
-                                {isAnimated ? (
-                                    <ZapOff size={16} className="text-gray-400 group-hover:text-indigo-500" />
-                                ) : (
-                                    <Zap size={16} className="text-gray-400 group-hover:text-indigo-500" />
-                                )}
-                                <span>{isAnimated ? '애니메이션 끄기' : '애니메이션 켜기'}</span>
-                            </button>
-
-                            {/* 구분선 */}
-                            <div className="h-px bg-gray-100 my-1" />
-                        </>
                     )}
 
                     {/* 삭제 */}
