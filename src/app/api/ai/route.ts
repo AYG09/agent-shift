@@ -408,21 +408,44 @@ ${graphContext ? `- 위의 이전/다음 단계와의 **데이터 흐름**을 �
 ${asIsNodes && asIsNodes.length > 0 ? `- **반드시** 위 AS-IS 단계들 중 이 AI가 대체하는 단계들을 식별하고, 역량별 시간 절감을 계산하세요!` : ''}
 
 ## 요구사항
-1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
-2. 각 하위 단계에 대해:
-   - **description**: AI가 수행하는 구체적인 작업 설명 (2~3문장)
-   - **duration**: AI 처리 예상 시간 (대부분 초~분 단위로 단축)
-   - **tools**: 사용되는 AI 도구/플랫폼
-   - **aiImplementation**: 필수! 아래 형식으로 작성
-     - method: AI가 이 작업을 처리하는 구체적 방법 (예: "이메일 본문을 NLP로 분석하여 핵심 키워드를 추출하고, 미리 정의된 카테고리에 자동 분류")
-     - technology: 사용 기술 배열 (예: ["LLM", "NLP", "OCR", "RPA"])
-     - platforms: 구현 가능한 플랫폼 (예: ["Microsoft 365 Copilot", "Google Gemini", "Power Automate"])
-     - automationLevel: "full"(완전자동), "partial"(부분자동), "assisted"(AI보조)
-   - **resources**: 학습 자료 1~2개 (필수!)
-     - type: "youtube", "docs", "article", "tutorial" 중 택일
-     - title: 자료 제목 (100자 이내, 예: "Power Automate로 이메일 자동 분류하기")
-     - url: ⚠️ **반드시 50자 이내의 짧은 검색 키워드만!** (예: "Power Automate email classification") - 긴 문장 절대 금지!
-     - description: 이 자료가 도움이 되는 이유 (200자 이내)
+1. 이 단계를 **3~5개**의 세부 하위 단계로 분해하세요. (**최대 5개, 절대 초과 금지!**)
+
+2. ⚠️ **매우 중요: JSON 구조를 정확히 따르세요!**
+   - aiImplementation은 각 subStep **내부의 객체**입니다
+   - aiImplementation을 **별도의 subStep으로 만들지 마세요!**
+   
+   **올바른 구조 예시 (subSteps 배열 내 각 항목):**
+   {
+     "id": "step1",
+     "label": "단계 이름",
+     "description": "설명...",
+     "duration": "30초",
+     "tools": ["Power Automate"],
+     "aiImplementation": { ← 이것은 subStep 내부의 객체!
+       "method": "AI 처리 방법",
+       "technology": ["RPA", "NLP"],
+       "platforms": ["Microsoft 365"],
+       "automationLevel": "full"
+     },
+     "resources": [{"type": "docs", "title": "제목", "url": "검색키워드"}]
+   }
+
+3. 각 하위 단계의 필드:
+   - **id**: 고유 ID (예: "node1_1")
+   - **label**: 단계 이름 (100자 이내)
+   - **description**: AI가 수행하는 구체적인 작업 설명 (2~3문장, 500자 이내)
+   - **duration**: AI 처리 예상 시간 (예: "30초", "2분")
+   - **tools**: 사용되는 AI 도구 배열
+   - **aiImplementation**: (객체) 아래 필드 포함
+     - method: AI 처리 방법 (500자 이내)
+     - technology: 기술 배열 ["LLM", "NLP", "OCR", "RPA"]
+     - platforms: 플랫폼 배열 ["Microsoft 365 Copilot", "Power Automate"]
+     - automationLevel: "full" | "partial" | "assisted"
+   - **resources**: 학습 자료 배열 (최대 3개)
+     - type: "youtube" | "docs" | "article" | "tutorial"
+     - title: 자료 제목 (100자 이내)
+     - url: **검색 키워드만! 50자 이내** (예: "Power Automate RPA tutorial")
+     - description: 설명 (200자 이내)
 
 3. **summary**: AI 도입으로 인한 효율성 향상 요약 (**500자 이내**, 핵심만 간결하게)
 4. **automationOverview**: 전체 자동화 개요 (**⚠️ 필수! AS-IS 대비 역량별 시간 절감 분석**)
@@ -494,7 +517,7 @@ export async function POST(request: NextRequest) {
         if (trimmedApiKey) {
             // 사용자가 제공한 API 키로 새 클라이언트 생성
             const customGoogle = createGoogleGenerativeAI({ apiKey: trimmedApiKey });
-            model = customGoogle('gemini-2.0-flash');
+            model = customGoogle('gemini-2.5-flash');
             console.log('[API Route] Using user-provided API key');
         } else {
             // 환경 변수의 기본 키 사용 (환경 변수도 trim)
@@ -502,10 +525,10 @@ export async function POST(request: NextRequest) {
             console.log('[API Route] Debug - Trimmed env key length:', envApiKey?.length);
             if (envApiKey) {
                 const customGoogle = createGoogleGenerativeAI({ apiKey: envApiKey });
-                model = customGoogle('gemini-2.0-flash');
+                model = customGoogle('gemini-2.5-flash');
                 console.log('[API Route] Using env API key (trimmed)');
             } else {
-                model = google('gemini-2.0-flash');
+                model = google('gemini-2.5-flash');
                 console.log('[API Route] Using default google() - no API key found!');
             }
         }

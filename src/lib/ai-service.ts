@@ -9,8 +9,8 @@ import {
     type ChangeStrategyResponse,
 } from './ai-schemas';
 
-// Gemini 모델 설정
-const model = google('gemini-2.0-flash');
+// Gemini 모델 설정 (gemini-2.5-flash로 통일)
+const model = google('gemini-2.5-flash');
 
 // 업무 맥락 타입
 export interface WorkContext {
