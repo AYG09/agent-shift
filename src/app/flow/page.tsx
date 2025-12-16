@@ -19,8 +19,63 @@ import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
 import { ShareDialog } from '@/components/collaboration/ShareDialog';
 import { Spinner } from '@/components/ui/spinner';
-import { Sparkles, Bot, Shield, Scale, Rocket, TrendingUp, Upload, FolderOpen, Save } from 'lucide-react';
+import { Sparkles, Bot, Shield, Scale, Rocket, TrendingUp, Upload, FolderOpen, Save, Building2, Briefcase, FileText, Users, Clock, Wrench, AlertCircle, CheckCircle2, Layers, Zap, Settings2, ChevronRight, Eye, GitCompare, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Collapsible Section Component
+const CollapsibleSection = ({ 
+    title, 
+    icon: Icon, 
+    children, 
+    defaultOpen = true,
+    badge,
+}: { 
+    title: string; 
+    icon: React.ComponentType<{ className?: string }>; 
+    children: React.ReactNode; 
+    defaultOpen?: boolean;
+    badge?: React.ReactNode;
+}) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+    return (
+        <div className="border border-gray-200/80 rounded-xl overflow-hidden bg-white/50 backdrop-blur-sm">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full flex items-center justify-between p-3 hover:bg-gray-50/80 transition-colors"
+            >
+                <div className="flex items-center gap-2">
+                    <Icon className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm font-medium text-gray-700">{title}</span>
+                    {badge}
+                </div>
+                <motion.div
+                    animate={{ rotate: isOpen ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                >
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                </motion.div>
+            </button>
+            <AnimatePresence initial={false}>
+                {isOpen && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                    >
+                        <div className="p-3 pt-0 border-t border-gray-100">
+                            {children}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
 
 // ReactFlow 동적 import
 const FlowCanvas = dynamic(() => import('@/components/flow/FlowCanvas'), { ssr: false });
@@ -418,165 +473,313 @@ export default function FlowPage() {
 
     // Context Form
     if (step === 'context') {
+        const formProgress = [
+            { filled: !!industry, label: '산업군' },
+            { filled: !!role, label: '직무' },
+            { filled: !!task, label: '업무명' },
+        ];
+        const filledCount = formProgress.filter(f => f.filled).length;
+        const progressPercent = (filledCount / formProgress.length) * 100;
+        const isFormValid = industry && role && task && 
+            (industry !== 'other' || customIndustry) && 
+            (role !== 'other' || customRole);
+
         return (
             <div className="min-h-screen overflow-y-auto pro-canvas relative text-[#18181B] p-8">
                 <div className="max-w-2xl mx-auto">
-                    <Link
-                        href="/"
-                        className="text-[#71717A] hover:text-[#18181B] mb-8 inline-block"
+                    <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.3 }}
                     >
-                        ← 홈으로
-                    </Link>
+                        <Link
+                            href="/"
+                            className="text-[#71717A] hover:text-[#18181B] mb-8 inline-flex items-center gap-2 transition-colors"
+                        >
+                            ← 홈으로
+                        </Link>
+                    </motion.div>
 
-                    <Card className="bg-white/70 backdrop-blur-xl border-white/50 shadow-xl">
-                        <CardHeader>
-                            <CardTitle className="text-2xl text-[#18181B] font-semibold flex items-center gap-2">
-                                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                업무 맥락 입력
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm text-[#71717A]">산업군</label>
-                                    <div className="space-y-2">
-                                        <Select value={industry} onValueChange={setIndustry}>
-                                            <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
-                                                <SelectValue placeholder="선택" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {industries.map((ind) => (
-                                                    <SelectItem key={ind.value} value={ind.value}>
-                                                        {ind.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {industry === 'other' && (
-                                            <Input
-                                                value={customIndustry}
-                                                onChange={(e) => setCustomIndustry(e.target.value)}
-                                                placeholder="산업군 직접 입력"
-                                                className="bg-white/50 border-[#3B82F6] text-[#18181B] placeholder:text-[#A1A1AA] animate-in fade-in slide-in-from-top-1"
-                                                autoFocus
-                                            />
-                                        )}
-                                    </div>
+                    <motion.div
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.1 }}
+                    >
+                        <Card className="bg-white/80 backdrop-blur-2xl border-white/60 shadow-2xl shadow-blue-500/10 overflow-hidden">
+                            {/* 진행률 표시줄 */}
+                            <div className="px-6 pt-6">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-medium text-[#71717A]">
+                                        필수 입력 {filledCount}/{formProgress.length}
+                                    </span>
+                                    <span className="text-xs font-medium text-blue-600">
+                                        {Math.round(progressPercent)}%
+                                    </span>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm text-[#71717A]">직무</label>
-                                    <div className="space-y-2">
-                                        <Select value={role} onValueChange={setRole}>
-                                            <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
-                                                <SelectValue placeholder="선택" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {roles.map((r) => (
-                                                    <SelectItem key={r.value} value={r.value}>
-                                                        {r.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {role === 'other' && (
-                                            <Input
-                                                value={customRole}
-                                                onChange={(e) => setCustomRole(e.target.value)}
-                                                placeholder="직무 직접 입력"
-                                                className="bg-white/50 border-[#3B82F6] text-[#18181B] placeholder:text-[#A1A1AA] animate-in fade-in slide-in-from-top-1"
-                                                autoFocus
-                                            />
-                                        )}
-                                    </div>
+                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <motion.div 
+                                        className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${progressPercent}%` }}
+                                        transition={{ duration: 0.5, ease: 'easeOut' }}
+                                    />
+                                </div>
+                                <div className="flex justify-between mt-2">
+                                    {formProgress.map((item, idx) => (
+                                        <div key={idx} className="flex items-center gap-1.5 text-xs">
+                                            {item.filled ? (
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                                            ) : (
+                                                <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300" />
+                                            )}
+                                            <span className={item.filled ? 'text-green-600' : 'text-gray-400'}>
+                                                {item.label}
+                                            </span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-sm text-[#71717A]">업무명</label>
-                                <Input
-                                    value={task}
-                                    onChange={(e) => setTask(e.target.value)}
-                                    placeholder="예: 주간 영업 실적 취합 및 보고"
-                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#A1A1AA]"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm text-[#71717A]">팀 규모</label>
-                                    <Select value={teamSize} onValueChange={setTeamSize}>
-                                        <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
-                                            <SelectValue placeholder="선택" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="1-5">1-5명</SelectItem>
-                                            <SelectItem value="5-20">5-20명</SelectItem>
-                                            <SelectItem value="20-50">20-50명</SelectItem>
-                                            <SelectItem value="50+">50명 이상</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm text-[#71717A]">업무 주기</label>
-                                    <Select
-                                        value={timeScale}
-                                        onValueChange={(v) => setTimeScale(v as typeof timeScale)}
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-2xl text-[#18181B] font-semibold flex items-center gap-3">
+                                    <motion.div 
+                                        className="p-2 bg-blue-100 rounded-xl"
+                                        whileHover={{ scale: 1.05, rotate: 5 }}
+                                        transition={{ type: 'spring', stiffness: 300 }}
                                     >
-                                        <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {timeScales.map((ts) => (
-                                                <SelectItem key={ts.value} value={ts.value}>
-                                                    {ts.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
+                                        <FileText className="w-6 h-6 text-blue-600" />
+                                    </motion.div>
+                                    업무 맥락 입력
+                                </CardTitle>
+                                <p className="text-sm text-[#71717A] mt-1">
+                                    AI가 맞춤형 업무 프로세스를 분석할 수 있도록 정보를 입력해주세요
+                                </p>
+                            </CardHeader>
 
-                            <div className="space-y-2">
-                                <label className="text-sm text-[#71717A]">
-                                    사용 중인 도구 (선택)
-                                </label>
-                                <Input
-                                    value={tooling}
-                                    onChange={(e) => setTooling(e.target.value)}
-                                    placeholder="예: Excel, Slack, Jira, Notion"
-                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#A1A1AA]"
-                                />
-                            </div>
+                            <CardContent className="space-y-6 pt-4">
+                                {/* 산업군 & 직무 */}
+                                <motion.div 
+                                    className="grid grid-cols-2 gap-4"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.2 }}
+                                >
+                                    <div className="space-y-2">
+                                        <label className="text-sm text-[#525252] font-medium flex items-center gap-2">
+                                            <Building2 className="w-4 h-4 text-blue-500" />
+                                            산업군 <span className="text-red-500">*</span>
+                                        </label>
+                                        <div className="space-y-2">
+                                            <Select value={industry} onValueChange={setIndustry}>
+                                                <SelectTrigger className={`bg-white/70 border-2 transition-all duration-200 ${industry ? 'border-green-300 bg-green-50/50' : 'border-[#E2E4E9] hover:border-blue-300'} text-[#18181B]`}>
+                                                    <SelectValue placeholder="선택" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {industries.map((ind) => (
+                                                        <SelectItem key={ind.value} value={ind.value}>
+                                                            {ind.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <AnimatePresence>
+                                                {industry === 'other' && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, height: 0 }}
+                                                        animate={{ opacity: 1, height: 'auto' }}
+                                                        exit={{ opacity: 0, height: 0 }}
+                                                        transition={{ duration: 0.2 }}
+                                                    >
+                                                        <Input
+                                                            value={customIndustry}
+                                                            onChange={(e) => setCustomIndustry(e.target.value)}
+                                                            placeholder="산업군 직접 입력"
+                                                            className="bg-white/70 border-2 border-blue-400 text-[#18181B] placeholder:text-[#A1A1AA] focus:ring-2 focus:ring-blue-200"
+                                                            autoFocus
+                                                        />
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm text-[#525252] font-medium flex items-center gap-2">
+                                            <Briefcase className="w-4 h-4 text-blue-500" />
+                                            직무 <span className="text-red-500">*</span>
+                                        </label>
+                                        <div className="space-y-2">
+                                            <Select value={role} onValueChange={setRole}>
+                                                <SelectTrigger className={`bg-white/70 border-2 transition-all duration-200 ${role ? 'border-green-300 bg-green-50/50' : 'border-[#E2E4E9] hover:border-blue-300'} text-[#18181B]`}>
+                                                    <SelectValue placeholder="선택" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {roles.map((r) => (
+                                                        <SelectItem key={r.value} value={r.value}>
+                                                            {r.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <AnimatePresence>
+                                                {role === 'other' && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, height: 0 }}
+                                                        animate={{ opacity: 1, height: 'auto' }}
+                                                        exit={{ opacity: 0, height: 0 }}
+                                                        transition={{ duration: 0.2 }}
+                                                    >
+                                                        <Input
+                                                            value={customRole}
+                                                            onChange={(e) => setCustomRole(e.target.value)}
+                                                            placeholder="직무 직접 입력"
+                                                            className="bg-white/70 border-2 border-blue-400 text-[#18181B] placeholder:text-[#A1A1AA] focus:ring-2 focus:ring-blue-200"
+                                                            autoFocus
+                                                        />
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    </div>
+                                </motion.div>
 
-                            <div className="space-y-2">
-                                <label className="text-sm text-[#71717A]">
-                                    주요 고충 (Pain Points)
-                                </label>
-                                <Input
-                                    value={painPoints}
-                                    onChange={(e) => setPainPoints(e.target.value)}
-                                    placeholder="예: 데이터 복사/붙여넣기에 시간이 너무 많이 걸림"
-                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#A1A1AA]"
-                                />
-                            </div>
+                                {/* 업무명 */}
+                                <motion.div 
+                                    className="space-y-2"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.3 }}
+                                >
+                                    <label className="text-sm text-[#525252] font-medium flex items-center gap-2">
+                                        <FileText className="w-4 h-4 text-blue-500" />
+                                        업무명 <span className="text-red-500">*</span>
+                                    </label>
+                                    <Input
+                                        value={task}
+                                        onChange={(e) => setTask(e.target.value)}
+                                        placeholder="예: 주간 영업 실적 취합 및 보고"
+                                        className={`bg-white/70 border-2 transition-all duration-200 ${task ? 'border-green-300 bg-green-50/50' : 'border-[#E2E4E9] hover:border-blue-300'} text-[#18181B] placeholder:text-[#A1A1AA]`}
+                                    />
+                                </motion.div>
 
-                            <Button
-                                onClick={handleStart}
-                                disabled={
-                                    !industry ||
-                                    !role ||
-                                    !task ||
-                                    (industry === 'other' && !customIndustry) ||
-                                    (role === 'other' && !customRole)
-                                }
-                                className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white mt-4"
-                            >
-                                🚀 Flow 캔버스 시작하기
-                            </Button>
-                        </CardContent>
-                    </Card>
+                                {/* 팀 규모 & 업무 주기 */}
+                                <motion.div 
+                                    className="grid grid-cols-2 gap-4"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.4 }}
+                                >
+                                    <div className="space-y-2">
+                                        <label className="text-sm text-[#525252] font-medium flex items-center gap-2">
+                                            <Users className="w-4 h-4 text-gray-400" />
+                                            팀 규모 <span className="text-xs text-gray-400">(선택)</span>
+                                        </label>
+                                        <Select value={teamSize} onValueChange={setTeamSize}>
+                                            <SelectTrigger className="bg-white/70 border-2 border-[#E2E4E9] hover:border-blue-300 transition-all duration-200 text-[#18181B]">
+                                                <SelectValue placeholder="선택" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="1-5">1-5명</SelectItem>
+                                                <SelectItem value="5-20">5-20명</SelectItem>
+                                                <SelectItem value="20-50">20-50명</SelectItem>
+                                                <SelectItem value="50+">50명 이상</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm text-[#525252] font-medium flex items-center gap-2">
+                                            <Clock className="w-4 h-4 text-gray-400" />
+                                            업무 주기 <span className="text-xs text-gray-400">(선택)</span>
+                                        </label>
+                                        <Select
+                                            value={timeScale}
+                                            onValueChange={(v) => setTimeScale(v as typeof timeScale)}
+                                        >
+                                            <SelectTrigger className="bg-white/70 border-2 border-[#E2E4E9] hover:border-blue-300 transition-all duration-200 text-[#18181B]">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {timeScales.map((ts) => (
+                                                    <SelectItem key={ts.value} value={ts.value}>
+                                                        {ts.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </motion.div>
+
+                                {/* 도구 & 고충 */}
+                                <motion.div 
+                                    className="space-y-4"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.5 }}
+                                >
+                                    <div className="space-y-2">
+                                        <label className="text-sm text-[#525252] font-medium flex items-center gap-2">
+                                            <Wrench className="w-4 h-4 text-gray-400" />
+                                            사용 중인 도구 <span className="text-xs text-gray-400">(선택)</span>
+                                        </label>
+                                        <Input
+                                            value={tooling}
+                                            onChange={(e) => setTooling(e.target.value)}
+                                            placeholder="예: Excel, Slack, Jira, Notion"
+                                            className="bg-white/70 border-2 border-[#E2E4E9] hover:border-blue-300 transition-all duration-200 text-[#18181B] placeholder:text-[#A1A1AA]"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm text-[#525252] font-medium flex items-center gap-2">
+                                            <AlertCircle className="w-4 h-4 text-gray-400" />
+                                            주요 고충 (Pain Points) <span className="text-xs text-gray-400">(선택)</span>
+                                        </label>
+                                        <Input
+                                            value={painPoints}
+                                            onChange={(e) => setPainPoints(e.target.value)}
+                                            placeholder="예: 데이터 복사/붙여넣기에 시간이 너무 많이 걸림"
+                                            className="bg-white/70 border-2 border-[#E2E4E9] hover:border-blue-300 transition-all duration-200 text-[#18181B] placeholder:text-[#A1A1AA]"
+                                        />
+                                    </div>
+                                </motion.div>
+
+                                {/* 시작 버튼 */}
+                                <motion.div
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.6 }}
+                                >
+                                    <motion.button
+                                        onClick={handleStart}
+                                        disabled={!isFormValid}
+                                        className={`w-full py-4 px-6 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition-all duration-300 ${
+                                            isFormValid
+                                                ? 'bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 hover:from-blue-600 hover:via-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40'
+                                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                        }`}
+                                        whileHover={isFormValid ? { scale: 1.02, y: -2 } : {}}
+                                        whileTap={isFormValid ? { scale: 0.98 } : {}}
+                                    >
+                                        <Rocket className="w-5 h-5" />
+                                        Flow 캔버스 시작하기
+                                        {isFormValid && (
+                                            <motion.span
+                                                className="ml-1"
+                                                animate={{ x: [0, 4, 0] }}
+                                                transition={{ repeat: Infinity, duration: 1.5 }}
+                                            >
+                                                →
+                                            </motion.span>
+                                        )}
+                                    </motion.button>
+                                    {!isFormValid && (
+                                        <p className="text-center text-xs text-gray-400 mt-2">
+                                            필수 항목(*)을 모두 입력해주세요
+                                        </p>
+                                    )}
+                                </motion.div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
                 </div>
             </div>
         );
@@ -635,211 +838,270 @@ export default function FlowPage() {
     return (
         <div className="h-screen pro-canvas text-[#18181B] flex overflow-hidden">
             {/* Sidebar - Pro Glassmorphism */}
-            <div className="w-64 bg-white/80 backdrop-blur-xl border-r border-[#E2E4E9] flex flex-col overflow-hidden">
+            <motion.div 
+                className="w-72 bg-white/90 backdrop-blur-2xl border-r border-gray-200/80 flex flex-col overflow-hidden shadow-xl shadow-gray-200/50"
+                initial={{ x: -20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ duration: 0.3 }}
+            >
                 {/* Fixed Header */}
-                <div className="p-4 pb-3 border-b border-[#E2E4E9]/50 shrink-0">
-                    <Link href="/" className="text-xl font-semibold text-[#18181B]">
-                        Agent Shift
-                    </Link>
+                <div className="p-4 pb-3 border-b border-gray-200/50 shrink-0 bg-gradient-to-r from-blue-50/50 to-indigo-50/50">
+                    <div className="flex items-center justify-between">
+                        <Link href="/" className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                            Agent Shift
+                        </Link>
+                        {currentProject && (
+                            <div className="flex items-center gap-1.5">
+                                {isSaving ? (
+                                    <motion.div 
+                                        className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full"
+                                        animate={{ opacity: [0.5, 1, 0.5] }}
+                                        transition={{ repeat: Infinity, duration: 1.5 }}
+                                    >
+                                        <Save className="w-3 h-3" />
+                                        저장 중
+                                    </motion.div>
+                                ) : lastSaved && (
+                                    <div className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                                        <CheckCircle2 className="w-3 h-3" />
+                                        저장됨
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                     {currentProject && (
-                        <div className="mt-2 flex items-center gap-2">
-                            <FolderOpen className="w-3.5 h-3.5 text-[#71717A]" />
-                            <span className="text-xs text-[#71717A] truncate flex-1" title={currentProject.name}>
+                        <div className="mt-2 flex items-center gap-2 text-xs text-gray-500 bg-white/60 rounded-lg px-2.5 py-1.5">
+                            <FolderOpen className="w-3.5 h-3.5 text-blue-500" />
+                            <span className="truncate flex-1 font-medium" title={currentProject.name}>
                                 {currentProject.name}
                             </span>
-                            {isSaving ? (
-                                <span className="text-xs text-amber-500 flex items-center gap-1">
-                                    <Save className="w-3 h-3 animate-pulse" />
-                                    저장 중...
-                                </span>
-                            ) : lastSaved && (
-                                <span className="text-xs text-green-600 flex items-center gap-1">
-                                    <Save className="w-3 h-3" />
-                                    저장됨
-                                </span>
-                            )}
                         </div>
                     )}
                 </div>
 
                 {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto p-4 pt-3 space-y-4">
-                    {/* 현재 분석 중 */}
-                    <div className="p-3 bg-[#F5F6F8] rounded-xl border border-[#E2E4E9]">
-                        <div className="text-xs text-[#71717A] mb-2">현재 분석 중</div>
-                        <div className="text-sm font-medium text-[#18181B]">{context?.task}</div>
-                        <div className="text-xs text-[#71717A] mt-1">
-                            {industries.find((i) => i.value === context?.industry)?.label} ·{' '}
-                            {roles.find((r) => r.value === context?.role)?.label}
+                <div className="flex-1 overflow-y-auto p-4 pt-3 space-y-3">
+                    {/* 현재 분석 중 - 개선된 카드 */}
+                    <CollapsibleSection title="업무 컨텍스트" icon={FileText} defaultOpen={true}>
+                        <div className="space-y-2 mt-2">
+                            <div className="text-sm font-semibold text-gray-800 line-clamp-2">{context?.task}</div>
+                            <div className="flex flex-wrap gap-1.5">
+                                <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">
+                                    <Building2 className="w-3 h-3" />
+                                    {industries.find((i) => i.value === context?.industry || i.label === context?.industry)?.label?.split(' ')[0] || context?.industry}
+                                </span>
+                                <span className="inline-flex items-center gap-1 text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full">
+                                    <Briefcase className="w-3 h-3" />
+                                    {roles.find((r) => r.value === context?.role || r.label === context?.role)?.label?.split(' ')[0] || context?.role}
+                                </span>
+                            </div>
                         </div>
-                    </div>
+                    </CollapsibleSection>
 
                     {/* 협업 시작 버튼 */}
                     <ShareDialog />
 
-                    {/* AI 생성 버튼 */}
-                    <div className="space-y-2">
-                        <Button
-                            onClick={handleGenerateAsIs}
-                            disabled={isLoading}
-                            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500"
-                        >
-                            {isLoading ? (
-                                <span className="flex items-center gap-2">
-                                    <Spinner size="sm" className="text-white" />
-                                    <span>AI 생성 중...</span>
+                    {/* AI 생성 버튼 - 개선된 디자인 */}
+                    <CollapsibleSection 
+                        title="AI 플로우 생성" 
+                        icon={Sparkles} 
+                        defaultOpen={true}
+                        badge={
+                            asIsNodes.length > 0 && (
+                                <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">
+                                    {asIsNodes.length} 노드
                                 </span>
-                            ) : (
-                                <span className="flex items-center gap-2 whitespace-nowrap">
-                                    <Sparkles className="w-4 h-4" />
-                                    As-Is 플로우 생성
-                                </span>
-                            )}
-                        </Button>
-                        <Button
-                            onClick={handleGenerateToBe}
-                            disabled={isLoading || asIsNodes.length === 0}
-                            className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500"
-                        >
-                            {isLoading ? (
-                                <span className="flex items-center gap-2">
-                                    <Spinner size="sm" className="text-white" />
-                                    <span>AI 변환 중...</span>
-                                </span>
-                            ) : (
-                                <span className="flex items-center gap-2 whitespace-nowrap">
-                                    <Bot className="w-4 h-4" />
-                                    To-Be 변환
-                                </span>
-                            )}
-                        </Button>
-                        {error && <p className="text-xs text-red-500 bg-red-50 p-2 rounded-lg">{error}</p>}
-                    </div>
+                            )
+                        }
+                    >
+                        <div className="space-y-2 mt-2">
+                            <motion.button
+                                onClick={handleGenerateAsIs}
+                                disabled={isLoading}
+                                className={`w-full py-2.5 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all ${
+                                    isLoading 
+                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                        : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-md shadow-green-500/20 hover:shadow-lg hover:shadow-green-500/30'
+                                }`}
+                                whileHover={!isLoading ? { scale: 1.02 } : {}}
+                                whileTap={!isLoading ? { scale: 0.98 } : {}}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <motion.div 
+                                            className="w-4 h-4 border-2 border-gray-300 border-t-gray-500 rounded-full"
+                                            animate={{ rotate: 360 }}
+                                            transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                                        />
+                                        AI 생성 중...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles className="w-4 h-4" />
+                                        As-Is 플로우 생성
+                                    </>
+                                )}
+                            </motion.button>
+                            <motion.button
+                                onClick={handleGenerateToBe}
+                                disabled={isLoading || asIsNodes.length === 0}
+                                className={`w-full py-2.5 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all ${
+                                    isLoading || asIsNodes.length === 0
+                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                        : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/30'
+                                }`}
+                                whileHover={!isLoading && asIsNodes.length > 0 ? { scale: 1.02 } : {}}
+                                whileTap={!isLoading && asIsNodes.length > 0 ? { scale: 0.98 } : {}}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <motion.div 
+                                            className="w-4 h-4 border-2 border-gray-300 border-t-gray-500 rounded-full"
+                                            animate={{ rotate: 360 }}
+                                            transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                                        />
+                                        AI 변환 중...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Bot className="w-4 h-4" />
+                                        To-Be 변환
+                                        {asIsNodes.length === 0 && <span className="text-xs opacity-70">(As-Is 필요)</span>}
+                                    </>
+                                )}
+                            </motion.button>
+                            <AnimatePresence>
+                                {error && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        className="text-xs text-red-600 bg-red-50 border border-red-100 p-2.5 rounded-lg flex items-start gap-2"
+                                    >
+                                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                        {error}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    </CollapsibleSection>
 
-                    {/* Scenario Selector */}
-                    {toBeNodes.length > 0 && (
-                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                            <div className="text-xs text-gray-500 mb-2">AI 자동화 수준</div>
-                            <div className="space-y-1">
-                                <button
-                                    onClick={() => setSelectedScenario('conservative')}
-                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 ${selectedScenario === 'conservative'
-                                        ? 'bg-amber-100 text-amber-700 border border-amber-300'
-                                        : 'text-gray-600 hover:bg-gray-100'
-                                        }`}
-                                >
-                                    <Shield className="w-3.5 h-3.5 shrink-0" />
-                                    <span className="truncate">보수적 - 인간 감독</span>
-                                </button>
-                                <button
-                                    onClick={() => setSelectedScenario('balanced')}
-                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 ${selectedScenario === 'balanced'
-                                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                        : 'text-gray-600 hover:bg-gray-100'
-                                        }`}
-                                >
-                                    <Scale className="w-3.5 h-3.5 shrink-0" />
-                                    <span className="truncate">균형 - AI 코파일럿</span>
-                                </button>
-                                <button
-                                    onClick={() => setSelectedScenario('aggressive')}
-                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 ${selectedScenario === 'aggressive'
-                                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
-                                        : 'text-gray-600 hover:bg-gray-100'
-                                        }`}
-                                >
-                                    <Rocket className="w-3.5 h-3.5 shrink-0" />
-                                    <span className="truncate">적극적 - 최대 자동화</span>
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                    {/* Scenario Selector - 개선된 디자인 */}
+                    <AnimatePresence>
+                        {toBeNodes.length > 0 && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                            >
+                                <CollapsibleSection title="AI 자동화 수준" icon={Zap} defaultOpen={true}>
+                                    <div className="space-y-1.5 mt-2">
+                                        {[
+                                            { value: 'conservative', label: '보수적', desc: '인간 감독 중심', icon: Shield, color: 'amber' },
+                                            { value: 'balanced', label: '균형', desc: 'AI 코파일럿', icon: Scale, color: 'blue' },
+                                            { value: 'aggressive', label: '적극적', desc: '최대 자동화', icon: Rocket, color: 'emerald' },
+                                        ].map((scenario) => (
+                                            <motion.button
+                                                key={scenario.value}
+                                                onClick={() => setSelectedScenario(scenario.value as typeof selectedScenario)}
+                                                className={`w-full text-left p-2.5 rounded-xl text-sm transition-all flex items-center gap-3 ${
+                                                    selectedScenario === scenario.value
+                                                        ? `bg-${scenario.color}-50 text-${scenario.color}-700 border-2 border-${scenario.color}-200 shadow-sm`
+                                                        : 'text-gray-600 hover:bg-gray-50 border-2 border-transparent'
+                                                }`}
+                                                whileHover={{ x: 2 }}
+                                                whileTap={{ scale: 0.98 }}
+                                            >
+                                                <scenario.icon className={`w-4 h-4 ${selectedScenario === scenario.value ? `text-${scenario.color}-500` : 'text-gray-400'}`} />
+                                                <div className="flex-1">
+                                                    <div className="font-medium">{scenario.label}</div>
+                                                    <div className="text-xs opacity-70">{scenario.desc}</div>
+                                                </div>
+                                                {selectedScenario === scenario.value && (
+                                                    <CheckCircle2 className={`w-4 h-4 text-${scenario.color}-500`} />
+                                                )}
+                                            </motion.button>
+                                        ))}
+                                    </div>
+                                </CollapsibleSection>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
-                    {/* 뷰 모드 탭 바 - 컴팩트 디자인 */}
-                    <div>
-                        <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1 font-medium">
-                            플로우 뷰
+                    {/* 뷰 모드 탭 바 - 개선된 디자인 */}
+                    <CollapsibleSection title="플로우 뷰" icon={Eye} defaultOpen={true}>
+                        <div className="grid grid-cols-3 gap-1.5 mt-2 bg-gray-100/80 rounded-xl p-1.5">
+                            {[
+                                { mode: 'asis', label: 'As-Is', icon: Layers, color: 'blue' },
+                                { mode: 'tobe', label: 'To-Be', icon: Bot, color: 'emerald' },
+                                { mode: 'split', label: '비교', icon: GitCompare, color: 'purple' },
+                            ].map((view) => (
+                                <motion.button
+                                    key={view.mode}
+                                    onClick={() => setViewMode(view.mode as typeof viewMode)}
+                                    className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium transition-all duration-200 ${
+                                        viewMode === view.mode
+                                            ? `bg-white text-${view.color}-600 shadow-md`
+                                            : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                                    }`}
+                                    whileHover={{ y: -1 }}
+                                    whileTap={{ scale: 0.95 }}
+                                >
+                                    <view.icon className="w-4 h-4 mb-1" />
+                                    {view.label}
+                                </motion.button>
+                            ))}
                         </div>
-                        <div className="grid grid-cols-3 gap-1 bg-gray-100/80 backdrop-blur-sm rounded-xl p-1">
-                            <button
-                                onClick={() => setViewMode('asis')}
-                                className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium transition-all duration-200 ${viewMode === 'asis'
-                                    ? 'bg-white text-blue-600 shadow-md'
-                                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                                    }`}
-                            >
-                                <svg className="w-4 h-4 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                </svg>
-                                As-Is
-                            </button>
-                            <button
-                                onClick={() => setViewMode('tobe')}
-                                className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium transition-all duration-200 ${viewMode === 'tobe'
-                                    ? 'bg-white text-emerald-600 shadow-md'
-                                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                                    }`}
-                            >
-                                <svg className="w-4 h-4 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                                To-Be
-                            </button>
-                            <button
-                                onClick={() => setViewMode('split')}
-                                className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium transition-all duration-200 ${viewMode === 'split'
-                                    ? 'bg-white text-purple-600 shadow-md'
-                                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                                    }`}
-                            >
-                                <svg className="w-4 h-4 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-                                </svg>
-                                비교
-                            </button>
-                        </div>
-                    </div>
+                    </CollapsibleSection>
 
-                    {/* 추가 메뉴 */}
-                    <div className="space-y-1">
-                        <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1">
-                            추가 기능
+                    {/* 추가 메뉴 - 개선된 디자인 */}
+                    <CollapsibleSection title="추가 기능" icon={Settings2} defaultOpen={false}>
+                        <div className="space-y-1 mt-2">
+                            <Link href="/strategy">
+                                <motion.div 
+                                    className="flex items-center justify-between p-2.5 rounded-xl text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors cursor-pointer"
+                                    whileHover={{ x: 4 }}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <TrendingUp className="w-4 h-4 text-orange-500" />
+                                        <span className="text-sm font-medium">변화 전략</span>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                                </motion.div>
+                            </Link>
+                            <Link href="/export">
+                                <motion.div 
+                                    className="flex items-center justify-between p-2.5 rounded-xl text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors cursor-pointer"
+                                    whileHover={{ x: 4 }}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Upload className="w-4 h-4 text-indigo-500" />
+                                        <span className="text-sm font-medium">내보내기</span>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                                </motion.div>
+                            </Link>
                         </div>
-                        <Link href="/strategy">
-                            <Button
-                                variant="ghost"
-                                className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100 gap-2"
-                            >
-                                <TrendingUp className="w-4 h-4" />
-                                변화 전략
-                            </Button>
-                        </Link>
-                        <Link href="/export">
-                            <Button
-                                variant="ghost"
-                                className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100 gap-2"
-                            >
-                                <Upload className="w-4 h-4" />
-                                내보내기
-                            </Button>
-                        </Link>
-                    </div>
+                    </CollapsibleSection>
 
                     {/* API 설정 */}
                     <ApiKeySettings />
                 </div>
 
-                {/* Fixed Footer */}
-                <div className="p-4 pt-3 border-t border-[#E2E4E9]/50 shrink-0">
-                    <Button
-                        variant="outline"
-                        className="w-full border-gray-300 text-gray-600 hover:text-gray-900"
+                {/* Fixed Footer - 개선된 디자인 */}
+                <div className="p-4 pt-3 border-t border-gray-200/50 shrink-0 bg-gray-50/50">
+                    <motion.button
                         onClick={() => setStep('context')}
+                        className="w-full py-2.5 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-2 border-2 border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-white hover:border-gray-300 transition-all"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                     >
-                        ← 맥락 수정
-                    </Button>
+                        <ArrowLeft className="w-4 h-4" />
+                        맥락 수정
+                    </motion.button>
                 </div>
-            </div>
+            </motion.div>
             <div className="flex-1 relative">
                 {viewMode === 'split' ? (
                     <SplitViewCanvas

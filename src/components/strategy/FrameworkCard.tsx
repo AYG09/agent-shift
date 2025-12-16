@@ -1,6 +1,8 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CheckCircle2 } from 'lucide-react';
 
 interface FrameworkCardProps {
     id: 'kotter' | 'adkar' | 'lewin';
@@ -69,35 +71,64 @@ export default function FrameworkCard({ id, selected, onSelect }: FrameworkCardP
     const hasSchein = 'scheinApproaches' in fw;
 
     return (
-        <Card
-            className={`cursor-pointer transition-all duration-300 backdrop-blur-xl relative overflow-hidden
+        <motion.div
+            whileHover={{ scale: 1.03, y: -4 }}
+            whileTap={{ scale: 0.98 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="h-full"
+        >
+            <Card
+                className={`cursor-pointer h-full transition-all duration-300 backdrop-blur-xl relative overflow-hidden group
         ${
             selected
-                ? `bg-gradient-to-br ${fw.color} border-2 ${fw.borderColor} scale-[1.02] shadow-xl ring-2 ring-offset-2 ring-offset-white`
-                : 'bg-white/80 border-[#E2E4E9] hover:border-[#3B82F6]/50 hover:shadow-lg hover:-translate-y-0.5'
+                ? `bg-gradient-to-br ${fw.color} border-2 ${fw.borderColor} shadow-2xl ring-2 ring-offset-2 ring-offset-white`
+                : 'bg-white/90 border-2 border-gray-200/80 hover:border-blue-400/60 hover:shadow-xl hover:shadow-blue-500/10'
         }
       `}
-            onClick={() => onSelect?.(id)}
-        >
-            {/* 체크마크 아이콘 */}
-            {selected && (
-                <div className="absolute top-3 right-3 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200">
-                    <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                </div>
-            )}
-            {/* 심층 분석 뱃지 */}
-            {'badge' in fw && fw.badge && (
-                <div className={`absolute top-3 ${selected ? 'right-12' : 'right-3'} px-2 py-0.5 rounded-full text-[10px] font-medium ${selected ? 'bg-white/30 text-white' : 'bg-purple-100 text-purple-700'}`}>
-                    {fw.badge}
-                </div>
-            )}
-            <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                    <span className="text-2xl">{fw.icon}</span>
-                    <span className={selected ? 'text-white' : 'text-[#18181B]'}>{fw.name}</span>
-                </CardTitle>
+                onClick={() => onSelect?.(id)}
+            >
+                {/* Glow Effect on Hover */}
+                {!selected && (
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
+                        <div className={`absolute inset-0 bg-gradient-to-br ${fw.color} opacity-5`} />
+                    </div>
+                )}
+
+                {/* 체크마크 아이콘 */}
+                {selected && (
+                    <motion.div 
+                        className="absolute top-3 right-3 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-lg"
+                        initial={{ scale: 0, rotate: -180 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    >
+                        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                    </motion.div>
+                )}
+                {/* 심층 분석 뱃지 */}
+                {'badge' in fw && fw.badge && (
+                    <motion.div 
+                        className={`absolute top-3 ${selected ? 'right-12' : 'right-3'} px-2.5 py-1 rounded-full text-[10px] font-semibold ${selected ? 'bg-white/30 text-white' : 'bg-purple-100 text-purple-700 border border-purple-200'}`}
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2 }}
+                    >
+                        ✨ {fw.badge}
+                    </motion.div>
+                )}
+                <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-3 text-lg">
+                        <motion.span 
+                            className="text-3xl"
+                            whileHover={{ scale: 1.2, rotate: 10 }}
+                            transition={{ type: 'spring', stiffness: 400 }}
+                        >
+                            {fw.icon}
+                        </motion.span>
+                        <span className={`font-bold ${selected ? 'text-white' : 'text-gray-800'}`}>{fw.name}</span>
+                    </CardTitle>
                 <CardDescription className={selected ? 'text-white/90' : 'text-[#71717A]'}>
                     {fw.description}
                 </CardDescription>
@@ -125,26 +156,30 @@ export default function FrameworkCard({ id, selected, onSelect }: FrameworkCardP
                 
                 {/* Schein 8가지 접근방법 (Lewin 모델만) */}
                 {hasSchein && (
-                    <div className="pt-2 border-t border-white/20">
-                        <p className={`text-xs mb-2 ${selected ? 'text-white/80' : 'text-[#71717A]'}`}>
+                    <div className="pt-3 border-t border-white/20">
+                        <p className={`text-xs mb-2 font-medium ${selected ? 'text-white/80' : 'text-gray-600'}`}>
                             + Schein의 8가지 학습불안 감소 방법
                         </p>
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1.5">
                             {(fw as typeof frameworks.lewin).scheinApproaches.map((approach, idx) => (
-                                <span
+                                <motion.span
                                     key={idx}
-                                    className={`text-[10px] px-1.5 py-0.5 rounded transition-colors
-                                        ${selected ? 'bg-white/10 text-white/90' : 'bg-purple-50 text-purple-600'}
+                                    initial={{ opacity: 0, scale: 0.8 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ delay: idx * 0.05 }}
+                                    className={`text-[10px] px-2 py-1 rounded-full transition-colors font-medium
+                                        ${selected ? 'bg-white/15 text-white/90' : 'bg-purple-50 text-purple-600 border border-purple-100'}
                                     `}
                                 >
                                     {idx + 1}. {approach}
-                                </span>
+                                </motion.span>
                             ))}
                         </div>
                     </div>
                 )}
             </CardContent>
         </Card>
+        </motion.div>
     );
 }
 
@@ -157,10 +192,31 @@ export function FrameworkSelector({
     onSelect?: (id: 'kotter' | 'adkar' | 'lewin') => void;
 }) {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {(['kotter', 'adkar', 'lewin'] as const).map((id) => (
-                <FrameworkCard key={id} id={id} selected={selected === id} onSelect={onSelect} />
+        <motion.div 
+            className="grid grid-cols-1 md:grid-cols-3 gap-5"
+            initial="hidden"
+            animate="visible"
+            variants={{
+                hidden: { opacity: 0 },
+                visible: {
+                    opacity: 1,
+                    transition: {
+                        staggerChildren: 0.1,
+                    },
+                },
+            }}
+        >
+            {(['kotter', 'adkar', 'lewin'] as const).map((id, idx) => (
+                <motion.div
+                    key={id}
+                    variants={{
+                        hidden: { opacity: 0, y: 30 },
+                        visible: { opacity: 1, y: 0 },
+                    }}
+                >
+                    <FrameworkCard id={id} selected={selected === id} onSelect={onSelect} />
+                </motion.div>
             ))}
-        </div>
+        </motion.div>
     );
 }

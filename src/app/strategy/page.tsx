@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ import { frameworkPhases } from '@/components/strategy/GanttChart';
 import { useAppStore } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import Link from 'next/link';
+import { ArrowLeft, Sparkles, Target, ChevronDown, CheckCircle2, AlertTriangle, Layers, Crosshair, Clock, LayoutGrid, Bot } from 'lucide-react';
 
 const GanttChart = dynamic(() => import('@/components/strategy/GanttChart'), { ssr: false });
 
@@ -172,294 +174,402 @@ export default function StrategyPage() {
 
     return (
         <div className="min-h-screen pro-canvas text-[#18181B] p-8 pb-24">
-            <div className="max-w-4xl mx-auto">
-                <Link
-                    href="/flow"
-                    className="text-[#71717A] hover:text-[#18181B] mb-8 inline-block text-sm"
+            <div className="max-w-5xl mx-auto">
+                <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3 }}
                 >
-                    ← Flow 캔버스로
-                </Link>
+                    <Link
+                        href="/flow"
+                        className="text-gray-500 hover:text-gray-800 mb-8 inline-flex items-center gap-2 text-sm transition-colors"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        Flow 캔버스로
+                    </Link>
+                </motion.div>
 
-                <h1 className="text-2xl font-semibold text-[#18181B] mb-8">변화 관리 전략</h1>
+                <motion.h1 
+                    className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-8"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: 0.1 }}
+                >
+                    변화 관리 전략
+                </motion.h1>
 
                 {/* Context Info */}
-                {context && (
-                    <Card className="bg-white border-[#E2E4E9] mb-6 shadow-sm">
-                        <CardContent className="py-4">
-                            <div className="flex items-center gap-4 text-sm">
-                                <span className="text-[#71717A]">분석 대상:</span>
-                                <span className="font-medium text-[#18181B]">{context.task}</span>
-                                <span className="text-[#E2E4E9]">|</span>
-                                <span className="text-[#71717A]">{context.industry}</span>
-                                <span className="text-[#71717A]">{context.role}</span>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
+                <AnimatePresence>
+                    {context && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.3, delay: 0.15 }}
+                        >
+                            <Card className="bg-white/80 backdrop-blur-xl border-gray-200/80 mb-6 shadow-lg shadow-gray-200/50">
+                                <CardContent className="py-4">
+                                    <div className="flex items-center gap-4 text-sm flex-wrap">
+                                        <div className="flex items-center gap-2">
+                                            <Target className="w-4 h-4 text-blue-500" />
+                                            <span className="text-gray-500">분석 대상:</span>
+                                        </div>
+                                        <span className="font-semibold text-gray-800">{context.task}</span>
+                                        <span className="text-gray-200">|</span>
+                                        <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-600">{context.industry}</span>
+                                        <span className="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-600">{context.role}</span>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
-                {!context && (
-                    <Card className="bg-[#FEF3C7] border-[#FCD34D] mb-6">
-                        <CardContent className="py-4">
-                            <p className="text-[#92400E] text-sm">
-                                ⚠️ 업무 맥락이 설정되지 않았습니다.{' '}
-                                <Link href="/flow" className="underline">
-                                    Flow 캔버스
-                                </Link>
-                                에서 먼저 업무를 입력해주세요.
-                            </p>
-                        </CardContent>
-                    </Card>
-                )}
+                <AnimatePresence>
+                    {!context && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                        >
+                            <Card className="bg-amber-50 border-amber-200 mb-6">
+                                <CardContent className="py-4">
+                                    <div className="flex items-center gap-3 text-amber-800 text-sm">
+                                        <AlertTriangle className="w-5 h-5" />
+                                        <p>
+                                            업무 맥락이 설정되지 않았습니다.{' '}
+                                            <Link href="/flow" className="underline font-medium hover:text-amber-900">
+                                                Flow 캔버스
+                                            </Link>
+                                            에서 먼저 업무를 입력해주세요.
+                                        </p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* Step 0: 전략 범위 선택 */}
-                <Card className="bg-white border-[#E2E4E9] mb-6 shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base font-medium text-[#18181B]">
-                            <span className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs px-2 py-1 rounded font-bold">
-                                0
-                            </span>
-                            전략 범위 선택
-                            {!hasToBeFlow && (
-                                <span className="text-xs font-normal text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full ml-2">
-                                    To-Be 플로우 필요
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: 0.2 }}
+                >
+                    <Card className="bg-white/90 backdrop-blur-xl border-gray-200/80 mb-6 shadow-lg shadow-gray-200/50 overflow-hidden">
+                        <CardHeader className="bg-gradient-to-r from-indigo-50/80 to-purple-50/80 border-b border-gray-100">
+                            <CardTitle className="flex items-center gap-3 text-base font-semibold text-gray-800">
+                                <span className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold shadow-sm">
+                                    0
                                 </span>
-                            )}
-                        </CardTitle>
-                        <p className="text-sm text-[#71717A] mt-1">
-                            전체 To-Be 플로우를 대상으로 할지, 특정 AI 에이전트 노드만 대상으로 할지 선택하세요.
-                        </p>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* 전체 플로우 옵션 */}
-                            <div
-                                className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                                    strategyScope === 'full'
-                                        ? 'border-indigo-500 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-md'
-                                        : 'border-[#E2E4E9] bg-white hover:border-indigo-300 hover:shadow-sm'
-                                } ${!hasToBeFlow ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                onClick={() => hasToBeFlow && setStrategyScope('full')}
-                            >
-                                <div className="flex items-start gap-3">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                                        strategyScope === 'full' ? 'bg-indigo-500 text-white' : 'bg-indigo-100 text-indigo-600'
-                                    }`}>
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-                                        </svg>
-                                    </div>
-                                    <div className="flex-1">
-                                        <h3 className={`font-semibold ${strategyScope === 'full' ? 'text-indigo-900' : 'text-[#18181B]'}`}>
-                                            전체 To-Be 플로우
-                                        </h3>
-                                        <p className="text-xs text-[#71717A] mt-1">
-                                            모든 변화 대상을 포함한 종합 전략
-                                        </p>
-                                        {hasToBeFlow && (
-                                            <div className="mt-3 flex flex-wrap gap-2">
-                                                <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
-                                                    🤖 AI 에이전트 {agentNodes.length}개
-                                                </span>
-                                                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">
-                                                    📊 총 {toBeNodes.length}개 노드
-                                                </span>
-                                            </div>
-                                        )}
-                                        {hasToBeFlow && agentNodes.length > 0 && (
-                                            <div className="mt-2 flex flex-wrap gap-1">
-                                                {collaborationSummary.copilot > 0 && (
-                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600">
-                                                        Copilot {collaborationSummary.copilot}
-                                                    </span>
-                                                )}
-                                                {collaborationSummary.monitor > 0 && (
-                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600">
-                                                        Monitor {collaborationSummary.monitor}
-                                                    </span>
-                                                )}
-                                                {collaborationSummary.autonomous > 0 && (
-                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600">
-                                                        Autonomous {collaborationSummary.autonomous}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                    {strategyScope === 'full' && (
-                                        <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
-                                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* 선택된 노드 옵션 */}
-                            <div
-                                className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                                    strategyScope === 'selected'
-                                        ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 shadow-md'
-                                        : 'border-[#E2E4E9] bg-white hover:border-purple-300 hover:shadow-sm'
-                                } ${!canSelectNode ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                onClick={() => canSelectNode && setStrategyScope('selected')}
-                            >
-                                <div className="flex items-start gap-3">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                                        strategyScope === 'selected' ? 'bg-purple-500 text-white' : 'bg-purple-100 text-purple-600'
-                                    }`}>
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                                        </svg>
-                                    </div>
-                                    <div className="flex-1">
-                                        <h3 className={`font-semibold ${strategyScope === 'selected' ? 'text-purple-900' : 'text-[#18181B]'}`}>
-                                            선택된 AI 에이전트
-                                        </h3>
-                                        <p className="text-xs text-[#71717A] mt-1">
-                                            특정 노드에 집중한 상세 전략
-                                        </p>
-                                        {selectedNode ? (
-                                            <div className="mt-3 p-2 bg-white/60 rounded-lg border border-purple-100">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm">🤖</span>
-                                                    <span className="text-sm font-medium text-purple-800">{selectedNode.label}</span>
-                                                </div>
-                                                {selectedNode.collaborationType && (
-                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded mt-1 inline-block ${
-                                                        selectedNode.collaborationType === 'copilot' ? 'bg-emerald-50 text-emerald-600' :
-                                                        selectedNode.collaborationType === 'monitor' ? 'bg-amber-50 text-amber-600' :
-                                                        'bg-purple-50 text-purple-600'
-                                                    }`}>
-                                                        {selectedNode.collaborationType}
-                                                    </span>
-                                                )}
-                                                {selectedNode.description && (
-                                                    <p className="text-[10px] text-[#71717A] mt-1 line-clamp-2">{selectedNode.description}</p>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <div className="mt-3 p-2 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                                                <p className="text-xs text-gray-400 text-center">
-                                                    <Link href="/flow" className="text-purple-500 hover:underline">
-                                                        Flow 캔버스
-                                                    </Link>
-                                                    에서 노드를 선택하세요
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                    {strategyScope === 'selected' && canSelectNode && (
-                                        <div className="w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center">
-                                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Step 1: Framework Selection */}
-                <Card className="bg-white border-[#E2E4E9] mb-6 shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base font-medium text-[#18181B]">
-                            <span className="bg-[#3B82F6] text-white text-xs px-2 py-1 rounded">
-                                1
-                            </span>
-                            프레임워크 선택
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <FrameworkSelector
-                            selected={selectedFramework || undefined}
-                            onSelect={setSelectedFramework}
-                        />
-                    </CardContent>
-                </Card>
-
-                {/* Step 2: Generate Strategy */}
-                {selectedFramework && (
-                    <Card className="bg-white border-[#E2E4E9] mb-6 shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-base font-medium text-[#18181B]">
-                                <span className="bg-[#8B5CF6] text-white text-xs px-2 py-1 rounded">
-                                    2
-                                </span>
-                                실행 로드맵
-                                {generatedPhases && (
-                                    <span className="text-xs text-[#10B981] ml-2">✓ AI 생성됨</span>
-                                )}
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="mb-6 flex items-center gap-4 flex-wrap">
-                                <Button
-                                    onClick={handleGenerateStrategy}
-                                    disabled={isLoading || !context}
-                                    className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"
-                                >
-                                    {isLoading ? (
-                                        <span className="flex items-center gap-2">
-                                            <Spinner size="sm" className="text-white" />
-                                            분석 중...
-                                        </span>
-                                    ) : (
-                                        'AI 맞춤 전략 생성'
-                                    )}
-                                </Button>
-                                <div className="flex items-center gap-2">
-                                    <label className="text-sm text-[#71717A] whitespace-nowrap">타임라인:</label>
-                                    <Input
-                                        type="number"
-                                        min={4}
-                                        max={52}
-                                        value={totalWeeks}
-                                        onChange={(e) => setTotalWeeks(Math.max(4, Math.min(52, parseInt(e.target.value) || 12)))}
-                                        className="w-20 bg-white border-[#E2E4E9]"
-                                    />
-                                    <span className="text-sm text-[#71717A]">주</span>
-                                </div>
-                                {!context && (
-                                    <span className="text-xs text-[#71717A]">
-                                        맥락 입력 후 사용 가능
+                                전략 범위 선택
+                                {!hasToBeFlow && (
+                                    <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full ml-2 flex items-center gap-1">
+                                        <AlertTriangle className="w-3 h-3" />
+                                        To-Be 플로우 필요
                                     </span>
                                 )}
-                                {error && (
-                                    <span className="text-xs text-[#EF4444]">{error}</span>
-                                )}
-                            </div>
-
-                            {/* Gantt Chart */}
-                            <div className="bg-[#F5F6F8] rounded-xl p-4 border border-[#E2E4E9]">
-                                <GanttChart
-                                    phases={displayPhases}
-                                    totalWeeks={totalWeeks}
-                                    onPhaseClick={(phase) => console.log('Phase clicked:', phase)}
-                                />
-                            </div>
-
-                            {/* Framework Explanation */}
-                            {frameworkExplanation && (
-                                <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                                    <div className="flex items-start gap-3">
-                                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
-                                            <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
+                            </CardTitle>
+                            <p className="text-sm text-gray-500 mt-1.5">
+                                전체 To-Be 플로우를 대상으로 할지, 특정 AI 에이전트 노드만 대상으로 할지 선택하세요.
+                            </p>
+                        </CardHeader>
+                        <CardContent className="pt-5">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                {/* 전체 플로우 옵션 */}
+                                <motion.div
+                                    className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
+                                        strategyScope === 'full'
+                                            ? 'border-indigo-400 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-lg shadow-indigo-500/10'
+                                            : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-md'
+                                    } ${!hasToBeFlow ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    onClick={() => hasToBeFlow && setStrategyScope('full')}
+                                    whileHover={hasToBeFlow ? { scale: 1.02, y: -2 } : {}}
+                                    whileTap={hasToBeFlow ? { scale: 0.98 } : {}}
+                                >
+                                    <div className="flex items-start gap-4">
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                            strategyScope === 'full' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' : 'bg-indigo-100 text-indigo-600'
+                                        }`}>
+                                            <LayoutGrid className="w-6 h-6" />
                                         </div>
-                                        <div>
-                                            <h4 className="text-sm font-medium text-blue-900 mb-1">프레임워크 이론적 배경</h4>
-                                            <p className="text-sm text-blue-700 leading-relaxed">{frameworkExplanation}</p>
+                                        <div className="flex-1">
+                                            <h3 className={`font-bold text-lg ${strategyScope === 'full' ? 'text-indigo-900' : 'text-gray-800'}`}>
+                                                전체 To-Be 플로우
+                                            </h3>
+                                            <p className="text-sm text-gray-500 mt-1">
+                                                모든 변화 대상을 포함한 종합 전략
+                                            </p>
+                                            {hasToBeFlow && (
+                                                <div className="mt-4 flex flex-wrap gap-2">
+                                                    <span className="text-xs px-2.5 py-1.5 rounded-full bg-blue-100 text-blue-700 font-medium flex items-center gap-1">
+                                                        <Bot className="w-3 h-3" />
+                                                        AI 에이전트 {agentNodes.length}개
+                                                    </span>
+                                                    <span className="text-xs px-2.5 py-1.5 rounded-full bg-gray-100 text-gray-700 font-medium flex items-center gap-1">
+                                                        <Layers className="w-3 h-3" />
+                                                        총 {toBeNodes.length}개 노드
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {hasToBeFlow && agentNodes.length > 0 && (
+                                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                                    {collaborationSummary.copilot > 0 && (
+                                                        <span className="text-[10px] px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 font-medium">
+                                                            Copilot {collaborationSummary.copilot}
+                                                        </span>
+                                                    )}
+                                                    {collaborationSummary.monitor > 0 && (
+                                                        <span className="text-[10px] px-2 py-1 rounded-full bg-amber-50 text-amber-600 font-medium">
+                                                            Monitor {collaborationSummary.monitor}
+                                                        </span>
+                                                    )}
+                                                    {collaborationSummary.autonomous > 0 && (
+                                                        <span className="text-[10px] px-2 py-1 rounded-full bg-purple-50 text-purple-600 font-medium">
+                                                            Autonomous {collaborationSummary.autonomous}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
+                                        {strategyScope === 'full' && (
+                                            <motion.div 
+                                                className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center shadow-md"
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                transition={{ type: 'spring', stiffness: 300 }}
+                                            >
+                                                <CheckCircle2 className="w-4 h-4 text-white" />
+                                            </motion.div>
+                                        )}
                                     </div>
-                                </div>
-                            )}
+                                </motion.div>
+
+                                {/* 선택된 노드 옵션 */}
+                                <motion.div
+                                    className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
+                                        strategyScope === 'selected'
+                                            ? 'border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg shadow-purple-500/10'
+                                            : 'border-gray-200 bg-white hover:border-purple-300 hover:shadow-md'
+                                    } ${!canSelectNode ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    onClick={() => canSelectNode && setStrategyScope('selected')}
+                                    whileHover={canSelectNode ? { scale: 1.02, y: -2 } : {}}
+                                    whileTap={canSelectNode ? { scale: 0.98 } : {}}
+                                >
+                                    <div className="flex items-start gap-4">
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                            strategyScope === 'selected' ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30' : 'bg-purple-100 text-purple-600'
+                                        }`}>
+                                            <Crosshair className="w-6 h-6" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <h3 className={`font-bold text-lg ${strategyScope === 'selected' ? 'text-purple-900' : 'text-gray-800'}`}>
+                                                선택된 AI 에이전트
+                                            </h3>
+                                            <p className="text-sm text-gray-500 mt-1">
+                                                특정 노드에 집중한 상세 전략
+                                            </p>
+                                            {selectedNode ? (
+                                                <div className="mt-4 p-3 bg-white/80 rounded-xl border border-purple-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <Bot className="w-4 h-4 text-purple-600" />
+                                                        <span className="text-sm font-semibold text-purple-800">{selectedNode.label}</span>
+                                                    </div>
+                                                    {selectedNode.collaborationType && (
+                                                        <span className={`text-[10px] px-2 py-1 rounded-full mt-2 inline-block font-medium ${
+                                                            selectedNode.collaborationType === 'copilot' ? 'bg-emerald-50 text-emerald-600' :
+                                                            selectedNode.collaborationType === 'monitor' ? 'bg-amber-50 text-amber-600' :
+                                                            'bg-purple-50 text-purple-600'
+                                                        }`}>
+                                                            {selectedNode.collaborationType}
+                                                        </span>
+                                                    )}
+                                                    {selectedNode.description && (
+                                                        <p className="text-xs text-gray-500 mt-2 line-clamp-2">{selectedNode.description}</p>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="mt-4 p-3 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                                                    <p className="text-xs text-gray-400 text-center">
+                                                        <Link href="/flow" className="text-purple-500 hover:underline font-medium">
+                                                            Flow 캔버스
+                                                        </Link>
+                                                        에서 노드를 선택하세요
+                                                    </p>
+                                                </div>
+                                            )}
+                                    </div>
+                                    {strategyScope === 'selected' && canSelectNode && (
+                                            <motion.div 
+                                                className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center shadow-md"
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                transition={{ type: 'spring', stiffness: 300 }}
+                                            >
+                                                <CheckCircle2 className="w-4 h-4 text-white" />
+                                            </motion.div>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            </div>
                         </CardContent>
                     </Card>
-                )}
+                </motion.div>
+                {/* Step 1: Framework Selection */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: 0.3 }}
+                >
+                    <Card className="bg-white/90 backdrop-blur-xl border-gray-200/80 mb-6 shadow-lg shadow-gray-200/50 overflow-hidden">
+                        <CardHeader className="bg-gradient-to-r from-blue-50/80 to-cyan-50/80 border-b border-gray-100">
+                            <CardTitle className="flex items-center gap-3 text-base font-semibold text-gray-800">
+                                <span className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold shadow-sm">
+                                    1
+                                </span>
+                                프레임워크 선택
+                                {selectedFramework && (
+                                    <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full font-medium flex items-center gap-1">
+                                        <CheckCircle2 className="w-3 h-3" />
+                                        선택됨
+                                    </span>
+                                )}
+                            </CardTitle>
+                            <p className="text-sm text-gray-500 mt-1.5">
+                                변화 관리에 적합한 프레임워크를 선택하세요. 각 프레임워크는 다른 관점과 단계를 제공합니다.
+                            </p>
+                        </CardHeader>
+                        <CardContent className="pt-5">
+                            <FrameworkSelector
+                                selected={selectedFramework || undefined}
+                                onSelect={setSelectedFramework}
+                            />
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                {/* Step 2: Generate Strategy */}
+                <AnimatePresence>
+                    {selectedFramework && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.4 }}
+                        >
+                            <Card className="bg-white/90 backdrop-blur-xl border-gray-200/80 mb-6 shadow-lg shadow-gray-200/50 overflow-hidden">
+                                <CardHeader className="bg-gradient-to-r from-violet-50/80 to-purple-50/80 border-b border-gray-100">
+                                    <CardTitle className="flex items-center gap-3 text-base font-semibold text-gray-800">
+                                        <span className="bg-gradient-to-r from-violet-500 to-purple-500 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold shadow-sm">
+                                            2
+                                        </span>
+                                        실행 로드맵
+                                        {generatedPhases && (
+                                            <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full font-medium flex items-center gap-1">
+                                                <CheckCircle2 className="w-3 h-3" />
+                                                AI 생성됨
+                                            </span>
+                                        )}
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="pt-5">
+                                    <div className="mb-6 flex items-center gap-4 flex-wrap">
+                                        <motion.button
+                                            onClick={handleGenerateStrategy}
+                                            disabled={isLoading || !context}
+                                            className={`px-6 py-3 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all ${
+                                                isLoading || !context
+                                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                    : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30'
+                                            }`}
+                                            whileHover={!isLoading && context ? { scale: 1.02, y: -1 } : {}}
+                                            whileTap={!isLoading && context ? { scale: 0.98 } : {}}
+                                        >
+                                            {isLoading ? (
+                                                <>
+                                                    <motion.div 
+                                                        className="w-4 h-4 border-2 border-gray-300 border-t-gray-500 rounded-full"
+                                                        animate={{ rotate: 360 }}
+                                                        transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                                                    />
+                                                    분석 중...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Sparkles className="w-4 h-4" />
+                                                    AI 맞춤 전략 생성
+                                                </>
+                                            )}
+                                        </motion.button>
+                                        <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
+                                            <Clock className="w-4 h-4 text-gray-400" />
+                                            <label className="text-sm text-gray-600 whitespace-nowrap">타임라인:</label>
+                                            <Input
+                                                type="number"
+                                                min={4}
+                                                max={52}
+                                                value={totalWeeks}
+                                                onChange={(e) => setTotalWeeks(Math.max(4, Math.min(52, parseInt(e.target.value) || 12)))}
+                                                className="w-16 bg-white border-gray-200 text-center"
+                                            />
+                                            <span className="text-sm text-gray-500">주</span>
+                                        </div>
+                                        {!context && (
+                                            <span className="text-xs text-gray-400">
+                                                맥락 입력 후 사용 가능
+                                            </span>
+                                        )}
+                                        <AnimatePresence>
+                                            {error && (
+                                                <motion.span
+                                                    initial={{ opacity: 0, x: -10 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    exit={{ opacity: 0, x: -10 }}
+                                                    className="text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg"
+                                                >
+                                                    {error}
+                                                </motion.span>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+
+                                    {/* Gantt Chart */}
+                                    <div className="bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-2xl p-5 border border-gray-200">
+                                        <GanttChart
+                                            phases={displayPhases}
+                                            totalWeeks={totalWeeks}
+                                            onPhaseClick={(phase) => console.log('Phase clicked:', phase)}
+                                        />
+                                    </div>
+
+                                    {/* Framework Explanation */}
+                                    <AnimatePresence>
+                                        {frameworkExplanation && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0, y: -10 }}
+                                                className="mt-5 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100"
+                                            >
+                                                <div className="flex items-start gap-4">
+                                                    <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
+                                                        <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-sm font-semibold text-blue-900 mb-1.5">프레임워크 이론적 배경</h4>
+                                                        <p className="text-sm text-blue-700 leading-relaxed">{frameworkExplanation}</p>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* Schein's 8 Approaches (Lewin model) */}
                 {scheinApproaches && scheinApproaches.length > 0 && (
