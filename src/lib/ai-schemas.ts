@@ -74,33 +74,33 @@ export const ChangeStrategyResponseSchema = z.object({
                 action: z.string().max(80).describe('활동 내용 (80자)'),
                 rationale: z.string().max(100).describe('필요 이유 (100자)'),
                 value: z.string().max(100).describe('제공 가치 (100자)'),
-            })).max(3).describe('액션 2~3개'),
+            })).describe('액션 2~3개 권장'),
             color: z.string().max(10).describe('색상 hex'),
         })
-    ).max(8).describe('단계 3~8개'),
-    keyMessages: z.array(z.string().max(80)).max(5).describe('핵심 메시지 3~5개 (각 80자)'),
+    ).describe('단계 3~8개 권장'),
+    keyMessages: z.array(z.string().max(80)).describe('핵심 메시지 3~5개 권장 (각 80자)'),
     riskFactors: z.array(
         z.object({
             risk: z.string().max(80).describe('리스크 (80자)'),
             mitigation: z.string().max(100).describe('완화 방안 (100자)'),
         })
-    ).max(3).describe('리스크 2~3개'),
+    ).describe('리스크 2~3개 권장'),
     survivalAnxiety: z.object({
         description: z.string().max(150).describe('변화 필요성 (150자)'),
-        triggers: z.array(z.string().max(80)).max(3).describe('불안 요소 3개 (각 80자)'),
+        triggers: z.array(z.string().max(80)).describe('불안 요소 2~3개 권장 (각 80자)'),
     }).optional().describe('Schein: 생존불안'),
     learningAnxiety: z.object({
         description: z.string().max(150).describe('변화 두려움 (150자)'),
-        barriers: z.array(z.string().max(80)).max(3).describe('장벽 3개 (각 80자)'),
+        barriers: z.array(z.string().max(80)).describe('장벽 2~3개 권장 (각 80자)'),
     }).optional().describe('Schein: 학습불안'),
     scheinApproaches: z.array(
         z.object({
             id: z.number().int().describe('1~8'),
             approach: z.string().max(50).describe('접근방법명 (50자)'),
             description: z.string().max(100).describe('적용 방법 (100자)'),
-            actions: z.array(z.string().max(80)).max(3).describe('실행 항목 3개 (각 80자)'),
+            actions: z.array(z.string().max(80)).describe('실행 항목 2~3개 권장 (각 80자)'),
         })
-    ).max(8).optional().describe('Schein 8가지 접근'),
+    ).optional().describe('Schein 8가지 접근 권장'),
 });
 
 // 타입 추출
@@ -165,7 +165,7 @@ export const NodeSplitResponseSchema = z.object({
             duration: z.number().int().optional().describe('소요시간 (숫자)'),
             durationUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months']).optional().describe('시간 단위'),
         })
-    ).max(6).describe('분할된 노드 4~6개'),
+    ).describe('분할된 노드 4~6개 권장'),
     summary: z.string().max(150).describe('분할 요약 (150자)'),
 });
 
