@@ -346,13 +346,20 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
                 />
             </svg>
 
-            {/* 꼭지점 Handle들 - 상/우/하/좌 */}
+            {/* 꼭지점 Handle들 - 상/우/하/좌 (각 방향 source/target 모두 지원) */}
             {/* 상단 꼭지점 */}
             <Handle
                 type="target"
                 position={Position.Top}
                 id="top"
                 className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
+                style={{ top: 0, left: '50%', transform: 'translate(-50%, -50%)' }}
+            />
+            <Handle
+                type="source"
+                position={Position.Top}
+                id="top-source"
+                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full !opacity-0"
                 style={{ top: 0, left: '50%', transform: 'translate(-50%, -50%)' }}
             />
             {/* 우측 꼭지점 */}
@@ -363,6 +370,13 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
                 className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
                 style={{ top: '50%', right: 0, transform: 'translate(50%, -50%)' }}
             />
+            <Handle
+                type="target"
+                position={Position.Right}
+                id="right-target"
+                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full !opacity-0"
+                style={{ top: '50%', right: 0, transform: 'translate(50%, -50%)' }}
+            />
             {/* 하단 꼭지점 */}
             <Handle
                 type="source"
@@ -371,12 +385,26 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
                 className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
                 style={{ bottom: 0, left: '50%', transform: 'translate(-50%, 50%)' }}
             />
+            <Handle
+                type="target"
+                position={Position.Bottom}
+                id="bottom-target"
+                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full !opacity-0"
+                style={{ bottom: 0, left: '50%', transform: 'translate(-50%, 50%)' }}
+            />
             {/* 좌측 꼭지점 */}
             <Handle
                 type="target"
                 position={Position.Left}
                 id="left"
                 className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
+                style={{ top: '50%', left: 0, transform: 'translate(-50%, -50%)' }}
+            />
+            <Handle
+                type="source"
+                position={Position.Left}
+                id="left-source"
+                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full !opacity-0"
                 style={{ top: '50%', left: 0, transform: 'translate(-50%, -50%)' }}
             />
 
