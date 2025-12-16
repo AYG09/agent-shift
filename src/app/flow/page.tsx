@@ -962,7 +962,13 @@ export default function FlowPage() {
 
     const displayAsIsEdges: Edge[] =
         asIsNodes.length > 0
-            ? asIsEdges.map((e) => ({ id: e.id, source: e.source, target: e.target }))
+            ? asIsEdges.map((e) => ({ 
+                id: e.id, 
+                source: e.source, 
+                target: e.target,
+                sourceHandle: e.sourceHandle,
+                targetHandle: e.targetHandle,
+            }))
             : [];
 
     const displayToBeNodes: Node[] =
@@ -977,13 +983,20 @@ export default function FlowPage() {
                     collaborationType: n.collaborationType,
                     agentDescription: n.agentDescription,
                     stressLevel: n.stressLevel,
+                    metrics: n.metrics,
                 },
             }))
             : displayAsIsNodes;
 
     const displayToBeEdges: Edge[] =
         toBeNodes.length > 0
-            ? toBeEdges.map((e) => ({ id: e.id, source: e.source, target: e.target }))
+            ? toBeEdges.map((e) => ({ 
+                id: e.id, 
+                source: e.source, 
+                target: e.target,
+                sourceHandle: e.sourceHandle,
+                targetHandle: e.targetHandle,
+            }))
             : displayAsIsEdges;
 
     // Canvas with Sidebar

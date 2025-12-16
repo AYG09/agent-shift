@@ -152,8 +152,8 @@ export const DrilldownResponseSchema = z.object({
             mid: z.string().max(80),    // 예: "60분→5분 (92% 절감)"
             senior: z.string().max(80), // 예: "42분→5분 (88% 절감)"
         }).optional(),
-        // 기존 필드 (역량별로 분리되면서 간단한 요약)
-        totalTimeReduction: z.string().max(150).optional(),
+        // 기존 필드 (역량별로 분리되면서 간단한 요약) - 50자 이내 권장
+        totalTimeReduction: z.string().max(300).optional(),
         keyBenefits: z.array(z.string().max(200)).max(5).optional(),
         implementationTips: z.array(z.string().max(200)).max(5).optional(),
     }).optional(),
