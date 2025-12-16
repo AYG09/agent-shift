@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,6 +41,7 @@ interface StrategyResult {
 export default function StrategyPage() {
     const { 
         context, 
+        strategy,
         setStrategy, 
         toBeNodes,
         strategyScope,
@@ -54,10 +55,39 @@ export default function StrategyPage() {
     const [frameworkExplanation, setFrameworkExplanation] = useState<string | null>(null);
     const [totalWeeks, setTotalWeeks] = useState(12);
 
+    // Hydration 안전 처리
+    const [mounted, setMounted] = useState(false);
+    const hasRestoredRef = useRef(false);
+
     // Interactive state
     const [completedActions, setCompletedActions] = useState<Set<string>>(new Set());
     const [roleAssignments, setRoleAssignments] = useState<Record<string, string>>({});
     const [expandedApproach, setExpandedApproach] = useState<number | null>(null);
+
+    // Mounted 상태 설정
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Store strategy에서 이전 결과 복원
+    useEffect(() => {
+        if (mounted && strategy && !hasRestoredRef.current) {
+            hasRestoredRef.current = true;
+
+            // 프레임워크 복원
+            setSelectedFramework(strategy.framework);
+
+            // phases 복원
+            if (strategy.phases && strategy.phases.length > 0) {
+                setGeneratedPhases(strategy.phases);
+                
+                // totalWeeks 복원
+                if (strategy.totalWeeks) {
+                    setTotalWeeks(strategy.totalWeeks);
+                }
+            }
+        }
+    }, [mounted, strategy]);
 
     // To-Be 플로우 요약 계산
     const agentNodes = toBeNodes.filter(n => n.type === 'agent');

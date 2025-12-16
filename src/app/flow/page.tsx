@@ -129,6 +129,21 @@ export default function FlowPage() {
     const { isLoading, error, generateAsIsFlow, generateToBeFlow, generateNodeSplit, generateDrilldown } =
         useAIGeneration();
 
+    // Hydration 안전 처리
+    const [mounted, setMounted] = useState(false);
+    const hasRestoredRef = useRef(false);
+
+    // label로 value 찾기 헬퍼 함수
+    const findIndustryValue = (label: string): string => {
+        const found = industries.find(i => i.label === label || i.value === label);
+        return found ? found.value : 'other';
+    };
+
+    const findRoleValue = (label: string): string => {
+        const found = roles.find(r => r.label === label || r.value === label);
+        return found ? found.value : 'other';
+    };
+
     const [industry, setIndustry] = useState('');
     const [customIndustry, setCustomIndustry] = useState('');
     const [role, setRole] = useState('');
@@ -146,6 +161,44 @@ export default function FlowPage() {
     const [selectedScenario, setSelectedScenario] = useState<
         'conservative' | 'balanced' | 'aggressive'
     >('balanced');
+
+    // Mounted 상태 설정
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Store context에서 form 필드 복원
+    useEffect(() => {
+        if (mounted && context && !hasRestoredRef.current) {
+            hasRestoredRef.current = true;
+
+            // 산업군 복원
+            const industryValue = findIndustryValue(context.industry);
+            setIndustry(industryValue);
+            if (industryValue === 'other') {
+                setCustomIndustry(context.industry);
+            }
+
+            // 직무 복원
+            const roleValue = findRoleValue(context.role);
+            setRole(roleValue);
+            if (roleValue === 'other') {
+                setCustomRole(context.role);
+            }
+
+            // 기타 필드 복원
+            setTask(context.task || '');
+            setTeamSize(context.teamSize || '');
+            setTooling(context.tooling || '');
+            setPainPoints(context.painPoints || '');
+            setTimeScale(context.timeScale || 'weekly');
+
+            // 이전 작업이 있으면 canvas 단계로 바로 이동
+            if (asIsNodes.length > 0) {
+                setStep('canvas');
+            }
+        }
+    }, [mounted, context, asIsNodes.length]);
 
     // Drilldown state
     const [drilldownNode, setDrilldownNode] = useState<{
