@@ -139,21 +139,15 @@ ${context.painPoints ? `- 주요 고충/문제점: ${context.painPoints}` : ''}
 4. 사용자가 언급한 고충(${context.painPoints || '없음'})이 발생하는 단계에는 stressLevel을 'high'로 설정하세요.
 5. painPoints 배열에 각 노드의 문제점을 분석해주세요.
 
-## 중요: description 필드 (⚠️ 50자 이내로 간결하게!)
-각 노드의 description은 핵심만 50자 이내로 작성하세요.
+## 핵심 규칙 (스키마가 강제하지만 참고)
+- label: 30자 이내 (예: "데이터 수집")
+- description: 60자 이내
+- 모든 숫자는 정수만
+- metrics: { duration: 정수, durationUnit: 'minutes'|'hours'|'days'|'weeks'|'months' }
 
-## 중요: metrics 필드 필수 작성 (⚠️ 모든 숫자는 정수만!)
-각 process/io 노드에 다음 metrics를 반드시 포함하세요:
-- duration: 예상 소요 시간 (정수, 예: 30)
-- durationUnit: 시간 단위 ('minutes' | 'hours' | 'days' | 'weeks' | 'months')
-  - 일반 업무(주간): minutes 또는 hours
-  - 장기 프로젝트(월/분기/반기): days, weeks, months
-예시: { "duration": 2, "durationUnit": "hours" } = 2시간
-
-## 중요: 노드 및 엣지 배치 규칙 (⬇️ 수직 플로우)
-- 모든 노드의 x는 250, y는 0부터 120 간격으로 배치하세요.
-- 엣지(edges)는 반드시 sourceHandle='bottom', targetHandle='top' 으로 설정하세요.
-- 예시: { "id": "e1", "source": "node1", "target": "node2", "sourceHandle": "bottom", "targetHandle": "top" }`;
+## 노드 배치 (수직 플로우)
+- x=250, y=0부터 120 간격
+- 엣지: sourceHandle='bottom', targetHandle='top'`;
 }
 
 function getToBePrompt(
@@ -221,24 +215,17 @@ ${JSON.stringify(asIsNodes, null, 2)}
    - copilot: 인간과 AI가 협력
    - monitor: 인간이 AI를 감독
    - autonomous: AI가 독립 수행
-3. 각 개선사항에 대해 예상 시간 절감률을 제시하세요.
-4. improvements 배열에 원래 노드와 새 노드의 매핑을 포함하세요.
+3. improvements 배열에 원래 노드와 새 노드의 매핑을 포함하세요.
 
-## 중요: agentDescription 필드 (⚠️ 100자 이내로 간결하게!)
-각 AI Agent 노드(type='agent')의 agentDescription:
-- 수행 작업 + AI 기술 + 협업 방식을 100자 이내로 간결히
+## 핵심 규칙 (스키마가 강제하지만 참고)
+- label: 30자 이내 (예: "AI 데이터 수집")
+- agentDescription: 100자 이내 (예: "LLM으로 문서 요약 후 인간이 검토")
+- description: 60자 이내
+- 모든 숫자는 정수만
 
-## 중요: metrics 필드 (⚠️ 모든 숫자는 정수만!)
-모든 process/io/agent 노드에 다음 metrics 포함:
-- duration: 예상 소요 시간 (정수)
-- durationUnit: 'minutes' | 'hours' | 'days' | 'weeks' | 'months'
-  - 단기 업무: minutes/hours, 장기 프로젝트: days/weeks/months
-예시: { "duration": 15, "durationUnit": "minutes" }
-
-## 중요: 노드 및 엣지 배치 규칙 (⬇️ 수직 플로우)
-- 모든 노드의 x는 250, y는 0부터 100 간격으로 배치하세요.
-- 엣지(edges)는 반드시 sourceHandle='bottom', targetHandle='top' 으로 설정하세요.
-- 예시: { "id": "e1", "source": "node1", "target": "node2", "sourceHandle": "bottom", "targetHandle": "top" }`;
+## 노드 배치 (수직 플로우)
+- x=250, y=0부터 100 간격
+- 엣지: sourceHandle='bottom', targetHandle='top'`;
 }
 
 function getStrategyPrompt(
@@ -647,7 +634,7 @@ export async function POST(request: NextRequest) {
             model,
             schema,
             prompt,
-            maxOutputTokens: 24576, // Gemini 2.5 Flash (토큰 오버플로우 방지)
+            maxOutputTokens: 16384, // 실제 필요량 6,000 + 여유분
         });
 
         // 숫자 필드 정규화 후 반환

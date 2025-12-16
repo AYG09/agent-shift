@@ -2,22 +2,22 @@ import { z } from 'zod';
 
 // 노드 메트릭 스키마 - 다양한 시간 단위 지원 (분/시간/일/주/월)
 export const NodeMetricsSchema = z.object({
-    timeMinutes: z.number().int().optional(), // 하위 호환성 (분 단위)
-    duration: z.number().int().optional(),    // 새 필드: 숫자 값
-    durationUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months']).optional(), // 새 필드: 단위
+    timeMinutes: z.number().int().optional().describe('하위 호환성용 시간(분)'),
+    duration: z.number().int().optional().describe('소요 시간 (정수)'),
+    durationUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months']).optional().describe('시간 단위'),
 });
 
-// 노드 스키마
+// 노드 스키마 - .describe()로 모델에 명확한 지시, .max()로 JSON Schema maxLength 강제
 export const FlowNodeSchema = z.object({
-    id: z.string(),
-    label: z.string(),
-    description: z.string().optional(),
+    id: z.string().describe('고유 ID'),
+    label: z.string().max(30).describe('노드 이름 (30자 이내, 핵심만)'),
+    description: z.string().max(60).optional().describe('간단 설명 (60자 이내)'),
     type: z.enum(['terminal', 'process', 'decision', 'io', 'agent', 'task', 'subprocess']),
     terminalType: z.enum(['start', 'end']).optional(),
     ioType: z.enum(['input', 'output']).optional(),
     stressLevel: z.enum(['low', 'medium', 'high']).optional(),
-    collaborationType: z.enum(['copilot', 'monitor', 'autonomous']).optional(),
-    agentDescription: z.string().optional(),
+    collaborationType: z.enum(['copilot', 'monitor', 'autonomous']).optional().describe('AI 협업 유형'),
+    agentDescription: z.string().max(100).optional().describe('AI 에이전트 역할 설명 (100자 이내, 핵심만)'),
     position: z.object({
         x: z.number(),
         y: z.number(),
