@@ -26,7 +26,7 @@ import NodeEditor from './NodeEditor';
 import NodeContextMenu from './NodeContextMenu';
 import EdgeContextMenu from './EdgeContextMenu';
 import { Button } from '@/components/ui/button';
-import { useAppStore, FlowNode, FlowEdge } from '@/lib/store';
+import { useAppStore, FlowNode, FlowEdge, DurationUnit } from '@/lib/store';
 
 interface FlowCanvasProps {
     onGenerateFlow?: () => void;
@@ -565,7 +565,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
             shape?: 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
             stressLevel?: 'low' | 'medium' | 'high';
             collaborationType?: 'copilot' | 'monitor' | 'autonomous';
-            metrics?: { timeMinutes?: number };
+            metrics?: { timeMinutes?: number; duration?: number; durationUnit?: DurationUnit };
         }) => {
             if (editorMode === 'create') {
                 const newNode: FlowNode = {

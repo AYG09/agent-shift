@@ -1,8 +1,10 @@
 import { z } from 'zod';
 
-// 노드 메트릭 스키마 - 시간만 관리 (비용/인원은 제거됨)
+// 노드 메트릭 스키마 - 다양한 시간 단위 지원 (분/시간/일/주/월)
 export const NodeMetricsSchema = z.object({
-    timeMinutes: z.number().int().optional(), // 소요 시간 (분) - 정수
+    timeMinutes: z.number().int().optional(), // 하위 호환성 (분 단위)
+    duration: z.number().int().optional(),    // 새 필드: 숫자 값
+    durationUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months']).optional(), // 새 필드: 단위
 });
 
 // 노드 스키마

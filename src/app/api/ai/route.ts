@@ -139,12 +139,16 @@ ${context.painPoints ? `- 주요 고충/문제점: ${context.painPoints}` : ''}
 4. 사용자가 언급한 고충(${context.painPoints || '없음'})이 발생하는 단계에는 stressLevel을 'high'로 설정하세요.
 5. painPoints 배열에 각 노드의 문제점을 분석해주세요.
 
-## 중요: description 필드 필수 작성
-각 노드의 description 필드에 반드시 구체적인 활동, 소요 시간, 사용 도구를 포함하세요.
+## 중요: description 필드 (⚠️ 50자 이내로 간결하게!)
+각 노드의 description은 핵심만 50자 이내로 작성하세요.
 
-## 중요: metrics 필드 필수 작성 (⚠️ 모든 숫자는 소수점 없는 정수만!)
+## 중요: metrics 필드 필수 작성 (⚠️ 모든 숫자는 정수만!)
 각 process/io 노드에 다음 metrics를 반드시 포함하세요:
-- timeMinutes: 예상 소요 시간 (분 단위, 정수만 예: 30) - ⚠️ 모든 노드에 필수!
+- duration: 예상 소요 시간 (정수, 예: 30)
+- durationUnit: 시간 단위 ('minutes' | 'hours' | 'days' | 'weeks' | 'months')
+  - 일반 업무(주간): minutes 또는 hours
+  - 장기 프로젝트(월/분기/반기): days, weeks, months
+예시: { "duration": 2, "durationUnit": "hours" } = 2시간
 
 ## 중요: 노드 및 엣지 배치 규칙 (⬇️ 수직 플로우)
 - 모든 노드의 x는 250, y는 0부터 120 간격으로 배치하세요.
@@ -220,15 +224,16 @@ ${JSON.stringify(asIsNodes, null, 2)}
 3. 각 개선사항에 대해 예상 시간 절감률을 제시하세요.
 4. improvements 배열에 원래 노드와 새 노드의 매핑을 포함하세요.
 
-## 중요: agentDescription 필드 필수 작성
-각 AI Agent 노드(type='agent')의 agentDescription 필드에:
-- 구체적 수행 작업 (2~3문장)
-- 사용 AI 기술 (LLM, RPA, 컴퓨터 비전 등)
-- 인간과의 협업 방식
+## 중요: agentDescription 필드 (⚠️ 100자 이내로 간결하게!)
+각 AI Agent 노드(type='agent')의 agentDescription:
+- 수행 작업 + AI 기술 + 협업 방식을 100자 이내로 간결히
 
-## 중요: metrics 필드 필수 작성 (⚠️ 모든 숫자는 소수점 없는 정수만!)
-모든 process/io/agent 노드에 다음 metrics를 반드시 포함하세요:
-- timeMinutes: 예상 소요 시간 (분 단위, 정수만 예: 10) - ⚠️ 모든 노드에 필수!
+## 중요: metrics 필드 (⚠️ 모든 숫자는 정수만!)
+모든 process/io/agent 노드에 다음 metrics 포함:
+- duration: 예상 소요 시간 (정수)
+- durationUnit: 'minutes' | 'hours' | 'days' | 'weeks' | 'months'
+  - 단기 업무: minutes/hours, 장기 프로젝트: days/weeks/months
+예시: { "duration": 15, "durationUnit": "minutes" }
 
 ## 중요: 노드 및 엣지 배치 규칙 (⬇️ 수직 플로우)
 - 모든 노드의 x는 250, y는 0부터 100 간격으로 배치하세요.
@@ -642,7 +647,7 @@ export async function POST(request: NextRequest) {
             model,
             schema,
             prompt,
-            maxOutputTokens: 8192, // Gemini 2.5 Flash 지원 (최대 65535)
+            maxOutputTokens: 24576, // Gemini 2.5 Flash (토큰 오버플로우 방지)
         });
 
         // 숫자 필드 정규화 후 반환

@@ -20,6 +20,8 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog';
 
+import type { DurationUnit } from '@/lib/store';
+
 interface NodeData {
     id?: string;
     label: string;
@@ -29,7 +31,9 @@ interface NodeData {
     stressLevel?: 'low' | 'medium' | 'high';
     collaborationType?: 'copilot' | 'monitor' | 'autonomous';
     metrics?: {
-        timeMinutes?: number;
+        timeMinutes?: number; // 하위 호환성
+        duration?: number;
+        durationUnit?: DurationUnit;
     };
 }
 
@@ -59,7 +63,9 @@ export default function NodeEditor({
     const [stressLevel, setStressLevel] = useState<NodeData['stressLevel']>('low');
     const [collaborationType, setCollaborationType] =
         useState<NodeData['collaborationType']>('copilot');
-    const [timeMinutes, setTimeMinutes] = useState<number | undefined>(undefined);
+    const [duration, setDuration] = useState<number | undefined>(undefined);
+    const [durationUnit, setDurationUnit] = useState<DurationUnit>('minutes');
+    const [timeMinutes, setTimeMinutes] = useState<number | undefined>(undefined); // 하위 호환성
 
     const resetForm = () => {
         setLabel('');
@@ -68,6 +74,8 @@ export default function NodeEditor({
         setShape(undefined); // Reset to default
         setStressLevel('low');
         setCollaborationType('copilot');
+        setDuration(undefined);
+        setDurationUnit('minutes');
         setTimeMinutes(undefined);
     };
 
@@ -80,7 +88,21 @@ export default function NodeEditor({
             setShape(initialData.shape);
             setStressLevel(initialData.stressLevel || 'low');
             setCollaborationType(initialData.collaborationType || 'copilot');
-            setTimeMinutes(initialData.metrics?.timeMinutes);
+            // 새 필드 우선, 하위 호환성 유지
+            if (initialData.metrics?.duration !== undefined) {
+                setDuration(initialData.metrics.duration);
+                setDurationUnit(initialData.metrics.durationUnit || 'minutes');
+                setTimeMinutes(undefined);
+            } else if (initialData.metrics?.timeMinutes !== undefined) {
+                // 기존 데이터 변환
+                setDuration(initialData.metrics.timeMinutes);
+                setDurationUnit('minutes');
+                setTimeMinutes(initialData.metrics.timeMinutes);
+            } else {
+                setDuration(undefined);
+                setDurationUnit('minutes');
+                setTimeMinutes(undefined);
+            }
         } else {
             resetForm();
         }
@@ -97,7 +119,9 @@ export default function NodeEditor({
             stressLevel: type !== 'agent' ? stressLevel : undefined,
             collaborationType: type === 'agent' ? collaborationType : undefined,
             metrics: {
-                timeMinutes,
+                duration,
+                durationUnit,
+                timeMinutes: durationUnit === 'minutes' ? duration : undefined, // 하위 호환성
             },
         });
         onClose();
@@ -178,32 +202,49 @@ export default function NodeEditor({
                         <Label className="text-[#71717A] font-medium">📊 노드 메트릭 (선택 사항)</Label>
                         <div className="space-y-3">
                             <div className="space-y-1">
-                                <Label className="text-[#A1A1AA] text-xs">⏱️ 기준 소요시간 (분)</Label>
-                                <Input
-                                    type="number"
-                                    min={0}
-                                    value={timeMinutes ?? ''}
-                                    onChange={(e) => setTimeMinutes(e.target.value ? Number(e.target.value) : undefined)}
-                                    placeholder="60"
-                                    className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#D4D4D8] h-8 text-sm"
-                                />
+                                <Label className="text-[#A1A1AA] text-xs">⏱️ 기준 소요시간</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        value={duration ?? ''}
+                                        onChange={(e) => setDuration(e.target.value ? Number(e.target.value) : undefined)}
+                                        placeholder="예: 30"
+                                        className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#D4D4D8] h-8 text-sm flex-1"
+                                    />
+                                    <Select
+                                        value={durationUnit}
+                                        onValueChange={(v) => setDurationUnit(v as DurationUnit)}
+                                    >
+                                        <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B] h-8 w-24">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="minutes">분</SelectItem>
+                                            <SelectItem value="hours">시간</SelectItem>
+                                            <SelectItem value="days">일</SelectItem>
+                                            <SelectItem value="weeks">주</SelectItem>
+                                            <SelectItem value="months">개월</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
                             {/* 스킬 레벨별 예상 시간 (읽기 전용) */}
-                            {timeMinutes && timeMinutes > 0 && (
+                            {duration && duration > 0 && (
                                 <div className="bg-white/80 rounded-md p-2 border border-[#E2E4E9]">
                                     <Label className="text-[#A1A1AA] text-xs mb-2 block">📈 스킬 레벨별 예상 시간</Label>
                                     <div className="grid grid-cols-3 gap-2 text-center">
                                         <div className="bg-red-50 rounded px-2 py-1">
                                             <div className="text-[10px] text-red-600">저역량</div>
-                                            <div className="text-sm font-medium text-red-700">{Math.round(timeMinutes * 1.5)}분</div>
+                                            <div className="text-sm font-medium text-red-700">{(duration * 1.5).toFixed(1)}{durationUnit === 'minutes' ? '분' : durationUnit === 'hours' ? '시간' : durationUnit === 'days' ? '일' : durationUnit === 'weeks' ? '주' : '개월'}</div>
                                         </div>
                                         <div className="bg-amber-50 rounded px-2 py-1">
                                             <div className="text-[10px] text-amber-600">중역량</div>
-                                            <div className="text-sm font-medium text-amber-700">{timeMinutes}분</div>
+                                            <div className="text-sm font-medium text-amber-700">{duration}{durationUnit === 'minutes' ? '분' : durationUnit === 'hours' ? '시간' : durationUnit === 'days' ? '일' : durationUnit === 'weeks' ? '주' : '개월'}</div>
                                         </div>
                                         <div className="bg-emerald-50 rounded px-2 py-1">
                                             <div className="text-[10px] text-emerald-600">고역량</div>
-                                            <div className="text-sm font-medium text-emerald-700">{Math.round(timeMinutes * 0.7)}분</div>
+                                            <div className="text-sm font-medium text-emerald-700">{(duration * 0.7).toFixed(1)}{durationUnit === 'minutes' ? '분' : durationUnit === 'hours' ? '시간' : durationUnit === 'days' ? '일' : durationUnit === 'weeks' ? '주' : '개월'}</div>
                                         </div>
                                     </div>
                                 </div>

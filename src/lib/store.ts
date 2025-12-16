@@ -2,9 +2,13 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { DrilldownResponse } from './ai-schemas';
 
-// 노드 타입 정의 - 시간만 관리 (비용/인원은 제거됨)
+// 노드 타입 정의 - 다양한 시간 단위 지원 (분/시간/일/주/월)
+export type DurationUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
+
 export interface NodeMetrics {
-    timeMinutes?: number; // 소요 시간 (분)
+    timeMinutes?: number; // 하위 호환성 (기존 분 단위)
+    duration?: number;    // 새 필드: 숫자 값
+    durationUnit?: DurationUnit; // 새 필드: 단위
 }
 
 export interface FlowNode {

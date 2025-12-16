@@ -2,10 +2,19 @@
 
 import { memo, useState } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import type { DurationUnit } from '@/lib/store';
 
 // ============================================
 // 데이터 타입 정의
 // ============================================
+
+// 공통 Metrics 타입 (duration + durationUnit 지원)
+type NodeMetrics = {
+    timeMinutes?: number; // 하위 호환성
+    duration?: number;
+    durationUnit?: DurationUnit;
+};
+
 type TerminalNodeData = {
     label: string;
     terminalType?: 'start' | 'end';
@@ -16,11 +25,7 @@ type ProcessNodeData = {
     label: string;
     description?: string;
     stressLevel?: 'low' | 'medium' | 'high';
-    metrics?: {
-        timeMinutes?: number;
-        costKRW?: number;
-        peopleCount?: number;
-    };
+    metrics?: NodeMetrics;
     isHeatmapMode?: boolean;
     shape?: ShapeType;
 };
@@ -44,9 +49,7 @@ type AgentNodeData = {
     agentDescription?: string;
     shape?: ShapeType;
     isSelectedForStrategy?: boolean;
-    metrics?: {
-        timeMinutes?: number;
-    };
+    metrics?: NodeMetrics;
 };
 
 // ============================================
@@ -57,6 +60,44 @@ const formatNumber = (num: number): string => {
     if (num >= 10000) return `${(num / 10000).toFixed(1)}만`;
     if (num >= 1000) return `${(num / 1000).toFixed(1)}천`;
     return num.toString();
+};
+
+// 시간 단위별 표시 포맷터
+const DURATION_UNIT_LABELS: Record<DurationUnit, string> = {
+    minutes: '분',
+    hours: '시간',
+    days: '일',
+    weeks: '주',
+    months: '개월',
+};
+
+const formatDuration = (metrics?: NodeMetrics): string | null => {
+    if (!metrics) return null;
+    
+    // 새 형식 우선 (duration + durationUnit)
+    if (metrics.duration !== undefined && metrics.duration > 0) {
+        const unit = metrics.durationUnit || 'minutes';
+        return `${metrics.duration}${DURATION_UNIT_LABELS[unit]}`;
+    }
+    
+    // 하위 호환성 (기존 timeMinutes)
+    if (metrics.timeMinutes !== undefined && metrics.timeMinutes > 0) {
+        return `${metrics.timeMinutes}분`;
+    }
+    
+    return null;
+};
+
+// 스킬 레벨별 시간 계산 (duration 기준)
+const formatDurationWithMultiplier = (metrics?: NodeMetrics, multiplier: number = 1): string | null => {
+    if (!metrics) return null;
+    
+    const duration = metrics.duration ?? metrics.timeMinutes;
+    if (duration === undefined || duration <= 0) return null;
+    
+    const unit = metrics.durationUnit || 'minutes';
+    const adjusted = multiplier === 1 ? duration : (duration * multiplier).toFixed(1);
+    return `${adjusted}${DURATION_UNIT_LABELS[unit]}`;
 };
 
 export type ShapeType = 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
@@ -280,10 +321,11 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
     const isHeatmapMode = data.isHeatmapMode;
     // Default shape for Process is 'rectangle' if not specified
     const shape = data.shape || 'rectangle';
+    const durationText = formatDuration(metrics);
 
     const handleTimeClick = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (metrics?.timeMinutes) {
+        if (durationText) {
             setSkillExpanded(!skillExpanded);
         }
     };
@@ -327,13 +369,13 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
                     </div>
                 )}
 
-                {metrics?.timeMinutes && (
+                {durationText && (
                     <div className="pt-2 mt-2 border-t border-slate-200">
                         <div 
                             className="flex items-center gap-1 text-xs text-slate-500 cursor-pointer hover:text-slate-700 transition-colors"
                             onClick={handleTimeClick}
                         >
-                            <span>⏱️ {metrics.timeMinutes}분</span>
+                            <span>⏱️ {durationText}</span>
                             <span 
                                 className="text-[10px] transition-transform"
                                 style={{ transform: skillExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
@@ -347,17 +389,17 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
                                 <div className="flex items-center gap-2 text-[10px]">
                                     <span className="w-2 h-2 rounded-full bg-red-500"></span>
                                     <span className="text-slate-600">저역량:</span>
-                                    <span className="font-medium text-red-600">{Math.round(metrics.timeMinutes * SKILL_MULTIPLIERS.junior)}분</span>
+                                    <span className="font-medium text-red-600">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.junior)}</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-[10px]">
                                     <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                                     <span className="text-slate-600">중역량:</span>
-                                    <span className="font-medium text-amber-600">{metrics.timeMinutes}분</span>
+                                    <span className="font-medium text-amber-600">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.mid)}</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-[10px]">
                                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                                     <span className="text-slate-600">고역량:</span>
-                                    <span className="font-medium text-emerald-600">{Math.round(metrics.timeMinutes * SKILL_MULTIPLIERS.senior)}분</span>
+                                    <span className="font-medium text-emerald-600">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.senior)}</span>
                                 </div>
                             </div>
                         )}
@@ -548,6 +590,7 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
     const shape = data.shape || 'hexagon';
     const isStrategySelected = data.isSelectedForStrategy;
     const metrics = data.metrics;
+    const durationText = formatDuration(metrics);
 
     const handleNodeClick = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -558,7 +601,7 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
 
     const handleTimeClick = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (metrics?.timeMinutes) {
+        if (durationText) {
             setSkillExpanded(!skillExpanded);
         }
     };
@@ -603,12 +646,12 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
                     </div>
 
                     {/* 시간 메트릭 표시 */}
-                    {metrics?.timeMinutes && (
+                    {durationText && (
                         <div 
                             className="text-[10px] text-slate-500 flex items-center justify-center gap-1 cursor-pointer hover:text-slate-700 transition-colors pt-1"
                             onClick={handleTimeClick}
                         >
-                            <span>⏱️ {metrics.timeMinutes}분</span>
+                            <span>⏱️ {durationText}</span>
                             <span 
                                 className="text-[8px] transition-transform"
                                 style={{ transform: skillExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
@@ -621,7 +664,7 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
             </NodeShapeWrapper>
 
             {/* 스킬별 시간 Popover (작은 팝업) */}
-            {skillExpanded && metrics?.timeMinutes && (
+            {skillExpanded && durationText && (
                 <div 
                     className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 
                                bg-white/95 backdrop-blur-lg border border-slate-200/80 
@@ -633,17 +676,17 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
                         <div className="flex items-center gap-2 text-[11px]">
                             <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
                             <span className="text-slate-600">저역량:</span>
-                            <span className="font-semibold text-red-600 ml-auto">{Math.round(metrics.timeMinutes * SKILL_MULTIPLIERS.junior)}분</span>
+                            <span className="font-semibold text-red-600 ml-auto">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.junior)}</span>
                         </div>
                         <div className="flex items-center gap-2 text-[11px]">
                             <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
                             <span className="text-slate-600">중역량:</span>
-                            <span className="font-semibold text-amber-600 ml-auto">{metrics.timeMinutes}분</span>
+                            <span className="font-semibold text-amber-600 ml-auto">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.mid)}</span>
                         </div>
                         <div className="flex items-center gap-2 text-[11px]">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
                             <span className="text-slate-600">고역량:</span>
-                            <span className="font-semibold text-emerald-600 ml-auto">{Math.round(metrics.timeMinutes * SKILL_MULTIPLIERS.senior)}분</span>
+                            <span className="font-semibold text-emerald-600 ml-auto">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.senior)}</span>
                         </div>
                     </div>
                     {/* 닫기 힌트 */}
@@ -692,21 +735,21 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
                     </div>
 
                     {/* 시간 정보 (있으면 표시) */}
-                    {metrics?.timeMinutes && (
+                    {durationText && (
                         <div className="px-4 pb-4">
                             <div className="text-xs text-slate-600 font-medium mb-1.5">예상 처리 시간</div>
                             <div className="grid grid-cols-3 gap-2">
                                 <div className="text-center p-2 bg-red-50 rounded-lg">
                                     <div className="text-[10px] text-red-600">저역량</div>
-                                    <div className="font-semibold text-red-700">{Math.round(metrics.timeMinutes * SKILL_MULTIPLIERS.junior)}분</div>
+                                    <div className="font-semibold text-red-700">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.junior)}</div>
                                 </div>
                                 <div className="text-center p-2 bg-amber-50 rounded-lg">
                                     <div className="text-[10px] text-amber-600">중역량</div>
-                                    <div className="font-semibold text-amber-700">{metrics.timeMinutes}분</div>
+                                    <div className="font-semibold text-amber-700">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.mid)}</div>
                                 </div>
                                 <div className="text-center p-2 bg-emerald-50 rounded-lg">
                                     <div className="text-[10px] text-emerald-600">고역량</div>
-                                    <div className="font-semibold text-emerald-700">{Math.round(metrics.timeMinutes * SKILL_MULTIPLIERS.senior)}분</div>
+                                    <div className="font-semibold text-emerald-700">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.senior)}</div>
                                 </div>
                             </div>
                         </div>
