@@ -35,6 +35,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ENTERPRISE_PLATFORMS, PLATFORM_CATEGORIES, PLATFORM_CATEGORY_ORDER, type Platform, type PlatformCategory } from '@/lib/platforms';
 import { cn } from '@/lib/utils';
 
+// 한국어 시간 문자열 파싱 ("10분", "2시간" → { duration, durationUnit })
+type DurationUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
+function parseDurationString(durationStr?: string): { duration: number; durationUnit: DurationUnit } | undefined {
+    if (!durationStr) return undefined;
+    const match = durationStr.match(/(\d+)\s*(분|시간|일|주|개월)/);
+    if (!match) return undefined;
+    const value = parseInt(match[1]);
+    const unitMap: Record<string, DurationUnit> = {
+        '분': 'minutes', '시간': 'hours', '일': 'days', '주': 'weeks', '개월': 'months'
+    };
+    return { duration: value, durationUnit: unitMap[match[2]] || 'minutes' };
+}
+
 // Collapsible Section Component
 const CollapsibleSection = ({ 
     title, 
@@ -580,14 +593,21 @@ export default function FlowPage() {
         const baseY = originalNode.position.y;
         const spacing = 100;
 
-        const newNodes: typeof targetNodes = drilldownResult.subSteps.map((step, idx) => ({
-            id: `${drilldownNode.id}-step-${idx}`,
-            type: 'task' as const, // FlowNode 타입에 맞게 'task' 사용
-            label: step.label,
-            description: step.description,
-            stressLevel: 'low' as const,
-            position: { x: originalNode.position.x, y: baseY + idx * spacing },
-        }));
+        const newNodes: typeof targetNodes = drilldownResult.subSteps.map((step, idx) => {
+            const parsed = parseDurationString(step.duration);
+            return {
+                id: `${drilldownNode.id}-step-${idx}`,
+                type: 'task' as const, // FlowNode 타입에 맞게 'task' 사용
+                label: step.label,
+                description: step.description,
+                stressLevel: 'low' as const,
+                position: { x: originalNode.position.x, y: baseY + idx * spacing },
+                metrics: parsed ? {
+                    duration: parsed.duration,
+                    durationUnit: parsed.durationUnit,
+                } : undefined,
+            };
+        });
 
         // 기존 엣지에서 원본 노드 연결 찾기
         const incomingEdges = targetEdges.filter((e) => e.target === drilldownNode.id);
