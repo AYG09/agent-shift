@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useAppStore } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
+import { ShareDialog } from '@/components/collaboration/ShareDialog';
 import { Spinner } from '@/components/ui/spinner';
 import { Sparkles, Bot, Shield, Scale, Rocket, TrendingUp, Upload } from 'lucide-react';
 import Link from 'next/link';
@@ -555,6 +556,11 @@ export default function FlowPage() {
                         {industries.find((i) => i.value === context?.industry)?.label} ·{' '}
                         {roles.find((r) => r.value === context?.role)?.label}
                     </div>
+                </div>
+
+                {/* 협업 시작 버튼 */}
+                <div className="mb-4">
+                    <ShareDialog />
                 </div>
 
                 {/* AI 생성 버튼 */}
