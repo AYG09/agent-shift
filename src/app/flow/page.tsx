@@ -435,12 +435,12 @@ export default function FlowPage() {
 
         const result = await generateNodeSplit(
             { industry: context.industry, role: context.role, task: context.task, platforms: context.platforms },
-            { id: node.id, label: node.label, description: node.description, type: node.type },
+            { id: node.id, label: node.label, description: node.description, type: node.type, metrics: node.metrics },
             flowType
         );
 
         if (result) {
-            // FlowNode 형식으로 변환
+            // FlowNode 형식으로 변환 (duration/durationUnit → metrics 변환)
             return {
                 nodes: result.nodes.map(
                     (n: {
@@ -449,6 +449,8 @@ export default function FlowPage() {
                         description?: string;
                         type: string;
                         stressLevel?: string;
+                        duration?: number;
+                        durationUnit?: 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
                     }) => ({
                         id: n.id,
                         label: n.label,
@@ -456,6 +458,11 @@ export default function FlowPage() {
                         type: n.type as 'task' | 'decision' | 'subprocess' | 'agent',
                         stressLevel: n.stressLevel as 'low' | 'medium' | 'high' | undefined,
                         position: { x: 0, y: 0 }, // FlowCanvas에서 재배치
+                        metrics: n.duration ? {
+                            duration: n.duration,
+                            durationUnit: n.durationUnit || 'minutes',
+                            timeMinutes: n.durationUnit === 'minutes' ? n.duration : undefined,
+                        } : undefined,
                     })
                 ),
                 edges: [] as { id: string; source: string; target: string }[],

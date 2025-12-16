@@ -528,6 +528,7 @@ export async function POST(request: NextRequest) {
 - 이름: ${node.label}
 - 설명: ${node.description || '없음'}
 - 현재 타입: ${node.type}
+- 현재 소요시간: ${node.metrics?.duration ? `${node.metrics.duration}${node.metrics.durationUnit || 'minutes'}` : '미정'}
 - 플로우 종류: ${flowType}
 
 ## 요구사항
@@ -535,7 +536,8 @@ export async function POST(request: NextRequest) {
 2. 각 노드에 고유한 id (sub-1, sub-2 등), label, description을 부여하세요.
 3. type은 process(일반 작업), decision(분기점), io(입출력) 중 적절히 선택하세요.
 4. 병목이나 어려운 단계는 stressLevel을 'medium' 또는 'high'로 설정하세요.
-5. summary에 분할 이유와 전체 요약을 작성하세요.`;
+5. **각 노드에 duration(숫자)과 durationUnit(단위)을 반드시 설정하세요.**
+6. summary에 분할 이유와 전체 요약을 작성하세요.`;
                 break;
 
             default:

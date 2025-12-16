@@ -388,7 +388,7 @@ export function useAIGeneration() {
     const generateNodeSplit = useCallback(
         async (
             context: WorkContext,
-            node: { id: string; label: string; description?: string; type: string },
+            node: { id: string; label: string; description?: string; type: string; metrics?: { duration?: number; durationUnit?: string } },
             flowType: 'asis' | 'tobe'
         ): Promise<{
             nodes: Array<{
@@ -397,6 +397,8 @@ export function useAIGeneration() {
                 description?: string;
                 type: string;
                 stressLevel?: string;
+                duration?: number;
+                durationUnit?: 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
             }>;
             summary: string;
         } | null> => {

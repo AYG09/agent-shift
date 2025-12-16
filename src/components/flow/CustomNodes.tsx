@@ -34,6 +34,7 @@ type DecisionNodeData = {
     label: string;
     condition?: string;
     shape?: ShapeType;
+    metrics?: NodeMetrics;
 };
 
 type IONodeData = {
@@ -41,6 +42,7 @@ type IONodeData = {
     ioType?: 'input' | 'output';
     description?: string;
     shape?: ShapeType;
+    metrics?: NodeMetrics;
 };
 
 type AgentNodeData = {
@@ -420,6 +422,7 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
     // 마름모 노드 - 꼭지점에 Handle 배치를 위해 커스텀 렌더링
     const size = 100; // 마름모 크기
     const half = size / 2;
+    const durationText = formatDuration(data.metrics);
 
     return (
         <div
@@ -510,6 +513,9 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
                 <div className="font-semibold text-[11px] text-slate-800 leading-tight text-center max-w-[70px]">
                     {data.label}
                 </div>
+                {durationText && (
+                    <div className="text-[9px] text-amber-600 mt-0.5">⏱️{durationText}</div>
+                )}
             </div>
         </div>
     );
@@ -524,6 +530,7 @@ export const IONode = memo(({ data, selected }: NodeProps<Node<IONodeData>>) => 
     const isInput = data.ioType !== 'output';
     const hasDescription = !!data.description;
     const shape = data.shape || 'parallelogram';
+    const durationText = formatDuration(data.metrics);
 
     return (
         <NodeShapeWrapper
@@ -539,6 +546,9 @@ export const IONode = memo(({ data, selected }: NodeProps<Node<IONodeData>>) => 
                 <div className="flex items-center gap-2">
                     <span className="text-lg">{isInput ? '📥' : '📤'}</span>
                     <span className="font-semibold text-sm text-slate-800">{data.label}</span>
+                    {durationText && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">⏱️{durationText}</span>
+                    )}
                     {hasDescription && (
                         <span
                             className="text-xs text-slate-400 ml-auto transition-transform"

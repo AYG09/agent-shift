@@ -158,13 +158,15 @@ export const NodeSplitResponseSchema = z.object({
     nodes: z.array(
         z.object({
             id: z.string(),
-            label: z.string(),
-            description: z.string().optional(),
+            label: z.string().max(40).describe('단계명 (40자)'),
+            description: z.string().max(100).optional().describe('설명 (100자)'),
             type: z.enum(['terminal', 'process', 'decision', 'io', 'agent', 'task', 'subprocess']),
             stressLevel: z.enum(['low', 'medium', 'high']).optional(),
+            duration: z.number().int().optional().describe('소요시간 (숫자)'),
+            durationUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months']).optional().describe('시간 단위'),
         })
-    ),
-    summary: z.string(),
+    ).max(6).describe('분할된 노드 4~6개'),
+    summary: z.string().max(150).describe('분할 요약 (150자)'),
 });
 
 export type NodeSplitResponse = z.infer<typeof NodeSplitResponseSchema>;
