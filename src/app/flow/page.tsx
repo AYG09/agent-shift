@@ -544,199 +544,192 @@ export default function FlowPage() {
     return (
         <div className="h-screen pro-canvas text-[#18181B] flex overflow-hidden">
             {/* Sidebar - Pro Glassmorphism */}
-            <div className="w-64 bg-white/80 backdrop-blur-xl border-r border-[#E2E4E9] p-4 flex flex-col">
-                <Link href="/" className="text-xl font-semibold text-[#18181B] mb-6">
-                    Agent Shift
-                </Link>
-
-                <div className="mb-6 p-3 bg-[#F5F6F8] rounded-xl border border-[#E2E4E9]">
-                    <div className="text-xs text-[#71717A] mb-2">현재 분석 중</div>
-                    <div className="text-sm font-medium text-[#18181B]">{context?.task}</div>
-                    <div className="text-xs text-[#71717A] mt-1">
-                        {industries.find((i) => i.value === context?.industry)?.label} ·{' '}
-                        {roles.find((r) => r.value === context?.role)?.label}
-                    </div>
+            <div className="w-64 bg-white/80 backdrop-blur-xl border-r border-[#E2E4E9] flex flex-col overflow-hidden">
+                {/* Fixed Header */}
+                <div className="p-4 pb-3 border-b border-[#E2E4E9]/50 shrink-0">
+                    <Link href="/" className="text-xl font-semibold text-[#18181B]">
+                        Agent Shift
+                    </Link>
                 </div>
 
-                {/* 협업 시작 버튼 */}
-                <div className="mb-4">
-                    <ShareDialog />
-                </div>
-
-                {/* AI 생성 버튼 */}
-                <div className="mb-4 space-y-2">
-                    <Button
-                        onClick={handleGenerateAsIs}
-                        disabled={isLoading}
-                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500"
-                    >
-                        {isLoading ? (
-                            <span className="flex items-center gap-2">
-                                <Spinner size="sm" className="text-white" />
-                                <span>AI 생성 중...</span>
-                            </span>
-                        ) : (
-                            <span className="flex items-center gap-2 whitespace-nowrap">
-                                <Sparkles className="w-4 h-4" />
-                                As-Is 플로우 생성
-                            </span>
-                        )}
-                    </Button>
-                    <Button
-                        onClick={handleGenerateToBe}
-                        disabled={isLoading || asIsNodes.length === 0}
-                        className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500"
-                    >
-                        {isLoading ? (
-                            <span className="flex items-center gap-2">
-                                <Spinner size="sm" className="text-white" />
-                                <span>AI 변환 중...</span>
-                            </span>
-                        ) : (
-                            <span className="flex items-center gap-2 whitespace-nowrap">
-                                <Bot className="w-4 h-4" />
-                                To-Be 변환
-                            </span>
-                        )}
-                    </Button>
-                    {error && <p className="text-xs text-red-500 bg-red-50 p-2 rounded-lg">{error}</p>}
-                </div>
-
-                {/* Scenario Selector */}
-                {toBeNodes.length > 0 && (
-                    <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="text-xs text-gray-500 mb-2">AI 자동화 수준</div>
-                        <div className="space-y-1">
-                            <button
-                                onClick={() => setSelectedScenario('conservative')}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 whitespace-nowrap ${selectedScenario === 'conservative'
-                                    ? 'bg-amber-100 text-amber-700 border border-amber-300'
-                                    : 'text-gray-600 hover:bg-gray-100'
-                                    }`}
-                            >
-                                <Shield className="w-3.5 h-3.5" />
-                                Conservative - 인간 감독 유지
-                            </button>
-                            <button
-                                onClick={() => setSelectedScenario('balanced')}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 whitespace-nowrap ${selectedScenario === 'balanced'
-                                    ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                    : 'text-gray-600 hover:bg-gray-100'
-                                    }`}
-                            >
-                                <Scale className="w-3.5 h-3.5" />
-                                Balanced - AI 코파일럿
-                            </button>
-                            <button
-                                onClick={() => setSelectedScenario('aggressive')}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 whitespace-nowrap ${selectedScenario === 'aggressive'
-                                    ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
-                                    : 'text-gray-600 hover:bg-gray-100'
-                                    }`}
-                            >
-                                <Rocket className="w-3.5 h-3.5" />
-                                Aggressive - 최대 자동화
-                            </button>
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-4 pt-3 space-y-4">
+                    {/* 현재 분석 중 */}
+                    <div className="p-3 bg-[#F5F6F8] rounded-xl border border-[#E2E4E9]">
+                        <div className="text-xs text-[#71717A] mb-2">현재 분석 중</div>
+                        <div className="text-sm font-medium text-[#18181B]">{context?.task}</div>
+                        <div className="text-xs text-[#71717A] mt-1">
+                            {industries.find((i) => i.value === context?.industry)?.label} ·{' '}
+                            {roles.find((r) => r.value === context?.role)?.label}
                         </div>
                     </div>
-                )}
 
-                {/* 뷰 모드 탭 바 - 프리미엄 디자인 */}
-                <div className="mb-4">
-                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1 font-medium">
-                        플로우 뷰
+                    {/* 협업 시작 버튼 */}
+                    <ShareDialog />
+
+                    {/* AI 생성 버튼 */}
+                    <div className="space-y-2">
+                        <Button
+                            onClick={handleGenerateAsIs}
+                            disabled={isLoading}
+                            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500"
+                        >
+                            {isLoading ? (
+                                <span className="flex items-center gap-2">
+                                    <Spinner size="sm" className="text-white" />
+                                    <span>AI 생성 중...</span>
+                                </span>
+                            ) : (
+                                <span className="flex items-center gap-2 whitespace-nowrap">
+                                    <Sparkles className="w-4 h-4" />
+                                    As-Is 플로우 생성
+                                </span>
+                            )}
+                        </Button>
+                        <Button
+                            onClick={handleGenerateToBe}
+                            disabled={isLoading || asIsNodes.length === 0}
+                            className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500"
+                        >
+                            {isLoading ? (
+                                <span className="flex items-center gap-2">
+                                    <Spinner size="sm" className="text-white" />
+                                    <span>AI 변환 중...</span>
+                                </span>
+                            ) : (
+                                <span className="flex items-center gap-2 whitespace-nowrap">
+                                    <Bot className="w-4 h-4" />
+                                    To-Be 변환
+                                </span>
+                            )}
+                        </Button>
+                        {error && <p className="text-xs text-red-500 bg-red-50 p-2 rounded-lg">{error}</p>}
                     </div>
-                    <div className="relative bg-gray-100/80 backdrop-blur-sm rounded-xl p-1">
-                        {/* 슬라이딩 인디케이터 배경 */}
-                        <div
-                            className="absolute top-1 h-[calc(100%-8px)] bg-white rounded-lg shadow-md transition-all duration-300 ease-out"
-                            style={{
-                                left: viewMode === 'asis' ? '4px' : viewMode === 'tobe' ? 'calc(33.33% + 2px)' : 'calc(66.66%)',
-                                width: 'calc(33.33% - 4px)',
-                            }}
-                        />
-                        <div className="relative flex gap-0.5">
+
+                    {/* Scenario Selector */}
+                    {toBeNodes.length > 0 && (
+                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="text-xs text-gray-500 mb-2">AI 자동화 수준</div>
+                            <div className="space-y-1">
+                                <button
+                                    onClick={() => setSelectedScenario('conservative')}
+                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 ${selectedScenario === 'conservative'
+                                        ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                                        : 'text-gray-600 hover:bg-gray-100'
+                                        }`}
+                                >
+                                    <Shield className="w-3.5 h-3.5 shrink-0" />
+                                    <span className="truncate">보수적 - 인간 감독</span>
+                                </button>
+                                <button
+                                    onClick={() => setSelectedScenario('balanced')}
+                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 ${selectedScenario === 'balanced'
+                                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                        : 'text-gray-600 hover:bg-gray-100'
+                                        }`}
+                                >
+                                    <Scale className="w-3.5 h-3.5 shrink-0" />
+                                    <span className="truncate">균형 - AI 코파일럿</span>
+                                </button>
+                                <button
+                                    onClick={() => setSelectedScenario('aggressive')}
+                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 ${selectedScenario === 'aggressive'
+                                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                        : 'text-gray-600 hover:bg-gray-100'
+                                        }`}
+                                >
+                                    <Rocket className="w-3.5 h-3.5 shrink-0" />
+                                    <span className="truncate">적극적 - 최대 자동화</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 뷰 모드 탭 바 - 컴팩트 디자인 */}
+                    <div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1 font-medium">
+                            플로우 뷰
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 bg-gray-100/80 backdrop-blur-sm rounded-xl p-1">
                             <button
                                 onClick={() => setViewMode('asis')}
-                                className={`relative z-10 flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'asis'
-                                    ? 'text-blue-600'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium transition-all duration-200 ${viewMode === 'asis'
+                                    ? 'bg-white text-blue-600 shadow-md'
+                                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
                                     }`}
                             >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                 </svg>
-                                <span>As-Is</span>
+                                As-Is
                             </button>
                             <button
                                 onClick={() => setViewMode('tobe')}
-                                className={`relative z-10 flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'tobe'
-                                    ? 'text-emerald-600'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium transition-all duration-200 ${viewMode === 'tobe'
+                                    ? 'bg-white text-emerald-600 shadow-md'
+                                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
                                     }`}
                             >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                 </svg>
-                                <span>To-Be</span>
+                                To-Be
                             </button>
                             <button
                                 onClick={() => setViewMode('split')}
-                                className={`relative z-10 flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'split'
-                                    ? 'text-purple-600'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium transition-all duration-200 ${viewMode === 'split'
+                                    ? 'bg-white text-purple-600 shadow-md'
+                                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
                                     }`}
                             >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
                                 </svg>
-                                <span>비교</span>
+                                비교
                             </button>
                         </div>
                     </div>
-                </div>
 
-                {/* 추가 메뉴 */}
-                <div className="space-y-1 flex-1">
-                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1">
-                        추가 기능
+                    {/* 추가 메뉴 */}
+                    <div className="space-y-1">
+                        <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1">
+                            추가 기능
+                        </div>
+                        <Link href="/strategy">
+                            <Button
+                                variant="ghost"
+                                className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100 gap-2"
+                            >
+                                <TrendingUp className="w-4 h-4" />
+                                변화 전략
+                            </Button>
+                        </Link>
+                        <Link href="/export">
+                            <Button
+                                variant="ghost"
+                                className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100 gap-2"
+                            >
+                                <Upload className="w-4 h-4" />
+                                내보내기
+                            </Button>
+                        </Link>
                     </div>
-                    <Link href="/strategy">
-                        <Button
-                            variant="ghost"
-                            className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100 gap-2"
-                        >
-                            <TrendingUp className="w-4 h-4" />
-                            변화 전략
-                        </Button>
-                    </Link>
-                    <Link href="/export">
-                        <Button
-                            variant="ghost"
-                            className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100 gap-2"
-                        >
-                            <Upload className="w-4 h-4" />
-                            내보내기
-                        </Button>
-                    </Link>
-                </div>
 
-                {/* API 설정 */}
-                <div className="mb-4">
+                    {/* API 설정 */}
                     <ApiKeySettings />
                 </div>
 
-                <Button
-                    variant="outline"
-                    className="border-slate-700"
-                    onClick={() => setStep('context')}
-                >
-                    ← 맥락 수정
-                </Button>
+                {/* Fixed Footer */}
+                <div className="p-4 pt-3 border-t border-[#E2E4E9]/50 shrink-0">
+                    <Button
+                        variant="outline"
+                        className="w-full border-gray-300 text-gray-600 hover:text-gray-900"
+                        onClick={() => setStep('context')}
+                    >
+                        ← 맥락 수정
+                    </Button>
+                </div>
             </div>
-
-
-            {/* Main Canvas */}
             <div className="flex-1 relative">
                 {viewMode === 'split' ? (
                     <SplitViewCanvas

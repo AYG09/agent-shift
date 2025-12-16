@@ -542,9 +542,13 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                 }}
             >
                 <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#D4D4D8" />
-                <Controls className="!bg-white/80 !backdrop-blur-md !border-[#E2E4E9] !rounded-xl !shadow-lg [&>button]:!bg-white [&>button]:!border-[#E2E4E9] [&>button]:!text-[#71717A] [&>button:hover]:!bg-[#F5F6F8] [&>button:hover]:!text-[#18181B]" />
+                <Controls 
+                    position="bottom-right"
+                    className="!bg-white/80 !backdrop-blur-md !border-[#E2E4E9] !rounded-xl !shadow-lg !mb-24 !mr-3 [&>button]:!bg-white [&>button]:!border-[#E2E4E9] [&>button]:!text-[#71717A] [&>button:hover]:!bg-[#F5F6F8] [&>button:hover]:!text-[#18181B]" 
+                />
                 <MiniMap
-                    className="!bg-white/80 !backdrop-blur-md !border-[#E2E4E9] !rounded-xl !shadow-lg"
+                    position="bottom-left"
+                    className="!bg-white/80 !backdrop-blur-md !border-[#E2E4E9] !rounded-xl !shadow-lg !mb-4 !ml-3"
                     nodeColor={(node) => {
                         if (node.type === 'agent') return '#10B981';
                         if (node.type === 'decision') return '#F59E0B';
@@ -556,32 +560,29 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                     }}
                 />
 
-                {/* View Mode Panel */}
-                <Panel position="top-left" className="flex gap-2">
-                    <Button
-                        size="sm"
-                        variant={viewMode === 'asis' ? 'default' : 'outline'}
-                        onClick={() => setViewMode('asis')}
-                        className="bg-white border-gray-200 text-gray-700 hover:bg-gray-100 shadow-sm"
-                    >
-                        📊 As-Is
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant={viewMode === 'tobe' ? 'default' : 'outline'}
-                        onClick={() => setViewMode('tobe')}
-                        className="bg-white border-gray-200 text-gray-700 hover:bg-gray-100 shadow-sm"
-                    >
-                        🤖 To-Be
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant={viewMode === 'split' ? 'default' : 'outline'}
-                        onClick={() => setViewMode('split')}
-                        className="bg-white border-gray-200 text-gray-700 hover:bg-gray-100 shadow-sm"
-                    >
-                        ⚡ 비교
-                    </Button>
+                {/* Node/Edge Count Info - Top Left */}
+                <Panel
+                    position="top-left"
+                    className="bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 shadow-lg"
+                >
+                    {currentNodes.length > 0 ? (
+                        <span className="flex items-center gap-3">
+                            <span className="flex items-center gap-1.5 font-medium">
+                                {viewMode === 'tobe' ? '🤖' : '📊'}
+                                <span className="text-gray-900">{currentNodes.length}</span>
+                                <span className="text-gray-500">노드</span>
+                            </span>
+                            <span className="w-px h-4 bg-gray-300" />
+                            <span className="flex items-center gap-1.5">
+                                <span className="text-gray-900">{currentEdges.length}</span>
+                                <span className="text-gray-500">연결</span>
+                            </span>
+                            <span className="w-px h-4 bg-gray-300" />
+                            <span className="text-gray-400 text-xs">우클릭: 메뉴</span>
+                        </span>
+                    ) : (
+                        <span className="text-gray-500">📝 더블클릭으로 노드 추가</span>
+                    )}
                 </Panel>
 
                 {/* Breadcrumb */}
@@ -603,7 +604,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                 )}
 
                 {/* Top Right Controls */}
-                <Panel position="top-right" className="flex gap-2">
+                <Panel position="top-right" className="flex gap-2 !mt-3 !mr-3">
                     <Button
                         size="sm"
                         onClick={() => setIsHeatmapMode(!isHeatmapMode)}
@@ -612,38 +613,29 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                                 : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'
                             } shadow-sm border`}
                     >
-                        {isHeatmapMode ? '🔥 Heatmap ON' : '🌡️ Heatmap OFF'}
+                        {isHeatmapMode ? '🔥 ON' : '🌡️ Heatmap'}
                     </Button>
                     <Button
                         size="sm"
                         onClick={handleAddNewNode}
-                        className="bg-green-600 hover:bg-green-500"
+                        className="bg-green-600 hover:bg-green-500 text-white shadow-sm"
                     >
-                        ➕ 노드 추가
-                    </Button>
-                    <Button
-                        onClick={onGenerateFlow}
-                        disabled={isLoading}
-                        className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500"
-                    >
-                        {isLoading ? '⏳ 생성 중...' : '✨ AI 플로우 생성'}
+                        ➕ 추가
                     </Button>
                 </Panel>
 
-                {/* Node Count Info */}
+                {/* Keyboard Shortcuts Hint - Bottom Left (above MiniMap) */}
                 <Panel
                     position="bottom-left"
-                    className="bg-white/90 backdrop-blur-md px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 shadow-sm"
+                    className="bg-white/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-500 shadow-sm !mb-40 !ml-3"
                 >
-                    {currentNodes.length > 0 ? (
-                        <span>
-                            {viewMode === 'tobe' ? '🤖' : '📊'} {currentNodes.length}개 노드 · {currentEdges.length}개 연결선
-                            <span className="text-gray-400 ml-2">|</span>
-                            <span className="text-gray-500 ml-2">우클릭: 메뉴 · 더블클릭: 추가</span>
-                        </span>
-                    ) : (
-                        <span>노드 없음 | 더블클릭으로 추가</span>
-                    )}
+                    <span className="flex items-center gap-2">
+                        <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-mono">Del</kbd>
+                        <span>삭제</span>
+                        <span className="text-gray-300">|</span>
+                        <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-mono">Dbl-Click</kbd>
+                        <span>노드 추가</span>
+                    </span>
                 </Panel>
             </ReactFlow>
 
