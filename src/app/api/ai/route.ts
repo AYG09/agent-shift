@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from '@ai-sdk/google';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { generateObject } from 'ai';
+import { generateObject, NoObjectGeneratedError } from 'ai';
 import {
     AsIsFlowResponseSchema,
     ToBeFlowResponseSchema,
@@ -28,6 +28,37 @@ function normalizeMetrics(obj: unknown): unknown {
         return result;
     }
     return obj;
+}
+
+// 배열 길이 정규화 (AI가 권장 개수 초과 시 잘라내기)
+function normalizeArrayLengths(obj: unknown): unknown {
+    if (obj === null || obj === undefined) return obj;
+    if (Array.isArray(obj)) {
+        return obj.slice(0, 10).map(normalizeArrayLengths); // 모든 배열 최대 10개
+    }
+    if (typeof obj === 'object') {
+        const result: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+            result[key] = normalizeArrayLengths(value);
+        }
+        return result;
+    }
+    return obj;
+}
+
+// NoObjectGeneratedError에서 raw text 파싱 시도
+function tryParseFromError(error: unknown): unknown | null {
+    if (NoObjectGeneratedError.isInstance(error) && error.text) {
+        try {
+            const parsed = JSON.parse(error.text);
+            console.log('[API Route] Fallback: parsed from error.text');
+            return normalizeArrayLengths(parsed);
+        } catch {
+            console.log('[API Route] Fallback failed: could not parse error.text');
+            return null;
+        }
+    }
+    return null;
 }
 
 // 그래프 컨텍스트 추출: 인접 노드(predecessors, successors) 정보 생성
@@ -554,16 +585,21 @@ export async function POST(request: NextRequest) {
             maxOutputTokens: 16384, // 실제 필요량 6,000 + 여유분
         });
 
-        // 숫자 필드 정규화 후 반환
-        const normalizedObject = normalizeMetrics(object);
+        // 숫자 필드 + 배열 길이 정규화 후 반환
+        const normalizedObject = normalizeArrayLengths(normalizeMetrics(object));
         return NextResponse.json(normalizedObject);
     } catch (error) {
         console.error('AI API Error:', error);
         
-        // finishReason: 'length' 에러 특별 처리
-        if (error instanceof Error && error.message.includes('No object generated')) {
+        // NoObjectGeneratedError: 스키마 검증 실패 시 raw text에서 파싱 시도
+        if (NoObjectGeneratedError.isInstance(error)) {
+            const fallbackResult = tryParseFromError(error);
+            if (fallbackResult) {
+                console.log('[API Route] Using fallback result from error.text');
+                return NextResponse.json(fallbackResult);
+            }
             return NextResponse.json({ 
-                error: 'AI 응답이 너무 길어 잘렸습니다. 다시 시도해주세요.' 
+                error: 'AI 응답이 스키마와 일치하지 않습니다. 다시 시도해주세요.' 
             }, { status: 500 });
         }
         

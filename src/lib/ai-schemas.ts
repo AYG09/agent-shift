@@ -120,12 +120,12 @@ export const DrilldownResponseSchema = z.object({
             label: z.string().max(40).describe('단계명 (40자 이내, 핵심만)'),
             description: z.string().max(150).describe('설명 (150자 이내, 간결하게)'),
             duration: z.string().max(20).optional().describe('소요 시간 (예: 30초, 2분)'),
-            tools: z.array(z.string().max(35)).max(3).optional().describe('도구명 1~3개 (35자 이내)'),
+            tools: z.array(z.string().max(35)).optional().describe('도구명 1~3개 권장'),
             painPoints: z.string().max(100).optional().describe('AS-IS: 인간이 겪는 어려움 (100자)'),
             aiImplementation: z.object({
                 method: z.string().max(150).describe('AI 처리 방법 (150자 이내)'),
-                technology: z.array(z.string().max(35)).max(3).describe('기술명 1~3개 (35자 이내)'),
-                platforms: z.array(z.string().max(35)).max(4).optional().describe('플랫폼명 1~4개 (35자 이내)'),
+                technology: z.array(z.string().max(35)).optional().describe('기술명 1~3개 권장'),
+                platforms: z.array(z.string().max(35)).optional().describe('플랫폼명 1~3개 권장'),
                 automationLevel: z.enum(['full', 'partial', 'assisted']).optional(),
             }).optional().describe('TO-BE AI 노드 전용'),
             resources: z.array(z.object({
@@ -133,12 +133,12 @@ export const DrilldownResponseSchema = z.object({
                 title: z.string().max(50).describe('자료 제목 (50자)'),
                 url: z.string().max(50).optional().describe('검색 키워드 (50자)'),
                 description: z.string().max(80).optional().describe('설명 (80자)'),
-            })).max(2).optional().describe('학습 자료 최대 2개'),
+            })).optional().describe('학습 자료 1~2개 권장'),
         })
-    ).max(5).describe('하위 단계 3~5개'),
+    ).max(8).describe('하위 단계 3~5개 권장'),
     summary: z.string().max(200).describe('전체 요약 (200자 이내)'),
     automationOverview: z.object({
-        replacedAsIsSteps: z.array(z.string().max(40)).max(5).optional().describe('대체된 AS-IS 단계명'),
+        replacedAsIsSteps: z.array(z.string().max(40)).optional().describe('대체된 AS-IS 단계명'),
         skillBasedReduction: z.object({
             asIsTotal: z.number().int().optional().describe('AS-IS 총 시간(분)'),
             junior: z.string().max(50).describe('저역량 절감 (예: 90분→5분)'),
@@ -146,8 +146,8 @@ export const DrilldownResponseSchema = z.object({
             senior: z.string().max(50).describe('고역량 절감'),
         }).optional().describe('역량별 시간 절감'),
         totalTimeReduction: z.string().max(80).optional().describe('절감 요약 (80자)'),
-        keyBenefits: z.array(z.string().max(80)).max(3).optional().describe('핵심 이점 3개 (각 80자)'),
-        implementationTips: z.array(z.string().max(80)).max(3).optional().describe('구현 팁 3개 (각 80자)'),
+        keyBenefits: z.array(z.string().max(80)).optional().describe('핵심 이점 1~3개 권장'),
+        implementationTips: z.array(z.string().max(80)).optional().describe('구현 팁 1~3개 권장'),
     }).optional().describe('TO-BE AI 노드: 자동화 개요'),
 });
 
