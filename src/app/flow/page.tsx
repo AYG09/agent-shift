@@ -17,6 +17,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useAppStore } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
+import { Spinner } from '@/components/ui/spinner';
+import { Sparkles, Bot, Shield, Scale, Rocket, TrendingUp, Upload } from 'lucide-react';
 import Link from 'next/link';
 
 // ReactFlow 동적 import
@@ -336,8 +338,11 @@ export default function FlowPage() {
 
                     <Card className="bg-white/70 backdrop-blur-xl border-white/50 shadow-xl">
                         <CardHeader>
-                            <CardTitle className="text-2xl text-[#18181B] font-semibold">
-                                📝 업무 맥락 입력
+                            <CardTitle className="text-2xl text-[#18181B] font-semibold flex items-center gap-2">
+                                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                업무 맥락 입력
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6">
@@ -559,16 +564,36 @@ export default function FlowPage() {
                         disabled={isLoading}
                         className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500"
                     >
-                        {isLoading ? '⏳ 생성 중...' : '✨ As-Is 플로우 생성'}
+                        {isLoading ? (
+                            <span className="flex items-center gap-2">
+                                <Spinner size="sm" className="text-white" />
+                                <span>AI 생성 중...</span>
+                            </span>
+                        ) : (
+                            <span className="flex items-center gap-2 whitespace-nowrap">
+                                <Sparkles className="w-4 h-4" />
+                                As-Is 플로우 생성
+                            </span>
+                        )}
                     </Button>
                     <Button
                         onClick={handleGenerateToBe}
                         disabled={isLoading || asIsNodes.length === 0}
                         className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500"
                     >
-                        {isLoading ? '⏳ 생성 중...' : '🤖 To-Be 변환'}
+                        {isLoading ? (
+                            <span className="flex items-center gap-2">
+                                <Spinner size="sm" className="text-white" />
+                                <span>AI 변환 중...</span>
+                            </span>
+                        ) : (
+                            <span className="flex items-center gap-2 whitespace-nowrap">
+                                <Bot className="w-4 h-4" />
+                                To-Be 변환
+                            </span>
+                        )}
                     </Button>
-                    {error && <p className="text-xs text-red-400">{error}</p>}
+                    {error && <p className="text-xs text-red-500 bg-red-50 p-2 rounded-lg">{error}</p>}
                 </div>
 
                 {/* Scenario Selector */}
@@ -578,68 +603,90 @@ export default function FlowPage() {
                         <div className="space-y-1">
                             <button
                                 onClick={() => setSelectedScenario('conservative')}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${selectedScenario === 'conservative'
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 whitespace-nowrap ${selectedScenario === 'conservative'
                                     ? 'bg-amber-100 text-amber-700 border border-amber-300'
                                     : 'text-gray-600 hover:bg-gray-100'
                                     }`}
                             >
-                                🛡️ Conservative - 인간 감독 유지
+                                <Shield className="w-3.5 h-3.5" />
+                                Conservative - 인간 감독 유지
                             </button>
                             <button
                                 onClick={() => setSelectedScenario('balanced')}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${selectedScenario === 'balanced'
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 whitespace-nowrap ${selectedScenario === 'balanced'
                                     ? 'bg-blue-100 text-blue-700 border border-blue-300'
                                     : 'text-gray-600 hover:bg-gray-100'
                                     }`}
                             >
-                                ⚖️ Balanced - AI 코파일럿
+                                <Scale className="w-3.5 h-3.5" />
+                                Balanced - AI 코파일럿
                             </button>
                             <button
                                 onClick={() => setSelectedScenario('aggressive')}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${selectedScenario === 'aggressive'
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all flex items-center gap-2 whitespace-nowrap ${selectedScenario === 'aggressive'
                                     ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
                                     : 'text-gray-600 hover:bg-gray-100'
                                     }`}
                             >
-                                🚀 Aggressive - 최대 자동화
+                                <Rocket className="w-3.5 h-3.5" />
+                                Aggressive - 최대 자동화
                             </button>
                         </div>
                     </div>
                 )}
 
-                {/* 뷰 모드 탭 바 */}
+                {/* 뷰 모드 탭 바 - 프리미엄 디자인 */}
                 <div className="mb-4">
-                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1">
+                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 px-1 font-medium">
                         플로우 뷰
                     </div>
-                    <div className="bg-gray-100 rounded-lg p-1 flex gap-1">
-                        <button
-                            onClick={() => setViewMode('asis')}
-                            className={`flex-1 px-3 py-2.5 rounded-md text-sm font-medium transition-all ${viewMode === 'asis'
-                                ? 'bg-white text-blue-600 shadow-sm'
-                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                                }`}
-                        >
-                            📊 As-Is
-                        </button>
-                        <button
-                            onClick={() => setViewMode('tobe')}
-                            className={`flex-1 px-3 py-2.5 rounded-md text-sm font-medium transition-all ${viewMode === 'tobe'
-                                ? 'bg-white text-emerald-600 shadow-sm'
-                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                                }`}
-                        >
-                            🤖 To-Be
-                        </button>
-                        <button
-                            onClick={() => setViewMode('split')}
-                            className={`flex-1 px-3 py-2.5 rounded-md text-sm font-medium transition-all ${viewMode === 'split'
-                                ? 'bg-white text-purple-600 shadow-sm'
-                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                                }`}
-                        >
-                            ⚡ 비교
-                        </button>
+                    <div className="relative bg-gray-100/80 backdrop-blur-sm rounded-xl p-1">
+                        {/* 슬라이딩 인디케이터 배경 */}
+                        <div
+                            className="absolute top-1 h-[calc(100%-8px)] bg-white rounded-lg shadow-md transition-all duration-300 ease-out"
+                            style={{
+                                left: viewMode === 'asis' ? '4px' : viewMode === 'tobe' ? 'calc(33.33% + 2px)' : 'calc(66.66%)',
+                                width: 'calc(33.33% - 4px)',
+                            }}
+                        />
+                        <div className="relative flex gap-0.5">
+                            <button
+                                onClick={() => setViewMode('asis')}
+                                className={`relative z-10 flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'asis'
+                                    ? 'text-blue-600'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                                <span>As-Is</span>
+                            </button>
+                            <button
+                                onClick={() => setViewMode('tobe')}
+                                className={`relative z-10 flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'tobe'
+                                    ? 'text-emerald-600'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                <span>To-Be</span>
+                            </button>
+                            <button
+                                onClick={() => setViewMode('split')}
+                                className={`relative z-10 flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 ${viewMode === 'split'
+                                    ? 'text-purple-600'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                                </svg>
+                                <span>비교</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -651,17 +698,19 @@ export default function FlowPage() {
                     <Link href="/strategy">
                         <Button
                             variant="ghost"
-                            className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                            className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100 gap-2"
                         >
-                            📈 변화 전략
+                            <TrendingUp className="w-4 h-4" />
+                            변화 전략
                         </Button>
                     </Link>
                     <Link href="/export">
                         <Button
                             variant="ghost"
-                            className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                            className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100 gap-2"
                         >
-                            📤 내보내기
+                            <Upload className="w-4 h-4" />
+                            내보내기
                         </Button>
                     </Link>
                 </div>

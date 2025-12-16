@@ -1,6 +1,76 @@
 'use client';
 
-import { BaseEdge, EdgeProps, getBezierPath } from '@xyflow/react';
+import { BaseEdge, EdgeProps, getBezierPath, EdgeLabelRenderer } from '@xyflow/react';
+
+// 선택 가능한 기본 엣지 (호버/선택 시 강조)
+export function SelectableEdge({
+    id,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    style = {},
+    selected,
+    data,
+}: EdgeProps) {
+    const [edgePath, labelX, labelY] = getBezierPath({
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+    });
+
+    // 선택/호버 상태에 따른 스타일
+    const strokeColor = selected ? '#6366f1' : '#71717A';
+    const strokeWidth = selected ? 3 : 2;
+    const glowFilter = selected ? 'drop-shadow(0 0 4px rgba(99, 102, 241, 0.5))' : 'none';
+
+    return (
+        <>
+            {/* 투명한 히트 영역 (클릭 감지 용이) */}
+            <path
+                d={edgePath}
+                fill="none"
+                stroke="transparent"
+                strokeWidth={20}
+                className="cursor-pointer"
+            />
+            
+            {/* 실제 엣지 */}
+            <BaseEdge
+                id={id}
+                path={edgePath}
+                style={{
+                    ...style,
+                    stroke: strokeColor,
+                    strokeWidth: strokeWidth,
+                    filter: glowFilter,
+                    transition: 'stroke 0.2s, stroke-width 0.2s, filter 0.2s',
+                }}
+            />
+
+            {/* 선택 시 라벨 표시 */}
+            {selected && (
+                <EdgeLabelRenderer>
+                    <div
+                        style={{
+                            position: 'absolute',
+                            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+                            pointerEvents: 'all',
+                        }}
+                        className="bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full shadow-lg font-medium"
+                    >
+                        우클릭: 메뉴
+                    </div>
+                </EdgeLabelRenderer>
+            )}
+        </>
+    );
+}
 
 // 토큰 시뮬레이션이 있는 애니메이션 엣지
 export function TokenFlowEdge({
@@ -12,9 +82,10 @@ export function TokenFlowEdge({
     sourcePosition,
     targetPosition,
     style = {},
+    selected,
     data,
 }: EdgeProps) {
-    const [edgePath] = getBezierPath({
+    const [edgePath, labelX, labelY] = getBezierPath({
         sourceX,
         sourceY,
         sourcePosition,
@@ -27,16 +98,34 @@ export function TokenFlowEdge({
     const speed = (data?.speed as 'slow' | 'fast') || 'fast';
     const duration = speed === 'slow' ? '3s' : '1s';
     const tokenColor = speed === 'slow' ? '#ef4444' : '#22c55e';
+    
+    // 선택 상태
+    const strokeColor = selected 
+        ? '#6366f1' 
+        : speed === 'slow' ? '#fbbf24' : '#6366f1';
+    const strokeWidth = selected ? 4 : 2;
+    const glowFilter = selected ? 'drop-shadow(0 0 6px rgba(99, 102, 241, 0.6))' : 'none';
 
     return (
         <>
+            {/* 투명한 히트 영역 */}
+            <path
+                d={edgePath}
+                fill="none"
+                stroke="transparent"
+                strokeWidth={20}
+                className="cursor-pointer"
+            />
+
             <BaseEdge
                 id={id}
                 path={edgePath}
                 style={{
                     ...style,
-                    stroke: speed === 'slow' ? '#fbbf24' : '#6366f1',
-                    strokeWidth: 2,
+                    stroke: strokeColor,
+                    strokeWidth: strokeWidth,
+                    filter: glowFilter,
+                    transition: 'stroke 0.2s, stroke-width 0.2s',
                 }}
             />
 
@@ -66,6 +155,22 @@ export function TokenFlowEdge({
                     />
                 </circle>
             )}
+
+            {/* 선택 시 라벨 */}
+            {selected && (
+                <EdgeLabelRenderer>
+                    <div
+                        style={{
+                            position: 'absolute',
+                            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+                            pointerEvents: 'all',
+                        }}
+                        className="bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full shadow-lg font-medium"
+                    >
+                        우클릭: 메뉴
+                    </div>
+                </EdgeLabelRenderer>
+            )}
         </>
     );
 }
@@ -80,8 +185,9 @@ export function SmoothEdge({
     sourcePosition,
     targetPosition,
     style = {},
+    selected,
 }: EdgeProps) {
-    const [edgePath] = getBezierPath({
+    const [edgePath, labelX, labelY] = getBezierPath({
         sourceX,
         sourceY,
         sourcePosition,
@@ -90,21 +196,55 @@ export function SmoothEdge({
         targetPosition,
     });
 
+    const strokeColor = selected ? '#6366f1' : '#6366f1';
+    const strokeWidth = selected ? 4 : 2;
+    const glowFilter = selected ? 'drop-shadow(0 0 6px rgba(99, 102, 241, 0.6))' : 'none';
+
     return (
-        <BaseEdge
-            id={id}
-            path={edgePath}
-            style={{
-                ...style,
-                stroke: '#6366f1',
-                strokeWidth: 2,
-            }}
-        />
+        <>
+            {/* 투명한 히트 영역 */}
+            <path
+                d={edgePath}
+                fill="none"
+                stroke="transparent"
+                strokeWidth={20}
+                className="cursor-pointer"
+            />
+
+            <BaseEdge
+                id={id}
+                path={edgePath}
+                style={{
+                    ...style,
+                    stroke: strokeColor,
+                    strokeWidth: strokeWidth,
+                    filter: glowFilter,
+                    transition: 'stroke 0.2s, stroke-width 0.2s',
+                }}
+            />
+
+            {selected && (
+                <EdgeLabelRenderer>
+                    <div
+                        style={{
+                            position: 'absolute',
+                            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+                            pointerEvents: 'all',
+                        }}
+                        className="bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full shadow-lg font-medium"
+                    >
+                        우클릭: 메뉴
+                    </div>
+                </EdgeLabelRenderer>
+            )}
+        </>
     );
 }
 
 // 엣지 타입 내보내기
 export const edgeTypes = {
+    default: SelectableEdge,
+    selectable: SelectableEdge,
     tokenFlow: TokenFlowEdge,
     smooth: SmoothEdge,
 };

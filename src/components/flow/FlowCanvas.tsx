@@ -16,12 +16,15 @@ import {
     Panel,
     NodeChange,
     NodePositionChange,
+    EdgeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { nodeTypes } from './CustomNodes';
+import { edgeTypes } from './CustomEdges';
 import NodeEditor from './NodeEditor';
 import NodeContextMenu from './NodeContextMenu';
+import EdgeContextMenu from './EdgeContextMenu';
 import { Button } from '@/components/ui/button';
 import { useAppStore, FlowNode, FlowEdge } from '@/lib/store';
 
@@ -50,6 +53,8 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
         updateNodePosition,
         setAsIsFlow,
         setToBeFlow,
+        deleteEdge: storeDeleteEdge,
+        updateEdge: storeUpdateEdge,
     } = useAppStore();
 
     const [editorOpen, setEditorOpen] = useState(false);
@@ -64,6 +69,16 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
         nodeId: string;
         nodeLabel: string;
     } | null>(null);
+
+    // Edge Context Menu State
+    const [edgeContextMenu, setEdgeContextMenu] = useState<{
+        x: number;
+        y: number;
+        edgeId: string;
+    } | null>(null);
+
+    // 선택된 Edge ID
+    const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
     const [isSplitting, setIsSplitting] = useState(false);
     const [isHeatmapMode, setIsHeatmapMode] = useState(false);
@@ -105,9 +120,23 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
 
     const currentEdges = useMemo(() => {
         if (viewMode === 'tobe') {
-            return storeToBeEdges.map((e) => ({ id: e.id, source: e.source, target: e.target }));
+            return storeToBeEdges.map((e) => ({ 
+                id: e.id, 
+                source: e.source, 
+                target: e.target,
+                sourceHandle: e.sourceHandle,
+                targetHandle: e.targetHandle,
+                animated: e.animated,
+            }));
         }
-        return storeAsIsEdges.map((e) => ({ id: e.id, source: e.source, target: e.target }));
+        return storeAsIsEdges.map((e) => ({ 
+            id: e.id, 
+            source: e.source, 
+            target: e.target,
+            sourceHandle: e.sourceHandle,
+            targetHandle: e.targetHandle,
+            animated: e.animated,
+        }));
     }, [viewMode, storeAsIsEdges, storeToBeEdges]);
 
     const storeNodes = viewMode === 'tobe' ? storeToBeNodes : storeAsIsNodes;
@@ -139,9 +168,108 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
     }, [currentNodes, currentEdges, placeholderNodes, setNodes, setEdges]);
 
     const onConnect = useCallback(
-        (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
-        [setEdges]
+        (connection: Connection) => {
+            // 새 엣지를 로컬 상태에 추가
+            setEdges((eds) => addEdge(connection, eds));
+            
+            // Store에도 동기화 (handle 정보 포함)
+            const handleSuffix = connection.sourceHandle && connection.targetHandle 
+                ? `-${connection.sourceHandle}-${connection.targetHandle}` 
+                : '';
+            const newEdge: FlowEdge = {
+                id: `edge-${connection.source}-${connection.target}${handleSuffix}`,
+                source: connection.source || '',
+                target: connection.target || '',
+                sourceHandle: connection.sourceHandle || undefined,
+                targetHandle: connection.targetHandle || undefined,
+            };
+            
+            if (target === 'asis') {
+                setAsIsFlow(storeAsIsNodes, [...storeAsIsEdges, newEdge]);
+            } else {
+                setToBeFlow(storeToBeNodes, [...storeToBeEdges, newEdge]);
+            }
+        },
+        [setEdges, target, storeAsIsNodes, storeAsIsEdges, storeToBeNodes, storeToBeEdges, setAsIsFlow, setToBeFlow]
     );
+
+    // Edge 클릭 핸들러
+    const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+        event.stopPropagation();
+        setSelectedEdgeId(edge.id);
+        setEdgeContextMenu(null); // 이전 메뉴 닫기
+    }, []);
+
+    // Edge 우클릭 컨텍스트 메뉴
+    const onEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setSelectedEdgeId(edge.id);
+        setEdgeContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            edgeId: edge.id,
+        });
+    }, []);
+
+    // Edge 컨텍스트 메뉴 닫기
+    const closeEdgeContextMenu = useCallback(() => {
+        setEdgeContextMenu(null);
+    }, []);
+
+    // Edge 삭제 핸들러
+    const handleDeleteEdge = useCallback(() => {
+        if (!selectedEdgeId) return;
+        
+        // Store에서 삭제
+        storeDeleteEdge(selectedEdgeId, target);
+        
+        // 로컬 상태에서도 삭제
+        setEdges((eds) => eds.filter((e) => e.id !== selectedEdgeId));
+        
+        setSelectedEdgeId(null);
+        closeEdgeContextMenu();
+    }, [selectedEdgeId, storeDeleteEdge, target, setEdges, closeEdgeContextMenu]);
+
+    // Edge 애니메이션 토글 핸들러
+    const handleToggleEdgeAnimation = useCallback(() => {
+        if (!selectedEdgeId) return;
+        
+        const currentEdge = storeEdges.find((e) => e.id === selectedEdgeId);
+        const newAnimated = !currentEdge?.animated;
+        
+        // Store 업데이트
+        storeUpdateEdge(selectedEdgeId, { animated: newAnimated }, target);
+        
+        // 로컬 상태 업데이트
+        setEdges((eds) => eds.map((e) => 
+            e.id === selectedEdgeId ? { ...e, animated: newAnimated } : e
+        ));
+        
+        closeEdgeContextMenu();
+    }, [selectedEdgeId, storeEdges, storeUpdateEdge, target, setEdges, closeEdgeContextMenu]);
+
+    // 선택된 Edge의 animated 상태
+    const selectedEdgeAnimated = useMemo(() => {
+        if (!selectedEdgeId) return false;
+        return storeEdges.find((e) => e.id === selectedEdgeId)?.animated ?? false;
+    }, [selectedEdgeId, storeEdges]);
+
+    // Delete 키로 선택된 Edge 삭제
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Delete' && selectedEdgeId) {
+                handleDeleteEdge();
+            }
+            if (e.key === 'Escape') {
+                setSelectedEdgeId(null);
+                closeEdgeContextMenu();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedEdgeId, handleDeleteEdge, closeEdgeContextMenu]);
 
     // 좌클릭 = 선택만 (우클릭 메뉴용)
     const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
@@ -301,7 +429,9 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
     // 빈 공간 더블클릭 시 노드 추가
     const onPaneClick = useCallback(() => {
         closeContextMenu();
-    }, [closeContextMenu]);
+        closeEdgeContextMenu();
+        setSelectedEdgeId(null);
+    }, [closeContextMenu, closeEdgeContextMenu]);
 
     const onPaneDoubleClick = useCallback((event: React.MouseEvent) => {
         const bounds = (event.target as HTMLElement).getBoundingClientRect();
@@ -396,12 +526,16 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                 onConnect={onConnect}
                 onNodeClick={onNodeClick}
                 onNodeContextMenu={onNodeContextMenu}
+                onEdgeClick={onEdgeClick}
+                onEdgeContextMenu={onEdgeContextMenu}
                 onPaneClick={onPaneClick}
                 onDoubleClick={onPaneDoubleClick}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 fitView
                 className="pro-canvas"
                 defaultEdgeOptions={{
+                    type: 'selectable',
                     style: { stroke: '#71717A', strokeWidth: 1.5 },
                     markerEnd: { type: 'arrowclosed', color: '#71717A', width: 16, height: 16 },
                     animated: false,
@@ -499,12 +633,13 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                 {/* Node Count Info */}
                 <Panel
                     position="bottom-left"
-                    className="bg-slate-800/80 px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-400"
+                    className="bg-white/90 backdrop-blur-md px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 shadow-sm"
                 >
                     {currentNodes.length > 0 ? (
                         <span>
-                            {viewMode === 'tobe' ? '🤖' : '📊'} {currentNodes.length}개 노드 |
-                            우클릭: 메뉴 | 더블클릭: 추가
+                            {viewMode === 'tobe' ? '🤖' : '📊'} {currentNodes.length}개 노드 · {currentEdges.length}개 연결선
+                            <span className="text-gray-400 ml-2">|</span>
+                            <span className="text-gray-500 ml-2">우클릭: 메뉴 · 더블클릭: 추가</span>
                         </span>
                     ) : (
                         <span>노드 없음 | 더블클릭으로 추가</span>
@@ -525,6 +660,19 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                     onDrilldown={handleDrilldown}
                     onDelete={handleDelete}
                     isLoading={isSplitting}
+                />
+            )}
+
+            {/* Edge Context Menu */}
+            {edgeContextMenu && (
+                <EdgeContextMenu
+                    x={edgeContextMenu.x}
+                    y={edgeContextMenu.y}
+                    edgeId={edgeContextMenu.edgeId}
+                    onClose={closeEdgeContextMenu}
+                    onDelete={handleDeleteEdge}
+                    onToggleAnimation={handleToggleEdgeAnimation}
+                    isAnimated={selectedEdgeAnimated}
                 />
             )}
 

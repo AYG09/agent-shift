@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
 import { FrameworkSelector } from '@/components/strategy/FrameworkCard';
 import { frameworkPhases } from '@/components/strategy/GanttChart';
 import { useAppStore } from '@/lib/store';
@@ -26,10 +27,11 @@ interface Phase {
 }
 
 export default function StrategyPage() {
-    const { context } = useAppStore();
+    const { context, setStrategy } = useAppStore();
     const { isLoading, error, generateChangeStrategy } = useAIGeneration();
     const [selectedFramework, setSelectedFramework] = useState<FrameworkType | null>(null);
     const [generatedPhases, setGeneratedPhases] = useState<Phase[] | null>(null);
+    const [totalWeeks, setTotalWeeks] = useState(12);
 
     // Interactive state
     const [completedActions, setCompletedActions] = useState<Set<string>>(new Set());
@@ -50,6 +52,12 @@ export default function StrategyPage() {
 
         if (result?.phases) {
             setGeneratedPhases(result.phases);
+            // Store에 전략 저장
+            setStrategy({
+                framework: selectedFramework,
+                phases: result.phases,
+                totalWeeks,
+            });
             // Reset completion state for new phases
             setCompletedActions(new Set());
             setRoleAssignments({});
@@ -156,21 +164,40 @@ export default function StrategyPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="mb-6">
+                            <div className="mb-6 flex items-center gap-4 flex-wrap">
                                 <Button
                                     onClick={handleGenerateStrategy}
                                     disabled={isLoading || !context}
                                     className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"
                                 >
-                                    {isLoading ? '분석 중...' : 'AI 맞춤 전략 생성'}
+                                    {isLoading ? (
+                                        <span className="flex items-center gap-2">
+                                            <Spinner size="sm" className="text-white" />
+                                            분석 중...
+                                        </span>
+                                    ) : (
+                                        'AI 맞춤 전략 생성'
+                                    )}
                                 </Button>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm text-[#71717A] whitespace-nowrap">타임라인:</label>
+                                    <Input
+                                        type="number"
+                                        min={4}
+                                        max={52}
+                                        value={totalWeeks}
+                                        onChange={(e) => setTotalWeeks(Math.max(4, Math.min(52, parseInt(e.target.value) || 12)))}
+                                        className="w-20 bg-white border-[#E2E4E9]"
+                                    />
+                                    <span className="text-sm text-[#71717A]">주</span>
+                                </div>
                                 {!context && (
-                                    <span className="text-xs text-[#71717A] ml-3">
+                                    <span className="text-xs text-[#71717A]">
                                         맥락 입력 후 사용 가능
                                     </span>
                                 )}
                                 {error && (
-                                    <span className="text-xs text-[#EF4444] ml-3">{error}</span>
+                                    <span className="text-xs text-[#EF4444]">{error}</span>
                                 )}
                             </div>
 
@@ -178,7 +205,7 @@ export default function StrategyPage() {
                             <div className="bg-[#F5F6F8] rounded-xl p-4 border border-[#E2E4E9]">
                                 <GanttChart
                                     phases={displayPhases}
-                                    totalWeeks={12}
+                                    totalWeeks={totalWeeks}
                                     onPhaseClick={(phase) => console.log('Phase clicked:', phase)}
                                 />
                             </div>
@@ -188,14 +215,14 @@ export default function StrategyPage() {
 
                 {/* Step 3: Interactive Actions */}
                 {selectedFramework && displayPhases.length > 0 && (
-                    <Card className="bg-slate-800/50 border-slate-700">
+                    <Card className="bg-white/90 backdrop-blur-xl border-[#E2E4E9] shadow-sm">
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <span className="bg-green-500 text-white text-sm px-2 py-1 rounded">
+                            <CardTitle className="flex items-center gap-2 text-base font-medium text-[#18181B]">
+                                <span className="bg-emerald-500 text-white text-xs px-2 py-1 rounded">
                                     3
                                 </span>
                                 주요 액션 아이템
-                                <span className="text-xs text-slate-400 ml-auto">
+                                <span className="text-xs text-[#71717A] ml-auto">
                                     전체 진행률:{' '}
                                     {Math.round(
                                         displayPhases.reduce(
@@ -214,7 +241,7 @@ export default function StrategyPage() {
                                     return (
                                         <div
                                             key={phase.id}
-                                            className="p-4 bg-slate-900/50 rounded-lg border border-slate-700"
+                                            className="p-4 bg-white/60 backdrop-blur-md rounded-xl border border-[#E2E4E9] shadow-sm hover:shadow-md transition-shadow"
                                         >
                                             {/* Phase Header */}
                                             <div className="flex items-center gap-2 mb-3">
@@ -222,16 +249,16 @@ export default function StrategyPage() {
                                                     className="w-3 h-3 rounded-full"
                                                     style={{ backgroundColor: phase.color }}
                                                 />
-                                                <h3 className="font-medium text-white flex-1">
+                                                <h3 className="font-medium text-[#18181B] flex-1">
                                                     {phase.name}
                                                 </h3>
-                                                <span className="text-xs text-slate-400">
+                                                <span className="text-xs text-[#71717A]">
                                                     {progress}%
                                                 </span>
                                             </div>
 
                                             {/* Progress Bar */}
-                                            <div className="h-1.5 bg-slate-700 rounded-full mb-3 overflow-hidden">
+                                            <div className="h-1.5 bg-[#E2E4E9] rounded-full mb-3 overflow-hidden">
                                                 <div
                                                     className="h-full rounded-full transition-all duration-300"
                                                     style={{
@@ -252,7 +279,7 @@ export default function StrategyPage() {
                                                             [phase.id]: e.target.value,
                                                         }))
                                                     }
-                                                    className="bg-slate-800 border-slate-600 text-sm h-8"
+                                                    className="bg-white/80 border-[#E2E4E9] text-sm h-8 text-[#18181B] placeholder:text-[#A1A1AA]"
                                                 />
                                             </div>
 
@@ -274,8 +301,8 @@ export default function StrategyPage() {
                                                                 className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors
                                                                 ${
                                                                     isCompleted
-                                                                        ? 'bg-green-500 border-green-500'
-                                                                        : 'border-slate-500 group-hover:border-slate-400'
+                                                                        ? 'bg-emerald-500 border-emerald-500'
+                                                                        : 'border-[#D4D4D8] group-hover:border-[#A1A1AA]'
                                                                 }`}
                                                             >
                                                                 {isCompleted && (
@@ -297,8 +324,8 @@ export default function StrategyPage() {
                                                             <span
                                                                 className={`text-sm transition-colors ${
                                                                     isCompleted
-                                                                        ? 'text-slate-500 line-through'
-                                                                        : 'text-slate-300 group-hover:text-white'
+                                                                        ? 'text-[#A1A1AA] line-through'
+                                                                        : 'text-[#52525B] group-hover:text-[#18181B]'
                                                                 }`}
                                                             >
                                                                 {action}

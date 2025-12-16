@@ -96,9 +96,9 @@ export default function NodeEditor({
 
     return (
         <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
+            <DialogContent className="bg-white/95 backdrop-blur-xl border-[#E2E4E9] text-[#18181B] max-w-md shadow-2xl">
                 <DialogHeader>
-                    <DialogTitle>
+                    <DialogTitle className="text-[#18181B]">
                         {mode === 'create' ? '✨ 새 노드 추가' : '✏️ 노드 편집'}
                     </DialogTitle>
                 </DialogHeader>
@@ -106,32 +106,32 @@ export default function NodeEditor({
                 <div className="space-y-4 py-4">
                     {/* Label */}
                     <div className="space-y-2">
-                        <Label>노드 이름 *</Label>
+                        <Label className="text-[#71717A]">노드 이름 *</Label>
                         <Input
                             value={label}
                             onChange={(e) => setLabel(e.target.value)}
                             placeholder="예: 데이터 수집"
-                            className="bg-slate-800 border-slate-600"
+                            className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#A1A1AA]"
                         />
                     </div>
 
                     {/* Description */}
                     <div className="space-y-2">
-                        <Label>설명</Label>
+                        <Label className="text-[#71717A]">설명</Label>
                         <Textarea
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             placeholder="이 단계에 대한 설명..."
-                            className="bg-slate-800 border-slate-600 resize-none"
+                            className="bg-white/50 border-[#E2E4E9] text-[#18181B] placeholder:text-[#A1A1AA] resize-none"
                             rows={2}
                         />
                     </div>
 
                     {/* Type */}
                     <div className="space-y-2">
-                        <Label>노드 유형</Label>
+                        <Label className="text-[#71717A]">노드 유형</Label>
                         <Select value={type} onValueChange={(v) => setType(v as NodeData['type'])}>
-                            <SelectTrigger className="bg-slate-800 border-slate-600">
+                            <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -145,12 +145,12 @@ export default function NodeEditor({
 
                     {/* Shape Selection */}
                     <div className="space-y-2">
-                        <Label>도형 모양 (선택 사항)</Label>
+                        <Label className="text-[#71717A]">도형 모양 (선택 사항)</Label>
                         <Select
                             value={shape}
                             onValueChange={(v) => setShape(v as NodeData['shape'])}
                         >
-                            <SelectTrigger className="bg-slate-800 border-slate-600">
+                            <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
                                 <SelectValue placeholder="자동 (기본값)" />
                             </SelectTrigger>
                             <SelectContent>
@@ -167,12 +167,12 @@ export default function NodeEditor({
                     {/* Stress Level (for non-agent) */}
                     {type !== 'agent' && (
                         <div className="space-y-2">
-                            <Label>스트레스 레벨</Label>
+                            <Label className="text-[#71717A]">스트레스 레벨</Label>
                             <Select
                                 value={stressLevel}
                                 onValueChange={(v) => setStressLevel(v as NodeData['stressLevel'])}
                             >
-                                <SelectTrigger className="bg-slate-800 border-slate-600">
+                                <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -187,14 +187,14 @@ export default function NodeEditor({
                     {/* Collaboration Type (for agent) */}
                     {type === 'agent' && (
                         <div className="space-y-2">
-                            <Label>협업 유형</Label>
+                            <Label className="text-[#71717A]">협업 유형</Label>
                             <Select
                                 value={collaborationType}
                                 onValueChange={(v) =>
                                     setCollaborationType(v as NodeData['collaborationType'])
                                 }
                             >
-                                <SelectTrigger className="bg-slate-800 border-slate-600">
+                                <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -219,14 +219,14 @@ export default function NodeEditor({
                         <Button
                             variant="outline"
                             onClick={onClose}
-                            className="border-slate-600 bg-white text-slate-900 hover:bg-slate-100"
+                            className="border-[#E2E4E9] bg-white text-[#18181B] hover:bg-[#F5F6F8]"
                         >
                             취소
                         </Button>
                         <Button
                             onClick={handleSave}
                             disabled={!label}
-                            className="bg-indigo-600 hover:bg-indigo-500"
+                            className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"
                         >
                             {mode === 'create' ? '추가' : '저장'}
                         </Button>

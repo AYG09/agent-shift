@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
 import { generateWordReport, generateExcelWBS } from '@/lib/export-service';
 import { useAppStore } from '@/lib/store';
 import Link from 'next/link';
 
 export default function ExportPage() {
-    const { context, asIsNodes, toBeNodes } = useAppStore();
+    const { context, asIsNodes, toBeNodes, strategy } = useAppStore();
     const [isExportingWord, setIsExportingWord] = useState(false);
     const [isExportingExcel, setIsExportingExcel] = useState(false);
     const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -72,6 +73,20 @@ export default function ExportPage() {
         ],
     };
 
+    // Store strategy가 있으면 사용, 없으면 sampleStrategy fallback
+    const exportStrategy = strategy
+        ? {
+              framework: strategy.framework === 'kotter' ? "Kotter's 8 Steps" 
+                       : strategy.framework === 'adkar' ? "ADKAR Model" 
+                       : "Lewin's Change Model",
+              phases: strategy.phases.map((p) => ({
+                  name: p.name,
+                  duration: p.duration,
+                  actions: p.actions,
+              })),
+          }
+        : sampleStrategy;
+
     const handleExportWord = async () => {
         setIsExportingWord(true);
         setExportStatus(null);
@@ -80,7 +95,7 @@ export default function ExportPage() {
                 context: exportContext,
                 asIsNodes: exportAsIsNodes,
                 toBeNodes: exportToBeNodes,
-                strategy: sampleStrategy,
+                strategy: exportStrategy,
             });
             setExportStatus('✅ Word 보고서가 다운로드되었습니다!');
         } catch (error) {
@@ -95,7 +110,7 @@ export default function ExportPage() {
         setIsExportingExcel(true);
         setExportStatus(null);
         try {
-            generateExcelWBS({ strategy: sampleStrategy });
+            generateExcelWBS({ strategy: exportStrategy });
             setExportStatus('✅ Excel WBS가 다운로드되었습니다!');
         } catch (error) {
             setExportStatus('❌ Excel 내보내기 실패');
@@ -114,7 +129,7 @@ export default function ExportPage() {
                 context: exportContext,
                 asIsNodes: exportAsIsNodes,
                 toBeNodes: exportToBeNodes,
-                strategy: sampleStrategy,
+                strategy: exportStrategy,
             });
             setExportStatus('✅ PDF 보고서가 다운로드되었습니다!');
         } catch (error) {
@@ -178,7 +193,7 @@ export default function ExportPage() {
                 {/* Export Options */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                     {/* Word Report */}
-                    <Card className="bg-white border-[#E2E4E9] hover:border-[#3B82F6] transition-colors shadow-sm">
+                    <Card className="group bg-white border-[#E2E4E9] hover:border-[#3B82F6] hover:-translate-y-1 hover:shadow-lg transition-all duration-200 shadow-sm">
                         <CardHeader>
                             <div className="w-10 h-10 bg-[#DBEAFE] rounded-lg flex items-center justify-center text-xl mb-3">
                                 📄
@@ -202,13 +217,20 @@ export default function ExportPage() {
                                 disabled={isExportingWord}
                                 className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white"
                             >
-                                {isExportingWord ? '생성 중...' : 'Word 다운로드'}
+                                {isExportingWord ? (
+                                    <span className="flex items-center gap-2">
+                                        <Spinner size="sm" className="text-white" />
+                                        생성 중...
+                                    </span>
+                                ) : (
+                                    'Word 다운로드'
+                                )}
                             </Button>
                         </CardContent>
                     </Card>
 
                     {/* Excel WBS */}
-                    <Card className="bg-white border-[#E2E4E9] hover:border-[#10B981] transition-colors shadow-sm">
+                    <Card className="group bg-white border-[#E2E4E9] hover:border-[#10B981] hover:-translate-y-1 hover:shadow-lg transition-all duration-200 shadow-sm">
                         <CardHeader>
                             <div className="w-10 h-10 bg-[#D1FAE5] rounded-lg flex items-center justify-center text-xl mb-3">
                                 📊
@@ -232,22 +254,35 @@ export default function ExportPage() {
                                 disabled={isExportingExcel}
                                 className="w-full bg-[#10B981] hover:bg-[#059669] text-white"
                             >
-                                {isExportingExcel ? '생성 중...' : 'Excel 다운로드'}
+                                {isExportingExcel ? (
+                                    <span className="flex items-center gap-2">
+                                        <Spinner size="sm" className="text-white" />
+                                        생성 중...
+                                    </span>
+                                ) : (
+                                    'Excel 다운로드'
+                                )}
                             </Button>
                         </CardContent>
                     </Card>
 
                     {/* PDF Report */}
-                    <Card className="bg-slate-800/70 border-slate-700 hover:border-purple-500/50 transition-colors md:col-span-2">
+                    <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200 hover:border-purple-400 hover:shadow-xl transition-all md:col-span-2 relative overflow-hidden">
+                        {/* Premium Badge */}
+                        <div className="absolute top-4 right-4 px-2 py-1 bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-xs font-medium rounded-full shadow-lg">
+                            ✨ Premium
+                        </div>
                         <CardHeader>
-                            <div className="text-4xl mb-2">📑</div>
-                            <CardTitle className="text-white">Premium PDF 보고서</CardTitle>
-                            <CardDescription className="text-slate-400">
+                            <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-indigo-100 rounded-xl flex items-center justify-center text-2xl mb-3 shadow-sm">
+                                📑
+                            </div>
+                            <CardTitle className="text-[#18181B]">Premium PDF 보고서</CardTitle>
+                            <CardDescription className="text-[#71717A]">
                                 전문적인 형식의 PDF 보고서를 다운로드합니다
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <ul className="text-sm text-slate-400 mb-4 space-y-1">
+                            <ul className="text-sm text-[#71717A] mb-4 space-y-1">
                                 <li>• Executive Summary</li>
                                 <li>• As-Is vs To-Be 비교 분석</li>
                                 <li>• 자동화율 및 ROI 메트릭</li>
@@ -256,9 +291,16 @@ export default function ExportPage() {
                             <Button
                                 onClick={handleExportPdf}
                                 disabled={isExportingPdf}
-                                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500"
+                                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-lg"
                             >
-                                {isExportingPdf ? '⏳ 생성 중...' : '📥 PDF 다운로드'}
+                                {isExportingPdf ? (
+                                    <span className="flex items-center gap-2">
+                                        <Spinner size="sm" className="text-white" />
+                                        생성 중...
+                                    </span>
+                                ) : (
+                                    '📥 PDF 다운로드'
+                                )}
                             </Button>
                         </CardContent>
                     </Card>
@@ -267,10 +309,10 @@ export default function ExportPage() {
                 {/* Export Status */}
                 {exportStatus && (
                     <Card
-                        className={`${exportStatus.includes('✅') ? 'border-green-500' : 'border-red-500'} bg-slate-800/50`}
+                        className={`${exportStatus.includes('✅') ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'} shadow-sm`}
                     >
                         <CardContent className="py-4 text-center">
-                            <span className="text-lg">{exportStatus}</span>
+                            <span className="text-lg text-[#18181B]">{exportStatus}</span>
                         </CardContent>
                     </Card>
                 )}

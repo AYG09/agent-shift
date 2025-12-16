@@ -26,6 +26,27 @@ export interface FlowEdge {
     id: string;
     source: string;
     target: string;
+    sourceHandle?: string;
+    targetHandle?: string;
+    animated?: boolean;
+}
+
+// 전략 단계 정보
+export interface StrategyPhase {
+    id: string;
+    name: string;
+    duration: string;
+    startWeek: number;
+    endWeek: number;
+    actions: string[];
+    color: string;
+}
+
+// 전략 데이터
+export interface StrategyData {
+    framework: 'kotter' | 'adkar' | 'lewin';
+    phases: StrategyPhase[];
+    totalWeeks: number;
 }
 
 // 컨텍스트 정보
@@ -46,6 +67,10 @@ interface AppState {
     // 사용자 컨텍스트
     context: UserContext | null;
     setContext: (context: UserContext) => void;
+
+    // 변화 전략
+    strategy: StrategyData | null;
+    setStrategy: (strategy: StrategyData | null) => void;
 
     // As-Is 플로우
     asIsNodes: FlowNode[];
@@ -84,6 +109,7 @@ interface AppState {
     // 엣지 CRUD 액션
     addEdge: (edge: FlowEdge, target: 'asis' | 'tobe') => void;
     deleteEdge: (id: string, target: 'asis' | 'tobe') => void;
+    updateEdge: (id: string, updates: Partial<FlowEdge>, target: 'asis' | 'tobe') => void;
 
     // 초기화
     clearAll: () => void;
@@ -94,6 +120,7 @@ export const useAppStore = create<AppState>()(
         (set) => ({
             // 초기 상태
             context: null,
+            strategy: null,
             asIsNodes: [],
             asIsEdges: [],
             toBeNodes: [],
@@ -104,6 +131,7 @@ export const useAppStore = create<AppState>()(
 
             // 기본 액션
             setContext: (context) => set({ context }),
+            setStrategy: (strategy) => set({ strategy }),
             setAsIsFlow: (nodes, edges) => set({ asIsNodes: nodes, asIsEdges: edges }),
             setToBeFlow: (nodes, edges) => set({ toBeNodes: nodes, toBeEdges: edges }),
 
@@ -187,10 +215,22 @@ export const useAppStore = create<AppState>()(
                     };
                 }),
 
+            // 엣지 업데이트
+            updateEdge: (id, updates, target) =>
+                set((state) => {
+                    const edges = target === 'asis' ? state.asIsEdges : state.toBeEdges;
+                    return {
+                        [target === 'asis' ? 'asIsEdges' : 'toBeEdges']: edges.map((edge) =>
+                            edge.id === id ? { ...edge, ...updates } : edge
+                        ),
+                    };
+                }),
+
             // 초기화
             clearAll: () =>
                 set({
                     context: null,
+                    strategy: null,
                     asIsNodes: [],
                     asIsEdges: [],
                     toBeNodes: [],
@@ -215,6 +255,7 @@ export const useAppStore = create<AppState>()(
             // 저장할 필드만 선택 (isGenerating은 제외)
             partialize: (state) => ({
                 context: state.context,
+                strategy: state.strategy,
                 asIsNodes: state.asIsNodes,
                 asIsEdges: state.asIsEdges,
                 toBeNodes: state.toBeNodes,

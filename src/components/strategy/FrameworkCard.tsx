@@ -55,21 +55,29 @@ export default function FrameworkCard({ id, selected, onSelect }: FrameworkCardP
 
     return (
         <Card
-            className={`cursor-pointer transition-all duration-300 backdrop-blur-sm
+            className={`cursor-pointer transition-all duration-300 backdrop-blur-xl relative overflow-hidden
         ${
             selected
-                ? `bg-gradient-to-br ${fw.color} bg-opacity-20 border-2 ${fw.borderColor} scale-105 shadow-lg`
-                : 'bg-slate-800/70 border-slate-700 hover:border-slate-500 hover:scale-102'
+                ? `bg-gradient-to-br ${fw.color} border-2 ${fw.borderColor} scale-[1.02] shadow-xl ring-2 ring-offset-2 ring-offset-white`
+                : 'bg-white/80 border-[#E2E4E9] hover:border-[#3B82F6]/50 hover:shadow-lg hover:-translate-y-0.5'
         }
       `}
             onClick={() => onSelect?.(id)}
         >
+            {/* 체크마크 아이콘 */}
+            {selected && (
+                <div className="absolute top-3 right-3 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200">
+                    <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+            )}
             <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-lg">
                     <span className="text-2xl">{fw.icon}</span>
-                    <span className={selected ? 'text-white' : 'text-slate-200'}>{fw.name}</span>
+                    <span className={selected ? 'text-white' : 'text-[#18181B]'}>{fw.name}</span>
                 </CardTitle>
-                <CardDescription className={selected ? 'text-slate-200' : 'text-slate-400'}>
+                <CardDescription className={selected ? 'text-white/90' : 'text-[#71717A]'}>
                     {fw.description}
                 </CardDescription>
             </CardHeader>
@@ -79,8 +87,8 @@ export default function FrameworkCard({ id, selected, onSelect }: FrameworkCardP
                     {fw.steps.map((step, idx) => (
                         <span
                             key={idx}
-                            className={`text-xs px-2 py-1 rounded-full 
-                ${selected ? 'bg-white/20 text-white' : 'bg-slate-700 text-slate-400'}
+                            className={`text-xs px-2 py-1 rounded-full transition-colors
+                ${selected ? 'bg-white/20 text-white' : 'bg-[#F5F6F8] text-[#71717A]'}
               `}
                         >
                             {idx + 1}. {step}

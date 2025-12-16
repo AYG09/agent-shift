@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { Cpu, GitMerge, Layers } from 'lucide-react';
+import { Cpu, GitMerge, Layers, ArrowRight } from 'lucide-react';
 
 export default function Home() {
     return (
@@ -39,9 +39,10 @@ export default function Home() {
                     <div className="flex justify-center gap-3">
                         <Link
                             href="/flow"
-                            className="px-6 py-3 bg-[#3B82F6] text-white rounded-xl text-base font-medium hover:bg-[#2563EB] transition-colors shadow-sm"
+                            className="group px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-base font-medium hover:from-blue-500 hover:to-indigo-500 hover:shadow-xl hover:scale-105 transition-all duration-200 shadow-lg flex items-center gap-2"
                         >
                             시작하기
+                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                         </Link>
                         <Link
                             href="/strategy"
@@ -76,9 +77,9 @@ export default function Home() {
                     ].map((feature, idx) => (
                         <div
                             key={idx}
-                            className="p-6 rounded-2xl bg-white/30 backdrop-blur-xl border border-white/50 hover:border-[#3B82F6]/50 hover:bg-white/50 transition-all cursor-pointer shadow-lg hover:shadow-xl hover:-translate-y-1"
+                            className="group p-6 rounded-2xl bg-white/30 backdrop-blur-xl border border-white/50 hover:border-[#3B82F6]/50 hover:bg-white/50 transition-all cursor-pointer shadow-lg hover:shadow-xl hover:-translate-y-1"
                         >
-                            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-4 backdrop-blur-md bg-white/50 border border-white/50">
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-4 backdrop-blur-md bg-white/50 border border-white/50 group-hover:scale-110 group-hover:bg-white/80 transition-all duration-200">
                                 {feature.icon}
                             </div>
                             <h3 className="text-base font-semibold text-[#18181B] mb-2">

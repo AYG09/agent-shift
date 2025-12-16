@@ -142,6 +142,7 @@ const NodeShapeWrapper = ({
                 <Handle
                     type="target"
                     position={Position.Top}
+                    id="top"
                     className="!bg-slate-300 w-3 h-3 border-2 border-white"
                 />
             )}
@@ -149,6 +150,7 @@ const NodeShapeWrapper = ({
                 <Handle
                     type="source"
                     position={Position.Right}
+                    id="right"
                     className="!bg-slate-300 w-3 h-3 border-2 border-white"
                 />
             )}
@@ -156,6 +158,7 @@ const NodeShapeWrapper = ({
                 <Handle
                     type="source"
                     position={Position.Bottom}
+                    id="bottom"
                     className="!bg-slate-300 w-3 h-3 border-2 border-white"
                 />
             )}
@@ -163,6 +166,7 @@ const NodeShapeWrapper = ({
                 <Handle
                     type="target"
                     position={Position.Left}
+                    id="left"
                     className="!bg-slate-300 w-3 h-3 border-2 border-white"
                 />
             )}
@@ -277,27 +281,76 @@ ProcessNode.displayName = 'ProcessNode';
 // ============================================
 // Decision Node (마름모 - 판단/분기)
 // ============================================
-// ============================================
-// Decision Node (마름모 - 판단/분기)
+// 마름모는 꼭지점에 연결점이 있어야 하므로 별도 구현
 // ============================================
 export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNodeData>>) => {
-    // Default shape for Decision is 'diamond'
-    const shape = data.shape || 'diamond';
+    // 마름모 노드 - 꼭지점에 Handle 배치를 위해 커스텀 렌더링
+    const size = 100; // 마름모 크기
+    const half = size / 2;
 
     return (
-        <NodeShapeWrapper
-            shape={shape}
-            selected={selected}
-            className="w-[120px] h-[120px]"
-            // Decision 노드는 모든 방향 연결 허용
+        <div
+            className={`relative ${selected ? 'drop-shadow-[0_0_8px_rgba(99,102,241,0.6)]' : ''}`}
+            style={{ width: size, height: size }}
         >
-            <div className="text-center p-2">
-                <span className="text-xl mb-1 block">❓</span>
-                <div className="font-semibold text-xs text-slate-800 leading-tight">
+            {/* 마름모 SVG */}
+            <svg
+                width={size}
+                height={size}
+                viewBox={`0 0 ${size} ${size}`}
+                className="absolute inset-0"
+            >
+                <polygon
+                    points={`${half},4 ${size - 4},${half} ${half},${size - 4} 4,${half}`}
+                    fill="white"
+                    stroke={selected ? '#6366f1' : '#60a5fa'}
+                    strokeWidth={selected ? 3 : 2}
+                    className="transition-all duration-200"
+                />
+            </svg>
+
+            {/* 꼭지점 Handle들 - 상/우/하/좌 */}
+            {/* 상단 꼭지점 */}
+            <Handle
+                type="target"
+                position={Position.Top}
+                id="top"
+                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
+                style={{ top: 0, left: '50%', transform: 'translate(-50%, -50%)' }}
+            />
+            {/* 우측 꼭지점 */}
+            <Handle
+                type="source"
+                position={Position.Right}
+                id="right"
+                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
+                style={{ top: '50%', right: 0, transform: 'translate(50%, -50%)' }}
+            />
+            {/* 하단 꼭지점 */}
+            <Handle
+                type="source"
+                position={Position.Bottom}
+                id="bottom"
+                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
+                style={{ bottom: 0, left: '50%', transform: 'translate(-50%, 50%)' }}
+            />
+            {/* 좌측 꼭지점 */}
+            <Handle
+                type="target"
+                position={Position.Left}
+                id="left"
+                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
+                style={{ top: '50%', left: 0, transform: 'translate(-50%, -50%)' }}
+            />
+
+            {/* 컨텐츠 (중앙에 배치) */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-3 pointer-events-none">
+                <span className="text-lg mb-0.5">❓</span>
+                <div className="font-semibold text-[11px] text-slate-800 leading-tight text-center max-w-[70px]">
                     {data.label}
                 </div>
             </div>
-        </NodeShapeWrapper>
+        </div>
     );
 });
 DecisionNode.displayName = 'DecisionNode';

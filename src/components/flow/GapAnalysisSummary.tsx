@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
+import { motion, useSpring, useTransform } from 'framer-motion';
 
 interface NodeMetrics {
     timeMinutes?: number;
@@ -24,6 +25,81 @@ const formatNumber = (num: number): string => {
     if (num >= 1000) return `${(num / 1000).toFixed(1)}천`;
     return num.toLocaleString();
 };
+
+// 애니메이션 숫자 카운터 컴포넌트
+function AnimatedNumber({ value, suffix = '' }: { value: number; suffix?: string }) {
+    const spring = useSpring(0, { mass: 0.8, stiffness: 75, damping: 15 });
+    const display = useTransform(spring, (current) => Math.round(current).toLocaleString());
+    const [displayValue, setDisplayValue] = useState('0');
+
+    useEffect(() => {
+        spring.set(value);
+    }, [spring, value]);
+
+    useEffect(() => {
+        return display.on('change', (v) => setDisplayValue(v));
+    }, [display]);
+
+    return <span>{displayValue}{suffix}</span>;
+}
+
+// 비교 바 차트 컴포넌트
+function ComparisonBar({ asIs, toBe, label }: { asIs: number; toBe: number; label: string }) {
+    const max = Math.max(asIs, toBe, 1);
+    const asIsPercent = (asIs / max) * 100;
+    const toBePercent = (toBe / max) * 100;
+    const savingsPercent = asIs > 0 ? Math.round(((asIs - toBe) / asIs) * 100) : 0;
+
+    return (
+        <div className="space-y-2">
+            <div className="flex justify-between items-center text-xs">
+                <span className="text-[#71717A]">{label}</span>
+                {savingsPercent > 0 && (
+                    <motion.span
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ delay: 0.5, type: 'spring' }}
+                        className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-semibold"
+                    >
+                        -{savingsPercent}%
+                    </motion.span>
+                )}
+            </div>
+            <div className="space-y-1.5">
+                {/* As-Is Bar */}
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-red-500 w-10 shrink-0">As-Is</span>
+                    <div className="flex-1 h-4 bg-[#F5F6F8] rounded-full overflow-hidden">
+                        <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${asIsPercent}%` }}
+                            transition={{ duration: 0.8, ease: 'easeOut' }}
+                            className="h-full bg-gradient-to-r from-red-400 to-red-500 rounded-full"
+                        />
+                    </div>
+                    <span className="text-[10px] text-[#71717A] w-12 text-right">
+                        <AnimatedNumber value={asIs} />
+                    </span>
+                </div>
+                {/* To-Be Bar */}
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-emerald-600 w-10 shrink-0">To-Be</span>
+                    <div className="flex-1 h-4 bg-[#F5F6F8] rounded-full overflow-hidden">
+                        <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${toBePercent}%` }}
+                            transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
+                            className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full"
+                        />
+                    </div>
+                    <span className="text-[10px] text-[#71717A] w-12 text-right">
+                        <AnimatedNumber value={toBe} />
+                    </span>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 const formatPercent = (before: number, after: number): string => {
     if (before === 0) return '—';
@@ -68,8 +144,8 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
 
     if (!hasData) {
         return (
-            <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-4 border border-slate-700">
-                <div className="text-sm text-slate-400 text-center">
+            <div className="bg-white/90 backdrop-blur-xl rounded-xl p-4 border border-[#E2E4E9] shadow-lg">
+                <div className="text-sm text-[#71717A] text-center">
                     📊 메트릭 데이터가 있으면 ROI 분석이 표시됩니다
                 </div>
             </div>
@@ -77,70 +153,71 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
     }
 
     return (
-        <div className="bg-slate-800/90 backdrop-blur-sm rounded-xl p-4 border border-slate-700 shadow-xl">
-            <div className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                📊 ROI 분석
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="bg-white/90 backdrop-blur-xl rounded-xl p-5 border border-[#E2E4E9] shadow-xl"
+        >
+            <div className="flex items-center justify-between mb-4">
+                <div className="text-sm font-semibold text-[#18181B] flex items-center gap-2">
+                    📊 ROI 분석
+                </div>
+                {/* 총 절감률 뱃지 */}
+                {metrics.asIs.time > 0 && metrics.savings.time > 0 && (
+                    <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ delay: 0.8, type: 'spring', stiffness: 200 }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full shadow-lg"
+                    >
+                        <span className="text-white text-xs font-medium">효율성</span>
+                        <span className="text-white text-sm font-bold">
+                            {Math.round(((metrics.asIs.time - metrics.toBe.time) / metrics.asIs.time) * 100)}%↑
+                        </span>
+                    </motion.div>
+                )}
             </div>
 
-            <div className="grid grid-cols-3 gap-3 text-xs">
-                {/* Time */}
-                <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700">
-                    <div className="text-slate-400 mb-1">⏱️ 소요 시간</div>
-                    <div className="flex justify-between items-baseline">
-                        <span className="text-red-400 line-through">{metrics.asIs.time}분</span>
-                        <span className="text-green-400 font-bold">{metrics.toBe.time}분</span>
-                    </div>
-                    <div
-                        className={`mt-1 font-semibold ${metrics.savings.time > 0 ? 'text-green-400' : 'text-slate-400'}`}
-                    >
-                        {metrics.savings.time > 0 ? `▼ ${metrics.savings.time}분 절감` : '—'}
-                    </div>
-                </div>
-
-                {/* Cost */}
-                <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700">
-                    <div className="text-slate-400 mb-1">💰 비용</div>
-                    <div className="flex justify-between items-baseline">
-                        <span className="text-red-400 line-through">
-                            {formatNumber(metrics.asIs.cost)}₩
-                        </span>
-                        <span className="text-green-400 font-bold">
-                            {formatNumber(metrics.toBe.cost)}₩
-                        </span>
-                    </div>
-                    <div
-                        className={`mt-1 font-semibold ${metrics.savings.cost > 0 ? 'text-green-400' : 'text-slate-400'}`}
-                    >
-                        {metrics.savings.cost > 0
-                            ? `▼ ${formatNumber(metrics.savings.cost)}₩ 절감`
-                            : '—'}
-                    </div>
-                </div>
-
-                {/* People */}
-                <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700">
-                    <div className="text-slate-400 mb-1">👥 인원</div>
-                    <div className="flex justify-between items-baseline">
-                        <span className="text-red-400 line-through">{metrics.asIs.people}명</span>
-                        <span className="text-green-400 font-bold">{metrics.toBe.people}명</span>
-                    </div>
-                    <div
-                        className={`mt-1 font-semibold ${metrics.savings.people > 0 ? 'text-green-400' : 'text-slate-400'}`}
-                    >
-                        {metrics.savings.people > 0 ? `▼ ${metrics.savings.people}명 절감` : '—'}
-                    </div>
-                </div>
+            {/* 비교 바 차트 */}
+            <div className="space-y-4">
+                <ComparisonBar asIs={metrics.asIs.time} toBe={metrics.toBe.time} label="⏱️ 소요 시간 (분)" />
+                <ComparisonBar asIs={metrics.asIs.cost} toBe={metrics.toBe.cost} label="💰 비용 (₩)" />
+                <ComparisonBar asIs={metrics.asIs.people} toBe={metrics.toBe.people} label="👥 인원 (명)" />
             </div>
 
-            {/* Overall ROI */}
-            {metrics.asIs.time > 0 && (
-                <div className="mt-3 pt-3 border-t border-slate-700 text-center">
-                    <span className="text-slate-400 text-xs">전체 효율성 개선: </span>
-                    <span className="text-lg font-bold text-emerald-400">
-                        {formatPercent(metrics.asIs.time, metrics.toBe.time)}
-                    </span>
-                </div>
-            )}
-        </div>
+            {/* 절감 요약 */}
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1 }}
+                className="mt-4 pt-4 border-t border-[#E2E4E9] grid grid-cols-3 gap-3"
+            >
+                {metrics.savings.time > 0 && (
+                    <div className="text-center">
+                        <div className="text-lg font-bold text-emerald-600">
+                            <AnimatedNumber value={metrics.savings.time} suffix="분" />
+                        </div>
+                        <div className="text-[10px] text-[#71717A]">시간 절감</div>
+                    </div>
+                )}
+                {metrics.savings.cost > 0 && (
+                    <div className="text-center">
+                        <div className="text-lg font-bold text-emerald-600">
+                            {formatNumber(metrics.savings.cost)}₩
+                        </div>
+                        <div className="text-[10px] text-[#71717A]">비용 절감</div>
+                    </div>
+                )}
+                {metrics.savings.people > 0 && (
+                    <div className="text-center">
+                        <div className="text-lg font-bold text-emerald-600">
+                            <AnimatedNumber value={metrics.savings.people} suffix="명" />
+                        </div>
+                        <div className="text-[10px] text-[#71717A]">인원 절감</div>
+                    </div>
+                )}
+            </motion.div>
+        </motion.div>
     );
 }

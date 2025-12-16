@@ -61,19 +61,19 @@ export default function NodeContextMenu({
     return (
         <div
             ref={menuRef}
-            className="fixed z-50 min-w-[180px] bg-slate-800 border border-slate-600 rounded-lg shadow-xl overflow-hidden"
+            className="fixed z-50 min-w-[180px] bg-white/95 backdrop-blur-xl border border-[#E2E4E9] rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
             style={{ left: x, top: y }}
         >
             {/* Header */}
-            <div className="px-3 py-2 bg-slate-700/50 border-b border-slate-600">
-                <div className="text-xs text-slate-400 truncate max-w-[160px]">{nodeLabel}</div>
+            <div className="px-3 py-2 bg-[#F5F6F8] border-b border-[#E2E4E9]">
+                <div className="text-xs text-[#71717A] truncate max-w-[160px]">{nodeLabel}</div>
             </div>
 
             {/* Menu Items */}
             <div className="py-1">
                 {menuItems.map((item, idx) => {
                     if ('divider' in item && item.divider) {
-                        return <div key={idx} className="border-t border-slate-600 my-1" />;
+                        return <div key={idx} className="border-t border-[#E2E4E9] my-1" />;
                     }
 
                     const menuItem = item as {
@@ -98,8 +98,8 @@ export default function NodeContextMenu({
                             disabled={menuItem.disabled}
                             className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors
                                 ${menuItem.danger
-                                    ? 'text-red-400 hover:bg-red-500/20'
-                                    : 'text-slate-200 hover:bg-slate-700'
+                                    ? 'text-red-500 hover:bg-red-50'
+                                    : 'text-[#18181B] hover:bg-[#F5F6F8]'
                                 }
                                 ${menuItem.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                             `}
