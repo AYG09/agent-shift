@@ -3,13 +3,19 @@
 import { useState } from 'react';
 // Unused UI imports removed to satisfy lint
 
+interface ActionItem {
+    action: string;
+    rationale: string;
+    value: string;
+}
+
 interface Phase {
     id: string;
     name: string;
     duration: string;
     startWeek: number;
     endWeek: number;
-    actions: string[];
+    actions: (string | ActionItem)[];
     color: string;
 }
 

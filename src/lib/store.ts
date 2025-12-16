@@ -1,12 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-// 노드 타입 정의
+// 노드 타입 정의 - 시간만 관리 (비용/인원은 제거됨)
 export interface NodeMetrics {
     timeMinutes?: number; // 소요 시간 (분)
-    costKRW?: number; // 비용 (원)
-    peopleCount?: number; // 관련 인원
-    errorRate?: number; // 오류율 (%)
 }
 
 export interface FlowNode {
@@ -31,6 +28,13 @@ export interface FlowEdge {
     animated?: boolean;
 }
 
+// 액션 아이템 정보
+export interface ActionItem {
+    action: string;
+    rationale: string;
+    value: string;
+}
+
 // 전략 단계 정보
 export interface StrategyPhase {
     id: string;
@@ -38,7 +42,7 @@ export interface StrategyPhase {
     duration: string;
     startWeek: number;
     endWeek: number;
-    actions: string[];
+    actions: (string | ActionItem)[];
     color: string;
 }
 

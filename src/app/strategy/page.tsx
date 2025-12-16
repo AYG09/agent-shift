@@ -16,13 +16,19 @@ const GanttChart = dynamic(() => import('@/components/strategy/GanttChart'), { s
 
 type FrameworkType = 'kotter' | 'adkar' | 'lewin';
 
+interface ActionItem {
+    action: string;
+    rationale: string;
+    value: string;
+}
+
 interface Phase {
     id: string;
     name: string;
     duration: string;
     startWeek: number;
     endWeek: number;
-    actions: string[];
+    actions: (string | ActionItem)[];
     color: string;
 }
 
@@ -124,7 +130,8 @@ export default function StrategyPage() {
 
         const result = await generateChangeStrategy(
             scopeContext,
-            selectedFramework
+            selectedFramework,
+            totalWeeks
         ) as StrategyResult | null;
 
         if (result?.phases) {
@@ -388,11 +395,14 @@ export default function StrategyPage() {
                                                 </div>
                                             ) : (
                                                 <div className="mt-4 p-3 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                                                    <p className="text-xs text-gray-400 text-center">
+                                                    <p className="text-xs text-gray-500 text-center">
                                                         <Link href="/flow" className="text-purple-500 hover:underline font-medium">
                                                             Flow 캔버스
                                                         </Link>
                                                         에서 노드를 선택하세요
+                                                    </p>
+                                                    <p className="text-[10px] text-gray-400 text-center mt-1">
+                                                        💡 To-Be 탭에서 🤖 AI 에이전트를 클릭하면 선택됩니다
                                                     </p>
                                                 </div>
                                             )}
@@ -745,52 +755,78 @@ export default function StrategyPage() {
                                             </div>
 
                                             {/* Action Items with Checkboxes */}
-                                            <ul className="space-y-2">
-                                                {phase.actions.map((action, idx) => {
+                                            <ul className="space-y-3">
+                                                {phase.actions.map((actionItem, idx) => {
                                                     const isCompleted = completedActions.has(
                                                         `${phase.id}-${idx}`
                                                     );
+                                                    // 하위 호환성: string 또는 object 지원
+                                                    const actionText = typeof actionItem === 'string' ? actionItem : actionItem.action;
+                                                    const rationale = typeof actionItem === 'object' ? actionItem.rationale : null;
+                                                    const value = typeof actionItem === 'object' ? actionItem.value : null;
                                                     return (
                                                         <li
                                                             key={idx}
-                                                            className="flex items-center gap-2 cursor-pointer group"
-                                                            onClick={() =>
-                                                                toggleAction(phase.id, idx)
-                                                            }
+                                                            className="group"
                                                         >
-                                                            <div
-                                                                className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200
-                                                                ${
-                                                                    isCompleted
-                                                                        ? 'bg-gradient-to-br from-emerald-500 to-teal-500 border-emerald-500 shadow-sm'
-                                                                        : 'border-gray-300 group-hover:border-emerald-400'
-                                                                }`}
+                                                            <div 
+                                                                className="flex items-start gap-2 cursor-pointer"
+                                                                onClick={() =>
+                                                                    toggleAction(phase.id, idx)
+                                                                }
                                                             >
-                                                                {isCompleted && (
-                                                                    <svg
-                                                                        className="w-3 h-3 text-white"
-                                                                        fill="none"
-                                                                        viewBox="0 0 24 24"
-                                                                        stroke="currentColor"
+                                                                <div
+                                                                    className={`w-4 h-4 mt-0.5 rounded border-2 flex items-center justify-center transition-all duration-200 flex-shrink-0
+                                                                    ${
+                                                                        isCompleted
+                                                                            ? 'bg-gradient-to-br from-emerald-500 to-teal-500 border-emerald-500 shadow-sm'
+                                                                            : 'border-gray-300 group-hover:border-emerald-400'
+                                                                    }`}
+                                                                >
+                                                                    {isCompleted && (
+                                                                        <svg
+                                                                            className="w-3 h-3 text-white"
+                                                                            fill="none"
+                                                                            viewBox="0 0 24 24"
+                                                                            stroke="currentColor"
+                                                                        >
+                                                                            <path
+                                                                                strokeLinecap="round"
+                                                                                strokeLinejoin="round"
+                                                                                strokeWidth={3}
+                                                                                d="M5 13l4 4L19 7"
+                                                                            />
+                                                                        </svg>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <span
+                                                                        className={`text-sm font-medium transition-colors ${
+                                                                            isCompleted
+                                                                                ? 'text-gray-400 line-through'
+                                                                                : 'text-gray-700 group-hover:text-gray-900'
+                                                                        }`}
                                                                     >
-                                                                        <path
-                                                                            strokeLinecap="round"
-                                                                            strokeLinejoin="round"
-                                                                            strokeWidth={3}
-                                                                            d="M5 13l4 4L19 7"
-                                                                        />
-                                                                    </svg>
-                                                                )}
+                                                                        {actionText}
+                                                                    </span>
+                                                                    {(rationale || value) && !isCompleted && (
+                                                                        <div className="mt-1 pl-0.5 space-y-0.5">
+                                                                            {rationale && (
+                                                                                <p className="text-xs text-gray-500 flex items-start gap-1">
+                                                                                    <span className="text-amber-500 font-medium">왜:</span>
+                                                                                    <span>{rationale}</span>
+                                                                                </p>
+                                                                            )}
+                                                                            {value && (
+                                                                                <p className="text-xs text-gray-500 flex items-start gap-1">
+                                                                                    <span className="text-emerald-500 font-medium">효과:</span>
+                                                                                    <span>{value}</span>
+                                                                                </p>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                            <span
-                                                                className={`text-sm transition-colors ${
-                                                                    isCompleted
-                                                                        ? 'text-gray-400 line-through'
-                                                                        : 'text-gray-600 group-hover:text-gray-800'
-                                                                }`}
-                                                            >
-                                                                {action}
-                                                            </span>
                                                         </li>
                                                     );
                                                 })}

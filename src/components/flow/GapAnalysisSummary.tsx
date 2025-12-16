@@ -5,8 +5,6 @@ import { motion, useSpring, useTransform } from 'framer-motion';
 
 interface NodeMetrics {
     timeMinutes?: number;
-    costKRW?: number;
-    peopleCount?: number;
 }
 
 interface FlowNodeData {
@@ -18,13 +16,6 @@ interface GapAnalysisSummaryProps {
     asIsNodes: FlowNodeData[];
     toBeNodes: FlowNodeData[];
 }
-
-// 숫자 포맷 헬퍼
-const formatNumber = (num: number): string => {
-    if (num >= 10000) return `${(num / 10000).toFixed(1)}만`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}천`;
-    return num.toLocaleString();
-};
 
 // 애니메이션 숫자 카운터 컴포넌트
 function AnimatedNumber({ value, suffix = '' }: { value: number; suffix?: string }) {
@@ -101,32 +92,22 @@ function ComparisonBar({ asIs, toBe, label }: { asIs: number; toBe: number; labe
     );
 }
 
-const formatPercent = (before: number, after: number): string => {
-    if (before === 0) return '—';
-    const change = ((after - before) / before) * 100;
-    return `${change > 0 ? '+' : ''}${change.toFixed(1)}%`;
-};
-
 export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysisSummaryProps) {
     const metrics = useMemo(() => {
         // Calculate As-Is totals
         const asIsTotals = asIsNodes.reduce(
             (acc, node) => ({
                 time: acc.time + (node.metrics?.timeMinutes || 0),
-                cost: acc.cost + (node.metrics?.costKRW || 0),
-                people: acc.people + (node.metrics?.peopleCount || 0),
             }),
-            { time: 0, cost: 0, people: 0 }
+            { time: 0 }
         );
 
         // Calculate To-Be totals
         const toBeTotals = toBeNodes.reduce(
             (acc, node) => ({
                 time: acc.time + (node.metrics?.timeMinutes || 0),
-                cost: acc.cost + (node.metrics?.costKRW || 0),
-                people: acc.people + (node.metrics?.peopleCount || 0),
             }),
-            { time: 0, cost: 0, people: 0 }
+            { time: 0 }
         );
 
         return {
@@ -134,13 +115,11 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
             toBe: toBeTotals,
             savings: {
                 time: asIsTotals.time - toBeTotals.time,
-                cost: asIsTotals.cost - toBeTotals.cost,
-                people: asIsTotals.people - toBeTotals.people,
             },
         };
     }, [asIsNodes, toBeNodes]);
 
-    const hasData = metrics.asIs.time > 0 || metrics.asIs.cost > 0 || metrics.asIs.people > 0;
+    const hasData = metrics.asIs.time > 0;
 
     if (!hasData) {
         return (
@@ -179,11 +158,9 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
                 )}
             </div>
 
-            {/* 비교 바 차트 */}
+            {/* 비교 바 차트 - 시간만 표시 */}
             <div className="space-y-4">
                 <ComparisonBar asIs={metrics.asIs.time} toBe={metrics.toBe.time} label="⏱️ 소요 시간 (분)" />
-                <ComparisonBar asIs={metrics.asIs.cost} toBe={metrics.toBe.cost} label="💰 비용 (₩)" />
-                <ComparisonBar asIs={metrics.asIs.people} toBe={metrics.toBe.people} label="👥 인원 (명)" />
             </div>
 
             {/* 절감 요약 */}
@@ -191,30 +168,14 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1 }}
-                className="mt-4 pt-4 border-t border-gray-200/80 grid grid-cols-3 gap-3"
+                className="mt-4 pt-4 border-t border-gray-200/80"
             >
                 {metrics.savings.time > 0 && (
                     <div className="text-center">
-                        <div className="text-lg font-bold text-emerald-600">
+                        <div className="text-xl font-bold text-emerald-600">
                             <AnimatedNumber value={metrics.savings.time} suffix="분" />
                         </div>
-                        <div className="text-[10px] text-gray-500">시간 절감</div>
-                    </div>
-                )}
-                {metrics.savings.cost > 0 && (
-                    <div className="text-center">
-                        <div className="text-lg font-bold text-emerald-600">
-                            {formatNumber(metrics.savings.cost)}₩
-                        </div>
-                        <div className="text-[10px] text-gray-500">비용 절감</div>
-                    </div>
-                )}
-                {metrics.savings.people > 0 && (
-                    <div className="text-center">
-                        <div className="text-lg font-bold text-emerald-600">
-                            <AnimatedNumber value={metrics.savings.people} suffix="명" />
-                        </div>
-                        <div className="text-[10px] text-gray-500">인원 절감</div>
+                        <div className="text-xs text-gray-500 mt-1">시간 절감</div>
                     </div>
                 )}
             </motion.div>

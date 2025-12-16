@@ -2,6 +2,12 @@
 
 import { BaseEdge, EdgeProps, getBezierPath, EdgeLabelRenderer } from '@xyflow/react';
 
+// 화살표 마커 ID 생성 헬퍼
+function getArrowMarkerId(color: string) {
+    // 색상에서 특수문자 제거하여 유효한 ID 생성
+    return `arrow-${color.replace(/[^a-zA-Z0-9]/g, '')}`;
+}
+
 // 선택 가능한 기본 엣지 (호버/선택 시 강조)
 export function SelectableEdge({
     id,
@@ -28,9 +34,25 @@ export function SelectableEdge({
     const strokeColor = selected ? '#6366f1' : '#71717A';
     const strokeWidth = selected ? 3 : 2;
     const glowFilter = selected ? 'drop-shadow(0 0 4px rgba(99, 102, 241, 0.5))' : 'none';
+    const tokenColor = '#6366f1';
 
     return (
         <>
+            {/* 화살표 마커 정의 */}
+            <defs>
+                <marker
+                    id={getArrowMarkerId(strokeColor)}
+                    markerWidth="20"
+                    markerHeight="20"
+                    refX="18"
+                    refY="10"
+                    orient="auto"
+                    markerUnits="userSpaceOnUse"
+                >
+                    <path d="M 0 0 L 20 10 L 0 20 z" fill={strokeColor} />
+                </marker>
+            </defs>
+
             {/* 투명한 히트 영역 (클릭 감지 용이) */}
             <path
                 d={edgePath}
@@ -51,7 +73,16 @@ export function SelectableEdge({
                     filter: glowFilter,
                     transition: 'stroke 0.2s, stroke-width 0.2s, filter 0.2s',
                 }}
+                markerEnd={`url(#${getArrowMarkerId(strokeColor)})`}
             />
+
+            {/* 소스→타겟 방향 토큰 애니메이션 */}
+            <circle r="4" fill={tokenColor} opacity="0.8" filter="drop-shadow(0 0 3px rgba(99, 102, 241, 0.6))">
+                <animateMotion dur="2s" repeatCount="indefinite" path={edgePath} />
+            </circle>
+            <circle r="2.5" fill={tokenColor} opacity="0.5">
+                <animateMotion dur="2s" repeatCount="indefinite" path={edgePath} begin="0.7s" />
+            </circle>
 
             {/* 선택 시 라벨 표시 */}
             {selected && (
@@ -108,6 +139,21 @@ export function TokenFlowEdge({
 
     return (
         <>
+            {/* 화살표 마커 정의 */}
+            <defs>
+                <marker
+                    id={getArrowMarkerId(strokeColor)}
+                    markerWidth="20"
+                    markerHeight="20"
+                    refX="18"
+                    refY="10"
+                    orient="auto"
+                    markerUnits="userSpaceOnUse"
+                >
+                    <path d="M 0 0 L 20 10 L 0 20 z" fill={strokeColor} />
+                </marker>
+            </defs>
+
             {/* 투명한 히트 영역 */}
             <path
                 d={edgePath}
@@ -127,6 +173,7 @@ export function TokenFlowEdge({
                     filter: glowFilter,
                     transition: 'stroke 0.2s, stroke-width 0.2s',
                 }}
+                markerEnd={`url(#${getArrowMarkerId(strokeColor)})`}
             />
 
             {/* 움직이는 토큰 (파티클) */}
@@ -199,9 +246,25 @@ export function SmoothEdge({
     const strokeColor = selected ? '#6366f1' : '#6366f1';
     const strokeWidth = selected ? 4 : 2;
     const glowFilter = selected ? 'drop-shadow(0 0 6px rgba(99, 102, 241, 0.6))' : 'none';
+    const tokenColor = '#6366f1';
 
     return (
         <>
+            {/* 화살표 마커 정의 */}
+            <defs>
+                <marker
+                    id={getArrowMarkerId(strokeColor)}
+                    markerWidth="20"
+                    markerHeight="20"
+                    refX="18"
+                    refY="10"
+                    orient="auto"
+                    markerUnits="userSpaceOnUse"
+                >
+                    <path d="M 0 0 L 20 10 L 0 20 z" fill={strokeColor} />
+                </marker>
+            </defs>
+
             {/* 투명한 히트 영역 */}
             <path
                 d={edgePath}
@@ -221,7 +284,16 @@ export function SmoothEdge({
                     filter: glowFilter,
                     transition: 'stroke 0.2s, stroke-width 0.2s',
                 }}
+                markerEnd={`url(#${getArrowMarkerId(strokeColor)})`}
             />
+
+            {/* 소스→타겟 방향 토큰 애니메이션 */}
+            <circle r="4" fill={tokenColor} opacity="0.8" filter="drop-shadow(0 0 3px rgba(99, 102, 241, 0.6))">
+                <animateMotion dur="2s" repeatCount="indefinite" path={edgePath} />
+            </circle>
+            <circle r="2.5" fill={tokenColor} opacity="0.5">
+                <animateMotion dur="2s" repeatCount="indefinite" path={edgePath} begin="0.7s" />
+            </circle>
 
             {selected && (
                 <EdgeLabelRenderer>

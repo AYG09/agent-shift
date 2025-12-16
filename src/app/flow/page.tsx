@@ -453,6 +453,7 @@ export default function FlowPage() {
     // 드릴다운 핸들러
     const handleDrilldown = async (nodeId: string) => {
         const nodes = viewMode === 'tobe' ? toBeNodes : asIsNodes;
+        const edges = viewMode === 'tobe' ? toBeEdges : asIsEdges;
         const node = nodes.find((n) => n.id === nodeId);
         if (!node || !context) return;
 
@@ -466,10 +467,26 @@ export default function FlowPage() {
 
         const flowType = viewMode === 'tobe' ? 'to-be' : 'as-is';
 
+        // 전체 노드/엣지를 API에 전달하여 플로우 컨텍스트 파악
+        const allNodesForContext = nodes.map(n => ({
+            id: n.id,
+            label: n.label,
+            description: n.description,
+            type: n.type,
+            collaborationType: n.collaborationType,
+        }));
+        const allEdgesForContext = edges.map(e => ({
+            id: e.id,
+            source: e.source,
+            target: e.target,
+        }));
+
         const result = await generateDrilldown(
             { industry: context.industry, role: context.role, task: context.task },
             { id: node.id, label: node.label, description: node.description, type: node.type, collaborationType: node.collaborationType },
-            flowType
+            flowType,
+            allNodesForContext,
+            allEdgesForContext
         );
 
         if (result) {

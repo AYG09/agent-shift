@@ -131,6 +131,25 @@ export default function SplitViewCanvas({
                 >
                     {isSimulating ? '⏸️ 시뮬레이션 정지' : '▶️ 토큰 시뮬레이션'}
                 </Button>
+                {/* 토큰 시뮬레이션 설명 툴팁 */}
+                <div className="group relative">
+                    <div className="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center cursor-help transition-colors">
+                        <span className="text-slate-300 text-sm">ℹ️</span>
+                    </div>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 text-white text-xs rounded-lg shadow-xl border border-slate-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                        <div className="font-semibold mb-1">토큰 시뮬레이션이란?</div>
+                        <div className="text-slate-300">업무 흐름을 시각적으로 재현합니다.</div>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                            <span className="text-slate-400">빨간색 = 병목 (느림)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                            <span className="text-slate-400">녹색 = 효율적 (빠름)</span>
+                        </div>
+                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-slate-800 border-r border-b border-slate-600 rotate-45"></div>
+                    </div>
+                </div>
             </div>
 
             {/* After (To-Be) */}
@@ -179,7 +198,7 @@ export default function SplitViewCanvas({
 
             {/* ROI Summary Panel - positioned higher to avoid overlap with ReactFlow Controls */}
             {!isSimulating && (
-                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 w-[600px] pointer-events-auto">
+                <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-30 w-[600px] pointer-events-auto">
                     <GapAnalysisSummary
                         asIsNodes={extractMetrics(asIsNodes)}
                         toBeNodes={extractMetrics(toBeNodes)}

@@ -145,13 +145,13 @@ const NodeShapeWrapper = ({
                         type="target"
                         position={Position.Top}
                         id="top"
-                        className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                        className="!bg-slate-400 w-4 h-4 border-2 border-white hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                     />
                     <Handle
                         type="source"
                         position={Position.Top}
                         id="top-source"
-                        className="!bg-slate-300 w-3 h-3 border-2 border-white !opacity-0 pointer-events-auto"
+                        className="!bg-slate-400 w-4 h-4 border-2 border-white !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all pointer-events-auto cursor-crosshair"
                         style={{ top: 0 }}
                     />
                 </>
@@ -162,13 +162,13 @@ const NodeShapeWrapper = ({
                         type="source"
                         position={Position.Right}
                         id="right"
-                        className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                        className="!bg-slate-400 w-4 h-4 border-2 border-white hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                     />
                     <Handle
                         type="target"
                         position={Position.Right}
                         id="right-target"
-                        className="!bg-slate-300 w-3 h-3 border-2 border-white !opacity-0 pointer-events-auto"
+                        className="!bg-slate-400 w-4 h-4 border-2 border-white !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all pointer-events-auto cursor-crosshair"
                         style={{ right: 0 }}
                     />
                 </>
@@ -179,13 +179,13 @@ const NodeShapeWrapper = ({
                         type="source"
                         position={Position.Bottom}
                         id="bottom"
-                        className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                        className="!bg-slate-400 w-4 h-4 border-2 border-white hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                     />
                     <Handle
                         type="target"
                         position={Position.Bottom}
                         id="bottom-target"
-                        className="!bg-slate-300 w-3 h-3 border-2 border-white !opacity-0 pointer-events-auto"
+                        className="!bg-slate-400 w-4 h-4 border-2 border-white !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all pointer-events-auto cursor-crosshair"
                         style={{ bottom: 0 }}
                     />
                 </>
@@ -196,13 +196,13 @@ const NodeShapeWrapper = ({
                         type="target"
                         position={Position.Left}
                         id="left"
-                        className="!bg-slate-300 w-3 h-3 border-2 border-white"
+                        className="!bg-slate-400 w-4 h-4 border-2 border-white hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                     />
                     <Handle
                         type="source"
                         position={Position.Left}
                         id="left-source"
-                        className="!bg-slate-300 w-3 h-3 border-2 border-white !opacity-0 pointer-events-auto"
+                        className="!bg-slate-400 w-4 h-4 border-2 border-white !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all pointer-events-auto cursor-crosshair"
                         style={{ left: 0 }}
                     />
                 </>
@@ -352,14 +352,14 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
                 type="target"
                 position={Position.Top}
                 id="top"
-                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
+                className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ top: 0, left: '50%', transform: 'translate(-50%, -50%)' }}
             />
             <Handle
                 type="source"
                 position={Position.Top}
                 id="top-source"
-                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full !opacity-0"
+                className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ top: 0, left: '50%', transform: 'translate(-50%, -50%)' }}
             />
             {/* 우측 꼭지점 */}
@@ -367,14 +367,14 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
                 type="source"
                 position={Position.Right}
                 id="right"
-                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
+                className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ top: '50%', right: 0, transform: 'translate(50%, -50%)' }}
             />
             <Handle
                 type="target"
                 position={Position.Right}
                 id="right-target"
-                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full !opacity-0"
+                className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ top: '50%', right: 0, transform: 'translate(50%, -50%)' }}
             />
             {/* 하단 꼭지점 */}
@@ -382,14 +382,14 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
                 type="source"
                 position={Position.Bottom}
                 id="bottom"
-                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
+                className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ bottom: 0, left: '50%', transform: 'translate(-50%, 50%)' }}
             />
             <Handle
                 type="target"
                 position={Position.Bottom}
                 id="bottom-target"
-                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full !opacity-0"
+                className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ bottom: 0, left: '50%', transform: 'translate(-50%, 50%)' }}
             />
             {/* 좌측 꼭지점 */}
@@ -397,14 +397,14 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
                 type="target"
                 position={Position.Left}
                 id="left"
-                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full"
+                className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ top: '50%', left: 0, transform: 'translate(-50%, -50%)' }}
             />
             <Handle
                 type="source"
                 position={Position.Left}
                 id="left-source"
-                className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white !rounded-full !opacity-0"
+                className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ top: '50%', left: 0, transform: 'translate(-50%, -50%)' }}
             />
 

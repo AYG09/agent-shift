@@ -343,19 +343,24 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [selectedEdgeId, handleDeleteEdge, closeEdgeContextMenu]);
 
-    // 좌클릭 = 선택 (To-Be 모드에서는 전략 페이지용 노드 선택)
+    // 좌클릭 = 선택 (To-Be 모드에서 agent 타입 노드만 전략 페이지용 선택 가능)
     const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
         if (node.id === 'placeholder') return;
-        // To-Be 모드에서 노드 클릭 시 전략 범위 선택용으로 store 업데이트
+        
+        // To-Be 모드에서 agent 타입 노드만 전략 범위 선택 가능
         if (viewMode === 'tobe') {
-            // 이미 선택된 노드를 다시 클릭하면 선택 해제
-            if (selectedToBeNodeId === node.id) {
-                setSelectedToBeNodeId(null);
-            } else {
-                setSelectedToBeNodeId(node.id);
+            const storeNode = storeToBeNodes.find(n => n.id === node.id);
+            // agent 타입만 선택 허용
+            if (storeNode?.type === 'agent') {
+                // 이미 선택된 노드를 다시 클릭하면 선택 해제
+                if (selectedToBeNodeId === node.id) {
+                    setSelectedToBeNodeId(null);
+                } else {
+                    setSelectedToBeNodeId(node.id);
+                }
             }
         }
-    }, [viewMode, selectedToBeNodeId, setSelectedToBeNodeId]);
+    }, [viewMode, selectedToBeNodeId, setSelectedToBeNodeId, storeToBeNodes]);
 
     // 우클릭 컨텍스트 메뉴
     const onNodeContextMenu = useCallback(

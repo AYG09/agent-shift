@@ -12,7 +12,6 @@ export default function ExportPage() {
     const { context, asIsNodes, toBeNodes, strategy } = useAppStore();
     const [isExportingWord, setIsExportingWord] = useState(false);
     const [isExportingExcel, setIsExportingExcel] = useState(false);
-    const [isExportingPdf, setIsExportingPdf] = useState(false);
     const [exportStatus, setExportStatus] = useState<string | null>(null);
 
     // 스토어에서 데이터 가져오기 또는 샘플 데이터 사용
@@ -27,6 +26,7 @@ export default function ExportPage() {
                   label: n.label,
                   description: n.description,
                   type: n.type,
+                  metrics: n.metrics,
               }))
             : [
                   {
@@ -34,12 +34,14 @@ export default function ExportPage() {
                       label: '데이터 수집',
                       description: '각 팀에서 수동으로 요청',
                       type: 'task' as const,
+                      metrics: { timeMinutes: 60 },
                   },
                   {
                       id: '2',
                       label: '엑셀 취합',
                       description: '병목 구간 - 3시간 소요',
                       type: 'task' as const,
+                      metrics: { timeMinutes: 180 },
                   },
               ];
 
@@ -50,10 +52,11 @@ export default function ExportPage() {
                   label: n.label,
                   description: n.description,
                   type: n.type,
+                  metrics: n.metrics,
               }))
             : [
-                  { id: 't1', label: '데이터 수집 Agent', description: '', type: 'agent' as const },
-                  { id: 't2', label: '데이터 분석 Agent', description: '', type: 'agent' as const },
+                  { id: 't1', label: '데이터 수집 Agent', description: 'AI가 자동으로 데이터 수집', type: 'agent' as const, metrics: { timeMinutes: 5 } },
+                  { id: 't2', label: '데이터 분석 Agent', description: 'AI가 자동으로 분석 수행', type: 'agent' as const, metrics: { timeMinutes: 10 } },
               ];
 
     const sampleStrategy = {
@@ -62,14 +65,18 @@ export default function ExportPage() {
             {
                 name: '긴급성 조성',
                 duration: '2주',
+                startWeek: 1,
+                endWeek: 2,
                 actions: ['위기 인식 공유', '변화 필요성 전파'],
             },
             {
                 name: '추진팀 구성',
                 duration: '1주',
+                startWeek: 3,
+                endWeek: 3,
                 actions: ['변화 리더 선정', '크로스펑셔널 팀 구성'],
             },
-            { name: '비전 수립', duration: '2주', actions: ['목표 상태 정의', '전략 로드맵 작성'] },
+            { name: '비전 수립', duration: '2주', startWeek: 4, endWeek: 5, actions: ['목표 상태 정의', '전략 로드맵 작성'] },
         ],
     };
 
@@ -82,6 +89,8 @@ export default function ExportPage() {
               phases: strategy.phases.map((p) => ({
                   name: p.name,
                   duration: p.duration,
+                  startWeek: p.startWeek,
+                  endWeek: p.endWeek,
                   actions: p.actions,
               })),
           }
@@ -110,33 +119,18 @@ export default function ExportPage() {
         setIsExportingExcel(true);
         setExportStatus(null);
         try {
-            generateExcelWBS({ strategy: exportStrategy });
-            setExportStatus('✅ Excel WBS가 다운로드되었습니다!');
+            generateExcelWBS({
+                asIsNodes: exportAsIsNodes,
+                toBeNodes: exportToBeNodes,
+                strategy: exportStrategy,
+                totalWeeks: strategy?.totalWeeks || 12,
+            });
+            setExportStatus('✅ Excel 보고서가 다운로드되었습니다!');
         } catch (error) {
             setExportStatus('❌ Excel 내보내기 실패');
             console.error(error);
         } finally {
             setIsExportingExcel(false);
-        }
-    };
-
-    const handleExportPdf = async () => {
-        setIsExportingPdf(true);
-        setExportStatus(null);
-        try {
-            const { generatePdfReport } = await import('@/components/export/PdfReport');
-            await generatePdfReport({
-                context: exportContext,
-                asIsNodes: exportAsIsNodes,
-                toBeNodes: exportToBeNodes,
-                strategy: exportStrategy,
-            });
-            setExportStatus('✅ PDF 보고서가 다운로드되었습니다!');
-        } catch (error) {
-            setExportStatus('❌ PDF 내보내기 실패');
-            console.error(error);
-        } finally {
-            setIsExportingPdf(false);
         }
     };
 
@@ -229,25 +223,25 @@ export default function ExportPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Excel WBS */}
+                    {/* Excel Report */}
                     <Card className="group bg-white border-[#E2E4E9] hover:border-[#10B981] hover:-translate-y-1 hover:shadow-lg transition-all duration-200 shadow-sm">
                         <CardHeader>
                             <div className="w-10 h-10 bg-[#D1FAE5] rounded-lg flex items-center justify-center text-xl mb-3">
                                 📊
                             </div>
                             <CardTitle className="text-base font-medium text-[#18181B]">
-                                Excel WBS
+                                Excel 보고서
                             </CardTitle>
                             <CardDescription className="text-[#71717A] text-sm">
-                                Work Breakdown Structure를 Excel로 내보냅니다
+                                전체 분석 결과를 Excel로 내보냅니다
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <ul className="text-sm text-[#71717A] mb-4 space-y-1">
-                                <li>• 단계별 태스크 분류</li>
-                                <li>• 담당자 / 일정 / 산출물</li>
-                                <li>• 예상 기간 및 리소스</li>
-                                <li>• 진행률 추적 템플릿</li>
+                                <li>• AS-IS / TO-BE 플로우</li>
+                                <li>• 간트 차트 형태 WBS</li>
+                                <li>• ROI 분석 요약</li>
+                                <li>• 주차별 일정 시각화</li>
                             </ul>
                             <Button
                                 onClick={handleExportExcel}
@@ -261,45 +255,6 @@ export default function ExportPage() {
                                     </span>
                                 ) : (
                                     'Excel 다운로드'
-                                )}
-                            </Button>
-                        </CardContent>
-                    </Card>
-
-                    {/* PDF Report */}
-                    <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200 hover:border-purple-400 hover:shadow-xl transition-all md:col-span-2 relative overflow-hidden">
-                        {/* Premium Badge */}
-                        <div className="absolute top-4 right-4 px-2 py-1 bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-xs font-medium rounded-full shadow-lg">
-                            ✨ Premium
-                        </div>
-                        <CardHeader>
-                            <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-indigo-100 rounded-xl flex items-center justify-center text-2xl mb-3 shadow-sm">
-                                📑
-                            </div>
-                            <CardTitle className="text-[#18181B]">Premium PDF 보고서</CardTitle>
-                            <CardDescription className="text-[#71717A]">
-                                전문적인 형식의 PDF 보고서를 다운로드합니다
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ul className="text-sm text-[#71717A] mb-4 space-y-1">
-                                <li>• Executive Summary</li>
-                                <li>• As-Is vs To-Be 비교 분석</li>
-                                <li>• 자동화율 및 ROI 메트릭</li>
-                                <li>• 변화 관리 전략 로드맵</li>
-                            </ul>
-                            <Button
-                                onClick={handleExportPdf}
-                                disabled={isExportingPdf}
-                                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-lg"
-                            >
-                                {isExportingPdf ? (
-                                    <span className="flex items-center gap-2">
-                                        <Spinner size="sm" className="text-white" />
-                                        생성 중...
-                                    </span>
-                                ) : (
-                                    '📥 PDF 다운로드'
                                 )}
                             </Button>
                         </CardContent>

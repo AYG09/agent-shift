@@ -10,6 +10,21 @@ import {
 } from '@/lib/ai-schemas';
 import { generateCacheKey, getCachedData, setCachedData } from '@/lib/cache-utils';
 
+// 드릴다운에 전달할 그래프 컨텍스트용 간소화된 타입
+interface FlowNodeBasic {
+    id: string;
+    label: string;
+    description?: string;
+    type: string;
+    collaborationType?: string;
+}
+
+interface FlowEdgeBasic {
+    id: string;
+    source: string;
+    target: string;
+}
+
 interface WorkContext {
     industry: string;
     role: string;
@@ -181,11 +196,11 @@ export function useAIGeneration() {
     );
 
     const generateChangeStrategy = useCallback(
-        async (context: WorkContext, framework: 'kotter' | 'adkar' | 'lewin') => {
+        async (context: WorkContext, framework: 'kotter' | 'adkar' | 'lewin', totalWeeks: number = 12) => {
             setIsLoading(true);
             setError(null);
             try {
-                const cacheKey = await generateCacheKey('generateChangeStrategy', { context, framework });
+                const cacheKey = await generateCacheKey('generateChangeStrategy', { context, framework, totalWeeks });
                 const cached = getCachedData<ChangeStrategyResponse>(cacheKey);
                 if (cached) {
                     console.log('⚡ Cache Hit: ChangeStrategy');
@@ -199,6 +214,7 @@ export function useAIGeneration() {
                         action: 'generateChangeStrategy',
                         context,
                         framework,
+                        totalWeeks,
                         apiKey: apiKey || undefined,
                     }),
                 });
@@ -226,12 +242,21 @@ export function useAIGeneration() {
         async (
             context: { industry: string; role: string; task: string },
             node: { id: string; label: string; description?: string; type: string; collaborationType?: string },
-            flowType: 'as-is' | 'to-be'
+            flowType: 'as-is' | 'to-be',
+            allNodes?: FlowNodeBasic[],
+            allEdges?: FlowEdgeBasic[]
         ) => {
             setIsLoading(true);
             setError(null);
             try {
-                const cacheKey = await generateCacheKey('generateDrilldown', { context, nodeId: node.id, flowType });
+                // 캐시 키에 그래프 컨텍스트 크기 포함 (노드/엣지 개수가 달라지면 다른 캐시)
+                const cacheKey = await generateCacheKey('generateDrilldown', { 
+                    context, 
+                    nodeId: node.id, 
+                    flowType,
+                    nodeCount: allNodes?.length ?? 0,
+                    edgeCount: allEdges?.length ?? 0
+                });
                 const cached = getCachedData<DrilldownResponse>(cacheKey);
                 if (cached) {
                     console.log('⚡ Cache Hit: Drilldown');
@@ -246,6 +271,8 @@ export function useAIGeneration() {
                         context,
                         node,
                         flowType,
+                        allNodes,
+                        allEdges,
                         apiKey: apiKey || undefined,
                     }),
                 });

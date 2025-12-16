@@ -1,11 +1,8 @@
 import { z } from 'zod';
 
-// 노드 메트릭 스키마 - 정수만 허용하여 부동소수점 오버플로우 방지
+// 노드 메트릭 스키마 - 시간만 관리 (비용/인원은 제거됨)
 export const NodeMetricsSchema = z.object({
     timeMinutes: z.number().int().optional(), // 소요 시간 (분) - 정수
-    costKRW: z.number().int().optional(), // 비용 (원) - 정수
-    peopleCount: z.number().int().optional(), // 관련 인원 - 정수
-    errorRate: z.number().int().optional(), // 오류율 (%) - 정수
 });
 
 // 노드 스키마
@@ -71,7 +68,12 @@ export const ChangeStrategyResponseSchema = z.object({
             duration: z.string(),
             startWeek: z.number(),
             endWeek: z.number(),
-            actions: z.array(z.string()),
+            // 확장된 액션 스키마: 이유와 가치 포함
+            actions: z.array(z.object({
+                action: z.string(),
+                rationale: z.string(), // 왜 이 활동이 필요한가
+                value: z.string(), // 어떤 가치를 제공하는가
+            })),
             color: z.string(),
         })
     ),

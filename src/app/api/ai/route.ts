@@ -30,6 +30,80 @@ function normalizeMetrics(obj: unknown): unknown {
     return obj;
 }
 
+// 그래프 컨텍스트 추출: 인접 노드(predecessors, successors) 정보 생성
+interface GraphNode {
+    id: string;
+    label: string;
+    description?: string;
+    type: string;
+    collaborationType?: string;
+}
+
+interface GraphEdge {
+    id: string;
+    source: string;
+    target: string;
+}
+
+interface GraphContext {
+    predecessors: GraphNode[];
+    successors: GraphNode[];
+    position: string; // 예: "2번째 단계 (총 8단계 중)"
+}
+
+function extractGraphContext(
+    nodeId: string,
+    allNodes?: GraphNode[],
+    allEdges?: GraphEdge[]
+): GraphContext | null {
+    if (!allNodes || !allEdges || allNodes.length === 0) {
+        return null;
+    }
+
+    // 이전 노드들 (이 노드를 target으로 하는 엣지의 source)
+    const predecessorIds = allEdges
+        .filter(e => e.target === nodeId)
+        .map(e => e.source);
+    const predecessors = allNodes.filter(n => predecessorIds.includes(n.id));
+
+    // 다음 노드들 (이 노드를 source로 하는 엣지의 target)
+    const successorIds = allEdges
+        .filter(e => e.source === nodeId)
+        .map(e => e.target);
+    const successors = allNodes.filter(n => successorIds.includes(n.id));
+
+    // 순서 파악 (간단한 BFS로 시작점부터 위치 계산)
+    const nodeIndex = allNodes.findIndex(n => n.id === nodeId);
+    const position = `${nodeIndex + 1}번째 단계 (총 ${allNodes.length}단계 중)`;
+
+    return { predecessors, successors, position };
+}
+
+function formatGraphContextForPrompt(graphContext: GraphContext | null): string {
+    if (!graphContext) {
+        return '';
+    }
+
+    let result = `\n## 전체 흐름에서의 위치\n`;
+    result += `- 현재 위치: ${graphContext.position}\n`;
+
+    if (graphContext.predecessors.length > 0) {
+        result += `\n### 이전 단계 (선행 작업)\n`;
+        graphContext.predecessors.forEach(p => {
+            result += `- **${p.label}** (${p.type}): ${p.description || '설명 없음'}\n`;
+        });
+    }
+
+    if (graphContext.successors.length > 0) {
+        result += `\n### 다음 단계 (후속 작업)\n`;
+        graphContext.successors.forEach(s => {
+            result += `- **${s.label}** (${s.type}): ${s.description || '설명 없음'}\n`;
+        });
+    }
+
+    return result;
+}
+
 // 프롬프트 템플릿들
 function getAsIsPrompt(context: {
     industry: string;
@@ -69,11 +143,8 @@ ${context.painPoints ? `- 주요 고충/문제점: ${context.painPoints}` : ''}
 각 노드의 description 필드에 반드시 구체적인 활동, 소요 시간, 사용 도구를 포함하세요.
 
 ## 중요: metrics 필드 필수 작성 (⚠️ 모든 숫자는 소수점 없는 정수만!)
-각 process/io 노드에 다음 metrics를 포함하세요 (반드시 정수로 작성):
-- timeMinutes: 예상 소요 시간 (분 단위, 정수만 예: 30)
-- costKRW: 예상 비용 (원 단위, 정수만 예: 15000)
-- peopleCount: 관련 인원 수 (정수만 예: 2)
-- errorRate: 예상 오류율 (%, 정수만 예: 5)
+각 process/io 노드에 다음 metrics를 반드시 포함하세요:
+- timeMinutes: 예상 소요 시간 (분 단위, 정수만 예: 30) - ⚠️ 모든 노드에 필수!
 
 ## 중요: 노드 및 엣지 배치 규칙 (⬇️ 수직 플로우)
 - 모든 노드의 x는 250, y는 0부터 120 간격으로 배치하세요.
@@ -146,11 +217,8 @@ ${JSON.stringify(asIsNodes, null, 2)}
 - 인간과의 협업 방식
 
 ## 중요: metrics 필드 필수 작성 (⚠️ 모든 숫자는 소수점 없는 정수만!)
-모든 process/io/agent 노드에 다음 metrics를 포함하세요 (반드시 정수로 작성):
-- timeMinutes: 예상 소요 시간 (분 단위, 정수만 예: 10)
-- costKRW: 예상 비용 (원 단위, 정수만 예: 5000)
-- peopleCount: 관련 인원 수 (정수만 예: 1)
-- errorRate: 예상 오류율 (%, 정수만 예: 2)
+모든 process/io/agent 노드에 다음 metrics를 반드시 포함하세요:
+- timeMinutes: 예상 소요 시간 (분 단위, 정수만 예: 10) - ⚠️ 모든 노드에 필수!
 
 ## 중요: 노드 및 엣지 배치 규칙 (⬇️ 수직 플로우)
 - 모든 노드의 x는 250, y는 0부터 100 간격으로 배치하세요.
@@ -160,7 +228,8 @@ ${JSON.stringify(asIsNodes, null, 2)}
 
 function getStrategyPrompt(
     context: { industry: string; role: string; task: string },
-    framework: string
+    framework: string,
+    totalWeeks: number = 12
 ) {
     const frameworkGuide: Record<string, string> = {
         kotter: 'Kotter의 8단계 변화 관리 (긴급성 조성 → 추진팀 구성 → 비전 수립 → 비전 전파 → 장애물 제거 → 단기 성과 → 변화 가속 → 문화 정착)',
@@ -180,18 +249,34 @@ function getStrategyPrompt(
 ${frameworkGuide[framework] || framework}
 
 ## 요구사항
-1. 12주 일정으로 각 단계의 기간과 시작/종료 주차를 설정하세요.
+1. **${totalWeeks}주 일정**으로 각 단계의 기간과 시작/종료 주차를 설정하세요.
 2. 각 단계별 2~3개의 구체적인 액션 아이템을 작성하세요.
 3. 단계별로 시각적으로 구분되는 색상(hex)을 지정하세요.
 4. 핵심 커뮤니케이션 메시지를 3~5개 제시하세요.
-5. 예상 리스크와 완화 방안을 2~3개 제시하세요.`;
+5. 예상 리스크와 완화 방안을 2~3개 제시하세요.
+
+## 중요: 액션 아이템 상세 설명 ⚠️
+각 액션 아이템은 반드시 다음 형식으로 작성하세요:
+- **action**: 구체적인 활동 내용
+- **rationale**: 왜 이 활동이 필요한지 (1-2문장)
+- **value**: 이 활동이 제공하는 가치와 효과 (1-2문장)
+
+예시:
+{
+  "action": "AI 시스템 도입 설명회 개최",
+  "rationale": "변화의 필요성과 배경을 명확히 전달하여 구성원의 이해도를 높이기 위함",
+  "value": "불확실성으로 인한 저항을 줄이고, 변화에 대한 수용도를 높임"
+}`;
 }
 
 // AS-IS 전용 드릴다운 프롬프트: 인간 작업 과정만 상세 분석
 function getDrilldownPromptAsIs(
     node: { id: string; label: string; description?: string; type: string },
-    context: { industry: string; role: string; task: string }
+    context: { industry: string; role: string; task: string },
+    graphContext: GraphContext | null = null
 ) {
+    const graphContextText = formatGraphContextForPrompt(graphContext);
+    
     return `당신은 업무 프로세스 분석 전문가입니다.
 다음 프로세스 단계를 **인간이 수행하는 관점**에서 세부적으로 분해해주세요.
 
@@ -205,11 +290,12 @@ function getDrilldownPromptAsIs(
 - 이름: ${node.label}
 - 설명: ${node.description || '없음'}
 - 타입: ${node.type}
-
+${graphContextText}
 ## 중요 지침 ⚠️
 이것은 **As-Is (현재 상태)** 분석입니다.
 - AI 자동화, AI 도입, AI 대체 가능성은 **절대 언급하지 마세요**
 - 오직 **인간이 현재 이 작업을 어떻게 수행하는지**만 분석하세요
+${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞는** 세부 단계를 도출하세요` : ''}
 
 ## 요구사항
 1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
@@ -227,10 +313,56 @@ function getDrilldownPromptAsIs(
 }
 
 // TO-BE 전용 드릴다운 프롬프트: AI 자동화 구현 방법 상세 안내
+// 단, 노드 타입이 'agent'가 아니면 인간 작업으로 분석
 function getDrilldownPromptToBe(
     node: { id: string; label: string; description?: string; type: string; collaborationType?: string },
-    context: { industry: string; role: string; task: string }
+    context: { industry: string; role: string; task: string },
+    graphContext: GraphContext | null = null
 ) {
+    const graphContextText = formatGraphContextForPrompt(graphContext);
+    
+    // 노드 타입이 'agent'가 아니면 인간 작업으로 분석 (TO-BE에서도 인간이 수행하는 단계)
+    const isHumanTask = node.type !== 'agent';
+    
+    if (isHumanTask) {
+        // TO-BE 플로우에서 인간이 수행하는 단계 (task, process, decision 등)
+        return `당신은 업무 프로세스 분석 전문가입니다.
+다음 프로세스 단계를 **인간이 수행하는 관점**에서 세부적으로 분해해주세요.
+
+## 업무 정보
+- 산업: ${context.industry}
+- 직무: ${context.role}  
+- 전체 업무: ${context.task}
+
+## 분석 대상 노드
+- ID: ${node.id}
+- 이름: ${node.label}
+- 설명: ${node.description || '없음'}
+- 타입: ${node.type}
+${graphContextText}
+## 중요 지침 ⚠️
+이것은 **To-Be 플로우에서 인간이 수행하는 단계**입니다.
+- 이 노드는 AI가 아닌 **인간 담당자**가 수행합니다
+- AI 자동화, AI 도입 가능성은 **언급하지 마세요** (이 단계는 인간 업무로 계획됨)
+- 오직 **인간이 이 작업을 어떻게 수행하는지**만 분석하세요
+${graphContext ? `- 위의 이전/다음 단계(일부는 AI 에이전트)와의 **연계**를 고려하세요` : ''}
+
+## 요구사항
+1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
+2. 각 하위 단계에 대해:
+   - **description**: 담당자가 수행하는 구체적인 활동 (2~3문장)
+   - **duration**: 예상 소요 시간
+   - **tools**: 사용되는 도구 (엑셀, 이메일, 워드 등)
+   - **painPoints**: 이 단계에서 겪는 어려움, 비효율, 실수 가능성 (1~2문장)
+3. **summary**: 전체 과정 요약과 AI 에이전트와의 협업 포인트
+
+## 응답 형식
+- flowType: "tobe"
+- subSteps 배열에 각 하위 단계
+- aiImplementation, resources 필드는 **생략** (null 또는 undefined)`;
+    }
+    
+    // 노드 타입이 'agent'인 경우: AI 자동화 분석
     return `당신은 AI 자동화 구현 전문가이자 기술 교육자입니다.
 다음 프로세스 단계가 AI로 어떻게 자동화되는지 **구체적이고 실용적으로** 설명해주세요.
 
@@ -244,13 +376,14 @@ function getDrilldownPromptToBe(
 - 이름: ${node.label}
 - 설명: ${node.description || '없음'}
 - 협업 유형: ${node.collaborationType || 'copilot'} (copilot=인간+AI 협력, autonomous=AI 독립 수행, monitor=인간 감독)
-
+${graphContextText}
 ## 중요 지침 ⚠️
 이것은 **To-Be (AI 도입 후)** 분석입니다.
 - 이 단계는 이미 AI가 처리하는 것으로 계획되어 있습니다
 - **AI가 구체적으로 어떻게 이 작업을 수행하는지** 설명하세요
 - 비전문가도 이해할 수 있게 쉽게 설명하세요
 - 실제로 구현 가능한 방법을 제시하세요
+${graphContext ? `- 위의 이전/다음 단계와의 **데이터 흐름**을 고려하세요` : ''}
 
 ## 요구사항
 1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
@@ -291,13 +424,18 @@ function getDrilldownPromptToBe(
 function getDrilldownPrompt(
     node: { id: string; label: string; description?: string; type: string; collaborationType?: string },
     context: { industry: string; role: string; task: string },
-    flowType: string
+    flowType: string,
+    allNodes?: GraphNode[],
+    allEdges?: GraphEdge[]
 ) {
+    // 그래프 컨텍스트 추출 (인접 노드 정보)
+    const graphContext = extractGraphContext(node.id, allNodes, allEdges);
+    
     // flowType에 따라 완전히 다른 프롬프트 반환
     if (flowType === 'tobe' || flowType === 'to-be') {
-        return getDrilldownPromptToBe(node, context);
+        return getDrilldownPromptToBe(node, context, graphContext);
     }
-    return getDrilldownPromptAsIs(node, context);
+    return getDrilldownPromptAsIs(node, context, graphContext);
 }
 
 export async function POST(request: NextRequest) {
@@ -369,8 +507,9 @@ export async function POST(request: NextRequest) {
                         { status: 400 }
                     );
                 }
+                const totalWeeks = body.totalWeeks || 12;
                 schema = ChangeStrategyResponseSchema;
-                prompt = getStrategyPrompt(context, framework);
+                prompt = getStrategyPrompt(context, framework, totalWeeks);
                 break;
 
             case 'generateDrilldown':
@@ -381,7 +520,8 @@ export async function POST(request: NextRequest) {
                     );
                 }
                 schema = DrilldownResponseSchema;
-                prompt = getDrilldownPrompt(node, context, flowType);
+                // allNodes, allEdges는 선택적 - 전체 플로우 컨텍스트 전달용
+                prompt = getDrilldownPrompt(node, context, flowType, body.allNodes, body.allEdges);
                 break;
 
             case 'generateNodeSplit':
