@@ -560,12 +560,12 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                     }}
                 />
 
-                {/* Node/Edge Count Info - Top Left */}
-                <Panel
-                    position="top-left"
-                    className="bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 shadow-lg"
-                >
-                    {currentNodes.length > 0 ? (
+                {/* Node/Edge Count Info - Top Left (노드가 있을 때만 표시) */}
+                {currentNodes.length > 0 && (
+                    <Panel
+                        position="top-left"
+                        className="bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 shadow-lg"
+                    >
                         <span className="flex items-center gap-3">
                             <span className="flex items-center gap-1.5 font-medium">
                                 {viewMode === 'tobe' ? '🤖' : '📊'}
@@ -580,10 +580,8 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                             <span className="w-px h-4 bg-gray-300" />
                             <span className="text-gray-400 text-xs">우클릭: 메뉴</span>
                         </span>
-                    ) : (
-                        <span className="text-gray-500">📝 더블클릭으로 노드 추가</span>
-                    )}
-                </Panel>
+                    </Panel>
+                )}
 
                 {/* Breadcrumb */}
                 {drilldownPath.length > 0 && (
@@ -624,19 +622,6 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                     </Button>
                 </Panel>
 
-                {/* Keyboard Shortcuts Hint - Bottom Left (above MiniMap) */}
-                <Panel
-                    position="bottom-left"
-                    className="bg-white/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-500 shadow-sm !mb-40 !ml-3"
-                >
-                    <span className="flex items-center gap-2">
-                        <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-mono">Del</kbd>
-                        <span>삭제</span>
-                        <span className="text-gray-300">|</span>
-                        <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-mono">Dbl-Click</kbd>
-                        <span>노드 추가</span>
-                    </span>
-                </Panel>
             </ReactFlow>
 
             {/* Context Menu */}
