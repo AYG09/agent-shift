@@ -681,7 +681,7 @@ export default function FlowPage() {
             (role !== 'other' || customRole);
 
         return (
-            <div className="min-h-screen overflow-y-auto pro-canvas relative text-[#18181B] p-4 sm:p-8 safe-area-padding">
+            <div className="min-h-screen overflow-y-auto pro-canvas relative text-[#18181B] p-4 sm:p-8 pb-24 md:pb-8 safe-area-padding">
                 <div className="max-w-2xl mx-auto">
                     <motion.div
                         initial={{ opacity: 0, x: -20 }}
