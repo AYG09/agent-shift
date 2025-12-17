@@ -1120,6 +1120,9 @@ export default function FlowPage() {
                             </CardContent>
                         </Card>
                     </motion.div>
+                    
+                    {/* 모바일 하단 네비게이션 바 공간 확보 */}
+                    <div className="h-24 md:hidden" aria-hidden="true" />
                 </div>
             </div>
         );
