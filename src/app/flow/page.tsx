@@ -242,6 +242,8 @@ export default function FlowPage() {
     const [selectedScenario, setSelectedScenario] = useState<
         'conservative' | 'balanced' | 'aggressive'
     >('balanced');
+    // 모바일 사이드바 토글 상태 (Hooks 순서 보장을 위해 상단에 선언)
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     // Mounted 상태 설정
     useEffect(() => {
@@ -1122,7 +1124,7 @@ export default function FlowPage() {
                     </motion.div>
                     
                     {/* 모바일 하단 네비게이션 바 공간 확보 */}
-                    <div className="h-24 md:hidden" aria-hidden="true" />
+                    <div className="h-32 md:hidden" aria-hidden="true" />
                 </div>
             </div>
         );
@@ -1191,9 +1193,6 @@ export default function FlowPage() {
             : displayAsIsEdges;
 
     // Canvas with Sidebar
-    // 모바일 사이드바 토글 상태
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-    
     return (
         <div className="h-screen pro-canvas text-[#18181B] flex overflow-hidden">
             {/* Mobile Sidebar Toggle */}
