@@ -66,8 +66,8 @@ export default function RoomPage({ params }: RoomPageProps) {
                     <UserAvatars />
                 </header>
 
-                {/* 메인 캔버스 */}
-                <main className="flex-1 overflow-hidden">
+                {/* 메인 캔버스 - 모바일에서 하단 네비게이션 공간 확보 */}
+                <main className="flex-1 overflow-hidden pb-20 md:pb-0">
                     <CollaborativeFlowCanvas />
                 </main>
             </div>

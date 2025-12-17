@@ -1263,8 +1263,8 @@ export default function FlowPage() {
                     )}
                 </div>
 
-                {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto p-4 pt-3 space-y-3">
+                {/* Scrollable Content - 모바일에서 하단 네비게이션 공간 확보 */}
+                <div className="flex-1 overflow-y-auto p-4 pt-3 pb-24 md:pb-4 space-y-3">
                     {/* 현재 분석 중 - 개선된 카드 */}
                     <CollapsibleSection title="업무 컨텍스트" icon={FileText} defaultOpen={true}>
                         <div className="space-y-2 mt-2">
@@ -1507,7 +1507,8 @@ export default function FlowPage() {
                     </motion.button>
                 </div>
             </motion.div>
-            <div className="flex-1 relative">
+            {/* Canvas Area - 모바일에서 하단 네비게이션 공간 확보 */}
+            <div className="flex-1 relative pb-20 md:pb-0">
                 {viewMode === 'split' ? (
                     <SplitViewCanvas
                         asIsNodes={displayAsIsNodes}

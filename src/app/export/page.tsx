@@ -143,7 +143,7 @@ export default function ExportPage() {
     const hasData = context || asIsNodes.length > 0 || toBeNodes.length > 0;
 
     return (
-        <div className="min-h-screen pro-canvas text-[#18181B] p-4 sm:p-8 pb-24 safe-area-padding">
+        <div className="min-h-screen pro-canvas text-[#18181B] p-4 sm:p-8 pb-nav safe-area-padding">
             <div className="max-w-3xl mx-auto">
                 <Link
                     href="/flow"

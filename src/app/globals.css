@@ -80,6 +80,17 @@ body {
     padding-bottom: calc(var(--safe-area-inset-bottom) + 16px);
 }
 
+/* 하단 네비게이션 바를 위한 패딩 (모바일에서 콘텐츠가 가려지지 않도록) */
+.pb-nav {
+    padding-bottom: calc(var(--safe-area-inset-bottom) + 80px); /* 네비게이션 바 높이 + 여유 공간 */
+}
+
+@media (min-width: 768px) {
+    .pb-nav {
+        padding-bottom: 0; /* 데스크톱에서는 플로팅 네비게이션이므로 패딩 불필요 */
+    }
+}
+
 @theme inline {
     --color-background: var(--background);
     --color-foreground: var(--foreground);

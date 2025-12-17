@@ -198,7 +198,7 @@ export default function StrategyPage() {
         generatedPhases || (selectedFramework ? frameworkPhases[selectedFramework] : []);
 
     return (
-        <div className="min-h-screen pro-canvas text-[#18181B] p-4 sm:p-8 pb-24 safe-area-padding">
+        <div className="min-h-screen pro-canvas text-[#18181B] p-4 sm:p-8 pb-nav safe-area-padding">
             <div className="max-w-5xl mx-auto">
                 <motion.div
                     initial={{ opacity: 0, x: -20 }}
