@@ -681,7 +681,7 @@ export default function FlowPage() {
             (role !== 'other' || customRole);
 
         return (
-            <div className="min-h-screen overflow-y-auto pro-canvas relative text-[#18181B] p-8">
+            <div className="min-h-screen overflow-y-auto pro-canvas relative text-[#18181B] p-4 sm:p-8 safe-area-padding">
                 <div className="max-w-2xl mx-auto">
                     <motion.div
                         initial={{ opacity: 0, x: -20 }}
@@ -690,7 +690,7 @@ export default function FlowPage() {
                     >
                         <Link
                             href="/"
-                            className="text-[#71717A] hover:text-[#18181B] mb-8 inline-flex items-center gap-2 transition-colors"
+                            className="text-[#71717A] hover:text-[#18181B] mb-6 sm:mb-8 inline-flex items-center gap-2 transition-colors touch-target"
                         >
                             ← 홈으로
                         </Link>
@@ -737,17 +737,17 @@ export default function FlowPage() {
                             </div>
 
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-2xl text-[#18181B] font-semibold flex items-center gap-3">
+                                <CardTitle className="text-xl sm:text-2xl text-[#18181B] font-semibold flex items-center gap-2 sm:gap-3">
                                     <motion.div 
-                                        className="p-2 bg-blue-100 rounded-xl"
+                                        className="p-1.5 sm:p-2 bg-blue-100 rounded-lg sm:rounded-xl"
                                         whileHover={{ scale: 1.05, rotate: 5 }}
                                         transition={{ type: 'spring', stiffness: 300 }}
                                     >
-                                        <FileText className="w-6 h-6 text-blue-600" />
+                                        <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                                     </motion.div>
                                     업무 맥락 입력
                                 </CardTitle>
-                                <p className="text-sm text-[#71717A] mt-1">
+                                <p className="text-xs sm:text-sm text-[#71717A] mt-1">
                                     AI가 맞춤형 업무 프로세스를 분석할 수 있도록 정보를 입력해주세요
                                 </p>
                             </CardHeader>
@@ -755,7 +755,7 @@ export default function FlowPage() {
                             <CardContent className="space-y-6 pt-4">
                                 {/* 산업군 & 직무 */}
                                 <motion.div 
-                                    className="grid grid-cols-2 gap-4"
+                                    className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4"
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.2 }}
@@ -859,7 +859,7 @@ export default function FlowPage() {
 
                                 {/* 팀 규모 & 업무 주기 */}
                                 <motion.div 
-                                    className="grid grid-cols-2 gap-4"
+                                    className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4"
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.4 }}
@@ -1091,7 +1091,7 @@ export default function FlowPage() {
                                     <motion.button
                                         onClick={handleStart}
                                         disabled={!isFormValid}
-                                        className={`w-full py-4 px-6 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition-all duration-300 ${
+                                        className={`w-full py-3 sm:py-4 px-4 sm:px-6 rounded-xl font-semibold text-base sm:text-lg flex items-center justify-center gap-2 sm:gap-3 transition-all duration-300 touch-target ${
                                             isFormValid
                                                 ? 'bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 hover:from-blue-600 hover:via-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40'
                                                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -1188,11 +1188,41 @@ export default function FlowPage() {
             : displayAsIsEdges;
 
     // Canvas with Sidebar
+    // 모바일 사이드바 토글 상태
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    
     return (
         <div className="h-screen pro-canvas text-[#18181B] flex overflow-hidden">
+            {/* Mobile Sidebar Toggle */}
+            <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="md:hidden fixed top-4 left-4 z-50 p-2 bg-white/90 backdrop-blur-xl border border-gray-200 rounded-xl shadow-lg touch-target"
+            >
+                {sidebarOpen ? (
+                    <X className="w-5 h-5 text-gray-700" />
+                ) : (
+                    <Settings2 className="w-5 h-5 text-gray-700" />
+                )}
+            </button>
+
+            {/* Mobile Overlay */}
+            {sidebarOpen && (
+                <div 
+                    className="md:hidden fixed inset-0 bg-black/30 z-30"
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
+
             {/* Sidebar - Pro Glassmorphism */}
             <motion.div 
-                className="w-72 bg-white/90 backdrop-blur-2xl border-r border-gray-200/80 flex flex-col overflow-hidden shadow-xl shadow-gray-200/50"
+                className={`
+                    fixed md:relative z-40
+                    w-72 h-full
+                    bg-white/90 backdrop-blur-2xl border-r border-gray-200/80 
+                    flex flex-col overflow-hidden shadow-xl shadow-gray-200/50
+                    transform transition-transform duration-300 ease-in-out
+                    ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+                `}
                 initial={{ x: -20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 transition={{ duration: 0.3 }}

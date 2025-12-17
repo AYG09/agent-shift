@@ -91,15 +91,15 @@ export default function NodeContextMenu({
                                 }
                             }}
                             disabled={menuItem.disabled}
-                            className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors
+                            className={`w-full px-4 py-3 min-h-[44px] text-left text-sm flex items-center gap-3 transition-colors active:scale-[0.98]
                                 ${menuItem.danger
-                                    ? 'text-red-500 hover:bg-red-50'
-                                    : 'text-[#18181B] hover:bg-[#F5F6F8]'
+                                    ? 'text-red-500 hover:bg-red-50 active:bg-red-100'
+                                    : 'text-[#18181B] hover:bg-[#F5F6F8] active:bg-[#E5E7EB]'
                                 }
                                 ${menuItem.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                             `}
                         >
-                            <span>{menuItem.icon}</span>
+                            <span className="text-base">{menuItem.icon}</span>
                             <span>{menuItem.label}</span>
                             {menuItem.label === '상세 분석 (AI)' && isLoading && (
                                 <span className="ml-auto animate-spin">⏳</span>

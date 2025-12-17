@@ -143,27 +143,27 @@ export default function ExportPage() {
     const hasData = context || asIsNodes.length > 0 || toBeNodes.length > 0;
 
     return (
-        <div className="min-h-screen pro-canvas text-[#18181B] p-8 pb-24">
+        <div className="min-h-screen pro-canvas text-[#18181B] p-4 sm:p-8 pb-24 safe-area-padding">
             <div className="max-w-3xl mx-auto">
                 <Link
                     href="/flow"
-                    className="text-[#71717A] hover:text-[#18181B] mb-8 inline-block text-sm"
+                    className="text-[#71717A] hover:text-[#18181B] mb-6 sm:mb-8 inline-flex items-center gap-2 text-sm touch-target"
                 >
                     ← Flow 캔버스로
                 </Link>
 
-                <h1 className="text-2xl font-semibold text-[#18181B] mb-8">결과 내보내기</h1>
+                <h1 className="text-xl sm:text-2xl font-semibold text-[#18181B] mb-6 sm:mb-8">결과 내보내기</h1>
 
                 {/* Data Status */}
                 <Card
-                    className={`mb-6 shadow-sm ${hasData ? 'bg-[#DCFCE7] border-[#86EFAC]' : 'bg-[#FEF3C7] border-[#FCD34D]'}`}
+                    className={`mb-4 sm:mb-6 shadow-sm ${hasData ? 'bg-[#DCFCE7] border-[#86EFAC]' : 'bg-[#FEF3C7] border-[#FCD34D]'}`}
                 >
-                    <CardContent className="py-4">
+                    <CardContent className="py-3 sm:py-4">
                         {hasData ? (
                             <div className="text-[#166534] text-sm">
                                 ✓ 내보낼 데이터가 준비되었습니다
-                                <ul className="mt-2 text-[#166534]/70">
-                                    <li>• 업무: {context?.task || '샘플 데이터'}</li>
+                                <ul className="mt-2 text-[#166534]/70 space-y-0.5">
+                                    <li className="truncate">• 업무: {context?.task || '샘플 데이터'}</li>
                                     <li>
                                         • As-Is 노드:{' '}
                                         {asIsNodes.length > 0
@@ -190,23 +190,27 @@ export default function ExportPage() {
                     </CardContent>
                 </Card>
 
-                {/* Export Options */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                {/* Export Options - 모바일에서 세로 스택 */}
+                <div className="grid grid-cols-1 gap-4 mb-6 sm:mb-8">
                     {/* Word Report */}
-                    <Card className="group bg-white border-[#E2E4E9] hover:border-[#3B82F6] hover:-translate-y-1 hover:shadow-lg transition-all duration-200 shadow-sm">
-                        <CardHeader>
-                            <div className="w-10 h-10 bg-[#DBEAFE] rounded-lg flex items-center justify-center text-xl mb-3">
-                                📄
+                    <Card className="group bg-white border-[#E2E4E9] hover:border-[#3B82F6] active:border-[#3B82F6] hover:-translate-y-1 hover:shadow-lg transition-all duration-200 shadow-sm touch-feedback">
+                        <CardHeader className="pb-2 sm:pb-4">
+                            <div className="flex items-center gap-3 sm:block">
+                                <div className="w-10 h-10 bg-[#DBEAFE] rounded-lg flex items-center justify-center text-xl sm:mb-3 flex-shrink-0">
+                                    📄
+                                </div>
+                                <div>
+                                    <CardTitle className="text-base font-medium text-[#18181B]">
+                                        Word 보고서
+                                    </CardTitle>
+                                    <CardDescription className="text-[#71717A] text-xs sm:text-sm">
+                                        변화 관리 분석 결과를 Word 문서로 내보냅니다
+                                    </CardDescription>
+                                </div>
                             </div>
-                            <CardTitle className="text-base font-medium text-[#18181B]">
-                                Word 보고서
-                            </CardTitle>
-                            <CardDescription className="text-[#71717A] text-sm">
-                                변화 관리 분석 결과를 Word 문서로 내보냅니다
-                            </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <ul className="text-sm text-[#71717A] mb-4 space-y-1">
+                            <ul className="text-xs sm:text-sm text-[#71717A] mb-4 space-y-0.5 sm:space-y-1 grid grid-cols-2 sm:block">
                                 <li>• 업무 맥락 요약</li>
                                 <li>• As-Is / To-Be 비교</li>
                                 <li>• 예상 효과 및 ROI</li>
@@ -215,7 +219,7 @@ export default function ExportPage() {
                             <Button
                                 onClick={handleExportWord}
                                 disabled={isExportingWord}
-                                className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+                                className="w-full bg-[#3B82F6] hover:bg-[#2563EB] active:bg-[#1D4ED8] text-white touch-target"
                             >
                                 {isExportingWord ? (
                                     <span className="flex items-center gap-2">
@@ -230,20 +234,24 @@ export default function ExportPage() {
                     </Card>
 
                     {/* Excel Report */}
-                    <Card className="group bg-white border-[#E2E4E9] hover:border-[#10B981] hover:-translate-y-1 hover:shadow-lg transition-all duration-200 shadow-sm">
-                        <CardHeader>
-                            <div className="w-10 h-10 bg-[#D1FAE5] rounded-lg flex items-center justify-center text-xl mb-3">
-                                📊
+                    <Card className="group bg-white border-[#E2E4E9] hover:border-[#10B981] active:border-[#10B981] hover:-translate-y-1 hover:shadow-lg transition-all duration-200 shadow-sm touch-feedback">
+                        <CardHeader className="pb-2 sm:pb-4">
+                            <div className="flex items-center gap-3 sm:block">
+                                <div className="w-10 h-10 bg-[#D1FAE5] rounded-lg flex items-center justify-center text-xl sm:mb-3 flex-shrink-0">
+                                    📊
+                                </div>
+                                <div>
+                                    <CardTitle className="text-base font-medium text-[#18181B]">
+                                        Excel 보고서
+                                    </CardTitle>
+                                    <CardDescription className="text-[#71717A] text-xs sm:text-sm">
+                                        전체 분석 결과를 Excel로 내보냅니다
+                                    </CardDescription>
+                                </div>
                             </div>
-                            <CardTitle className="text-base font-medium text-[#18181B]">
-                                Excel 보고서
-                            </CardTitle>
-                            <CardDescription className="text-[#71717A] text-sm">
-                                전체 분석 결과를 Excel로 내보냅니다
-                            </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <ul className="text-sm text-[#71717A] mb-4 space-y-1">
+                            <ul className="text-xs sm:text-sm text-[#71717A] mb-4 space-y-0.5 sm:space-y-1 grid grid-cols-2 sm:block">
                                 <li>• AS-IS / TO-BE 플로우</li>
                                 <li>• 간트 차트 형태 WBS</li>
                                 <li>• ROI 분석 요약</li>
@@ -252,7 +260,7 @@ export default function ExportPage() {
                             <Button
                                 onClick={handleExportExcel}
                                 disabled={isExportingExcel}
-                                className="w-full bg-[#10B981] hover:bg-[#059669] text-white"
+                                className="w-full bg-[#10B981] hover:bg-[#059669] active:bg-[#047857] text-white touch-target"
                             >
                                 {isExportingExcel ? (
                                     <span className="flex items-center gap-2">
@@ -272,8 +280,8 @@ export default function ExportPage() {
                     <Card
                         className={`${exportStatus.includes('✅') ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'} shadow-sm`}
                     >
-                        <CardContent className="py-4 text-center">
-                            <span className="text-lg text-[#18181B]">{exportStatus}</span>
+                        <CardContent className="py-3 sm:py-4 text-center">
+                            <span className="text-base sm:text-lg text-[#18181B]">{exportStatus}</span>
                         </CardContent>
                     </Card>
                 )}

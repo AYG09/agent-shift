@@ -28,43 +28,43 @@ export default function ValueCard({
     const collab = collabInfo[collaborationType];
 
     return (
-        <Card className="bg-slate-800/90 border-slate-700 backdrop-blur-sm w-80">
+        <Card className="bg-slate-800/90 border-slate-700 backdrop-blur-sm w-full sm:w-80">
             <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
-                    <span className="text-2xl">🤖</span>
-                    <span className="text-white">{nodeLabel}</span>
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                    <span className="text-xl sm:text-2xl">🤖</span>
+                    <span className="text-white truncate">{nodeLabel}</span>
                 </CardTitle>
-                <div className={`text-sm ${collab.color}`}>
+                <div className={`text-xs sm:text-sm ${collab.color}`}>
                     {collab.label} - {collab.desc}
                 </div>
             </CardHeader>
 
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 sm:space-y-4">
                 {/* 가치 지표 */}
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 text-center">
-                        <div className="text-2xl font-bold text-green-400">{timeSaved}</div>
-                        <div className="text-xs text-slate-400">시간 절감</div>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-2 sm:p-3 text-center">
+                        <div className="text-xl sm:text-2xl font-bold text-green-400">{timeSaved}</div>
+                        <div className="text-[10px] sm:text-xs text-slate-400">시간 절감</div>
                     </div>
-                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-center">
-                        <div className="text-2xl font-bold text-blue-400">{costSaved}</div>
-                        <div className="text-xs text-slate-400">비용 절감</div>
+                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-2 sm:p-3 text-center">
+                        <div className="text-xl sm:text-2xl font-bold text-blue-400">{costSaved}</div>
+                        <div className="text-[10px] sm:text-xs text-slate-400">비용 절감</div>
                     </div>
                 </div>
 
                 {/* SWOT 간소화 */}
                 <div className="space-y-2">
                     <div className="flex items-start gap-2">
-                        <span className="text-green-400 text-sm">✅</span>
-                        <div className="text-sm text-slate-300">
+                        <span className="text-green-400 text-xs sm:text-sm">✅</span>
+                        <div className="text-xs sm:text-sm text-slate-300">
                             {strengths.map((s, i) => (
                                 <div key={i}>• {s}</div>
                             ))}
                         </div>
                     </div>
                     <div className="flex items-start gap-2">
-                        <span className="text-yellow-400 text-sm">⚠️</span>
-                        <div className="text-sm text-slate-400">
+                        <span className="text-yellow-400 text-xs sm:text-sm">⚠️</span>
+                        <div className="text-xs sm:text-sm text-slate-400">
                             {weaknesses.map((w, i) => (
                                 <div key={i}>• {w}</div>
                             ))}

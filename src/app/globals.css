@@ -3,6 +3,83 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* =============================================
+   Mobile-First Base Styles
+   ============================================= */
+
+/* iOS Safe Area 지원 */
+:root {
+    --safe-area-inset-top: env(safe-area-inset-top, 0px);
+    --safe-area-inset-right: env(safe-area-inset-right, 0px);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+/* 터치 최적화 기본 설정 */
+html {
+    -webkit-tap-highlight-color: transparent; /* 터치 하이라이트 제거 */
+    -webkit-touch-callout: none; /* iOS 롱프레스 메뉴 비활성화 */
+    touch-action: manipulation; /* 더블탭 줌 방지, 스크롤 허용 */
+}
+
+/* 모바일 기본 폰트 크기 (16px - iOS 자동 줌 방지) */
+body {
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: contain; /* 풀-투-리프레시 방지 */
+}
+
+/* 반응형 텍스트 크기 */
+@media (max-width: 640px) {
+    html {
+        font-size: 15px;
+    }
+}
+
+/* 터치 타겟 최소 크기 유틸리티 */
+.touch-target {
+    min-width: 44px;
+    min-height: 44px;
+}
+
+.touch-target-lg {
+    min-width: 48px;
+    min-height: 48px;
+}
+
+/* 모바일 스크롤 최적화 */
+.mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+}
+
+/* 모바일 전용 숨김/표시 */
+@media (max-width: 768px) {
+    .hide-mobile {
+        display: none !important;
+    }
+}
+
+@media (min-width: 769px) {
+    .hide-desktop {
+        display: none !important;
+    }
+}
+
+/* 모바일 Safe Area 패딩 */
+.safe-area-padding {
+    padding-top: var(--safe-area-inset-top);
+    padding-right: var(--safe-area-inset-right);
+    padding-bottom: var(--safe-area-inset-bottom);
+    padding-left: var(--safe-area-inset-left);
+}
+
+.safe-area-bottom {
+    padding-bottom: calc(var(--safe-area-inset-bottom) + 16px);
+}
+
 @theme inline {
     --color-background: var(--background);
     --color-foreground: var(--foreground);
@@ -264,4 +341,153 @@
 
 .react-flow__handle:hover {
     background: #6366f1;
+}
+
+/* =============================================
+   Mobile-First Responsive Enhancements
+   ============================================= */
+
+/* 모바일 터치 핸들 크기 증가 */
+@media (max-width: 768px) {
+    .react-flow__handle {
+        width: 16px;
+        height: 16px;
+    }
+
+    /* 모바일에서 노드 크기 조정 */
+    .flow-node {
+        min-width: 120px;
+        font-size: 13px;
+    }
+
+    /* 모바일 캔버스 컨트롤 크기 */
+    .react-flow__controls-button {
+        width: 36px;
+        height: 36px;
+    }
+
+    /* 미니맵 숨김 (모바일에서 공간 확보) */
+    .react-flow__minimap {
+        display: none;
+    }
+}
+
+/* 모바일 버튼 터치 최적화 */
+@media (max-width: 768px) {
+    button, 
+    [role="button"],
+    .btn,
+    a.inline-flex {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* 입력 필드 터치 최적화 */
+    input,
+    textarea,
+    select {
+        min-height: 44px;
+        font-size: 16px; /* iOS 자동 줌 방지 */
+    }
+}
+
+/* 모바일 카드 그리드 */
+@media (max-width: 640px) {
+    .mobile-card-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+}
+
+/* 모바일 헤더/푸터 Safe Area */
+.mobile-header {
+    padding-top: calc(var(--safe-area-inset-top) + 12px);
+}
+
+.mobile-footer {
+    padding-bottom: calc(var(--safe-area-inset-bottom) + 12px);
+}
+
+/* 모바일 풀 너비 버튼 */
+@media (max-width: 640px) {
+    .mobile-full-width {
+        width: 100%;
+    }
+}
+
+/* 모바일 텍스트 크기 조정 */
+@media (max-width: 640px) {
+    .text-responsive-sm {
+        font-size: 0.875rem;
+    }
+    
+    .text-responsive-base {
+        font-size: 0.9375rem;
+    }
+    
+    .text-responsive-lg {
+        font-size: 1.125rem;
+    }
+    
+    .text-responsive-xl {
+        font-size: 1.25rem;
+    }
+    
+    .text-responsive-2xl {
+        font-size: 1.5rem;
+    }
+}
+
+/* 모바일 스와이프 힌트 */
+.swipe-hint {
+    position: relative;
+    overflow: hidden;
+}
+
+.swipe-hint::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 24px;
+    background: linear-gradient(to right, transparent, var(--pro-canvas));
+    pointer-events: none;
+}
+
+/* 터치 피드백 */
+@media (hover: none) and (pointer: coarse) {
+    .touch-feedback:active {
+        transform: scale(0.98);
+        opacity: 0.9;
+    }
+}
+
+/* 모바일 모달/다이얼로그 최적화 */
+@media (max-width: 640px) {
+    [role="dialog"] {
+        max-height: calc(100vh - var(--safe-area-inset-top) - var(--safe-area-inset-bottom) - 32px);
+        max-width: calc(100vw - 32px);
+        border-radius: 16px;
+    }
+}
+
+/* 가로 스크롤 영역 */
+.horizontal-scroll {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.horizontal-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.horizontal-scroll > * {
+    scroll-snap-align: start;
+    flex-shrink: 0;
 }

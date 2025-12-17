@@ -198,7 +198,7 @@ export default function StrategyPage() {
         generatedPhases || (selectedFramework ? frameworkPhases[selectedFramework] : []);
 
     return (
-        <div className="min-h-screen pro-canvas text-[#18181B] p-8 pb-24">
+        <div className="min-h-screen pro-canvas text-[#18181B] p-4 sm:p-8 pb-24 safe-area-padding">
             <div className="max-w-5xl mx-auto">
                 <motion.div
                     initial={{ opacity: 0, x: -20 }}
@@ -207,7 +207,7 @@ export default function StrategyPage() {
                 >
                     <Link
                         href="/flow"
-                        className="text-gray-500 hover:text-gray-800 mb-8 inline-flex items-center gap-2 text-sm transition-colors"
+                        className="text-gray-500 hover:text-gray-800 mb-6 sm:mb-8 inline-flex items-center gap-2 text-sm transition-colors touch-target"
                     >
                         <ArrowLeft className="w-4 h-4" />
                         Flow 캔버스로
@@ -215,7 +215,7 @@ export default function StrategyPage() {
                 </motion.div>
 
                 <motion.h1 
-                    className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-8"
+                    className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-6 sm:mb-8"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, delay: 0.1 }}
@@ -233,16 +233,17 @@ export default function StrategyPage() {
                             transition={{ duration: 0.3, delay: 0.15 }}
                         >
                             <Card className="bg-white/80 backdrop-blur-xl border-gray-200/80 mb-6 shadow-lg shadow-gray-200/50">
-                                <CardContent className="py-4">
-                                    <div className="flex items-center gap-4 text-sm flex-wrap">
+                                <CardContent className="py-3 sm:py-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm">
                                         <div className="flex items-center gap-2">
                                             <Target className="w-4 h-4 text-blue-500" />
                                             <span className="text-gray-500">분석 대상:</span>
                                         </div>
-                                        <span className="font-semibold text-gray-800">{context.task}</span>
-                                        <span className="text-gray-200">|</span>
-                                        <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-600">{context.industry}</span>
-                                        <span className="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-600">{context.role}</span>
+                                        <span className="font-semibold text-gray-800 line-clamp-2 sm:line-clamp-1">{context.task}</span>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-600">{context.industry}</span>
+                                            <span className="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-600">{context.role}</span>
+                                        </div>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -299,11 +300,11 @@ export default function StrategyPage() {
                                 전체 To-Be 플로우를 대상으로 할지, 특정 AI 에이전트 노드만 대상으로 할지 선택하세요.
                             </p>
                         </CardHeader>
-                        <CardContent className="pt-5">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <CardContent className="pt-4 sm:pt-5">
+                            <div className="grid grid-cols-1 gap-4 sm:gap-5">
                                 {/* 전체 플로우 옵션 */}
                                 <motion.div
-                                    className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
+                                    className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl border-2 cursor-pointer transition-all touch-feedback ${
                                         strategyScope === 'full'
                                             ? 'border-indigo-400 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-lg shadow-indigo-500/10'
                                             : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-md'
@@ -312,8 +313,8 @@ export default function StrategyPage() {
                                     whileHover={hasToBeFlow ? { scale: 1.02, y: -2 } : {}}
                                     whileTap={hasToBeFlow ? { scale: 0.98 } : {}}
                                 >
-                                    <div className="flex items-start gap-4">
-                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                    <div className="flex items-start gap-3 sm:gap-4">
+                                        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0 ${
                                             strategyScope === 'full' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' : 'bg-indigo-100 text-indigo-600'
                                         }`}>
                                             <LayoutGrid className="w-6 h-6" />
@@ -372,7 +373,7 @@ export default function StrategyPage() {
 
                                 {/* 선택된 노드 옵션 */}
                                 <motion.div
-                                    className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
+                                    className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl border-2 cursor-pointer transition-all touch-feedback ${
                                         strategyScope === 'selected'
                                             ? 'border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg shadow-purple-500/10'
                                             : 'border-gray-200 bg-white hover:border-purple-300 hover:shadow-md'

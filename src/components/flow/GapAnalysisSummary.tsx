@@ -187,15 +187,15 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
-            className="bg-white/95 backdrop-blur-xl rounded-xl p-5 border border-gray-200/80 shadow-xl shadow-gray-200/50"
+            className="bg-white/95 backdrop-blur-xl rounded-xl p-4 sm:p-5 border border-gray-200/80 shadow-xl shadow-gray-200/50"
         >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-4">
                 <div className="text-sm font-semibold text-gray-800 flex items-center gap-2">
                     📊 생산성 분석
                 </div>
                 {/* 스킬 레벨 선택 */}
                 <Select value={skillLevel} onValueChange={(v) => setSkillLevel(v as SkillLevel)}>
-                    <SelectTrigger className="w-[140px] h-7 text-xs bg-white/80 border-gray-200">
+                    <SelectTrigger className="w-full sm:w-[140px] h-11 sm:h-7 text-sm sm:text-xs bg-white/80 border-gray-200">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

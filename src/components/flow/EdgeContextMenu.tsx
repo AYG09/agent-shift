@@ -77,9 +77,9 @@ export default function EdgeContextMenu({
                                 onReverseDirection();
                                 onClose();
                             }}
-                            className="w-full px-3 py-2.5 flex items-center gap-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors group"
+                            className="w-full px-4 py-3 min-h-[44px] flex items-center gap-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 active:bg-indigo-100 active:scale-[0.98] transition-colors group"
                         >
-                            <ArrowLeftRight size={16} className="text-gray-400 group-hover:text-indigo-500" />
+                            <ArrowLeftRight size={18} className="text-gray-400 group-hover:text-indigo-500" />
                             <span>방향 뒤집기</span>
                             <span className="ml-auto text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
                                 R
@@ -93,9 +93,9 @@ export default function EdgeContextMenu({
                             onDelete();
                             onClose();
                         }}
-                        className="w-full px-3 py-2.5 flex items-center gap-3 text-sm text-red-600 hover:bg-red-50 transition-colors group"
+                        className="w-full px-4 py-3 min-h-[44px] flex items-center gap-3 text-sm text-red-600 hover:bg-red-50 active:bg-red-100 active:scale-[0.98] transition-colors group"
                     >
-                        <Trash2 size={16} className="text-red-400 group-hover:text-red-500" />
+                        <Trash2 size={18} className="text-red-400 group-hover:text-red-500" />
                         <span>연결선 삭제</span>
                         <span className="ml-auto text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
                             Del
