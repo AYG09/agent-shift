@@ -10,6 +10,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
     DialogFooter,
     DialogTrigger,
 } from '@/components/ui/dialog';
@@ -140,6 +141,9 @@ export default function ApiKeySettings({ trigger }: ApiKeySettingsProps) {
             <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
                 <DialogHeader>
                     <DialogTitle>🔑 Google AI API 키 설정</DialogTitle>
+                    <DialogDescription className="text-slate-400">
+                        개인 Google AI API 키를 저장하고 현재 프로젝트에서 사용합니다.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">

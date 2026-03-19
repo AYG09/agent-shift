@@ -10,7 +10,6 @@ import {
     useNodesState,
     useEdgesState,
     BackgroundVariant,
-    Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 

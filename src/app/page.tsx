@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Cpu, GitMerge, Layers, Plus, FolderOpen, Trash2, Edit3, Calendar } from 'lucide-react';
 import { useAppStore, Project } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useMounted } from '@/hooks/useMounted';
 import {
     Dialog,
     DialogContent,
@@ -18,18 +19,12 @@ import {
 export default function Home() {
     const router = useRouter();
     const { projects, createProject, loadProject, deleteProject, renameProject } = useAppStore();
-    
-    const [mounted, setMounted] = useState(false);
+    const mounted = useMounted();
     const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
     const [editingProject, setEditingProject] = useState<Project | null>(null);
     const [editName, setEditName] = useState('');
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-
-    // Hydration 문제 방지
-    useEffect(() => {
-        setMounted(true);
-    }, []);
 
     const handleCreateProject = () => {
         if (!newProjectName.trim()) return;

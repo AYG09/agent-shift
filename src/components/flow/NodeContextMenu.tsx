@@ -9,6 +9,7 @@ interface ContextMenuProps {
     onClose: () => void;
     onEdit: () => void;
     onDuplicate: () => void;
+    onSplit?: () => void;
     onDrilldown: () => void;
     onDelete: () => void;
     isLoading?: boolean;
@@ -21,6 +22,7 @@ export default function NodeContextMenu({
     onClose,
     onEdit,
     onDuplicate,
+    onSplit,
     onDrilldown,
     onDelete,
     isLoading = false,
@@ -50,6 +52,7 @@ export default function NodeContextMenu({
     const menuItems = [
         { icon: '✏️', label: '편집', action: onEdit, disabled: false },
         { icon: '📋', label: '복제', action: onDuplicate, disabled: false },
+        ...(onSplit ? [{ icon: '🧩', label: '세분화 (AI Split)', action: onSplit, disabled: isLoading }] : []),
         { icon: '🔍', label: '상세 분석 (AI)', action: onDrilldown, disabled: isLoading },
         { divider: true },
         { icon: '🗑️', label: '삭제', action: onDelete, danger: true, disabled: false },
@@ -101,7 +104,7 @@ export default function NodeContextMenu({
                         >
                             <span className="text-base">{menuItem.icon}</span>
                             <span>{menuItem.label}</span>
-                            {menuItem.label === '상세 분석 (AI)' && isLoading && (
+                            {(menuItem.label === '상세 분석 (AI)' || menuItem.label === '세분화 (AI Split)') && isLoading && (
                                 <span className="ml-auto animate-spin">⏳</span>
                             )}
                         </button>

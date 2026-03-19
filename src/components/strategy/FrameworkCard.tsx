@@ -206,7 +206,7 @@ export function FrameworkSelector({
                 },
             }}
         >
-            {(['kotter', 'adkar', 'lewin'] as const).map((id, idx) => (
+            {(['kotter', 'adkar', 'lewin'] as const).map((id) => (
                 <motion.div
                     key={id}
                     variants={{

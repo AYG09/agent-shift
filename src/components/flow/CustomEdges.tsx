@@ -13,7 +13,6 @@ export function SelectableEdge({
     targetPosition,
     style = {},
     selected,
-    data,
 }: EdgeProps) {
     const [edgePath, labelX, labelY] = getBezierPath({
         sourceX,
@@ -113,7 +112,6 @@ export function TokenFlowEdge({
     targetPosition,
     style = {},
     selected,
-    data,
 }: EdgeProps) {
     const [edgePath, labelX, labelY] = getBezierPath({
         sourceX,

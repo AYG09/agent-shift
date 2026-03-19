@@ -2,7 +2,7 @@
 
 import { memo, useState } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import type { DurationUnit } from '@/lib/store';
+import type { DurationUnit, SkillMultipliers } from '@/lib/store';
 
 // ============================================
 // 데이터 타입 정의
@@ -13,6 +13,7 @@ type NodeMetrics = {
     timeMinutes?: number; // 하위 호환성
     duration?: number;
     durationUnit?: DurationUnit;
+    skillMultipliers?: SkillMultipliers;
 };
 
 type TerminalNodeData = {
@@ -57,12 +58,6 @@ type AgentNodeData = {
 // ============================================
 // 공통 스타일
 // ============================================
-
-const formatNumber = (num: number): string => {
-    if (num >= 10000) return `${(num / 10000).toFixed(1)}만`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}천`;
-    return num.toString();
-};
 
 // 시간 단위별 표시 포맷터
 const DURATION_UNIT_LABELS: Record<DurationUnit, string> = {
@@ -307,6 +302,11 @@ const SKILL_MULTIPLIERS = {
     senior: 0.7,
 };
 
+const getSkillMultiplier = (
+    metrics: NodeMetrics | undefined,
+    level: keyof typeof SKILL_MULTIPLIERS
+) => metrics?.skillMultipliers?.[level] ?? SKILL_MULTIPLIERS[level];
+
 // ============================================
 // Process Node (직사각형 - 처리) - 아코디언 확장
 // ============================================
@@ -391,17 +391,17 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeD
                                 <div className="flex items-center gap-2 text-[10px]">
                                     <span className="w-2 h-2 rounded-full bg-red-500"></span>
                                     <span className="text-slate-600">저역량:</span>
-                                    <span className="font-medium text-red-600">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.junior)}</span>
+                                    <span className="font-medium text-red-600">{formatDurationWithMultiplier(metrics, getSkillMultiplier(metrics, 'junior'))}</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-[10px]">
                                     <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                                     <span className="text-slate-600">중역량:</span>
-                                    <span className="font-medium text-amber-600">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.mid)}</span>
+                                    <span className="font-medium text-amber-600">{formatDurationWithMultiplier(metrics, getSkillMultiplier(metrics, 'mid'))}</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-[10px]">
                                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                                     <span className="text-slate-600">고역량:</span>
-                                    <span className="font-medium text-emerald-600">{formatDurationWithMultiplier(metrics, SKILL_MULTIPLIERS.senior)}</span>
+                                    <span className="font-medium text-emerald-600">{formatDurationWithMultiplier(metrics, getSkillMultiplier(metrics, 'senior'))}</span>
                                 </div>
                             </div>
                         )}
@@ -448,16 +448,16 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
             {/* 꼭지점 Handle들 - 상/우/하/좌 (각 방향 source/target 모두 지원) */}
             {/* 상단 꼭지점 */}
             <Handle
-                type="target"
+                type="source"
                 position={Position.Top}
                 id="top"
                 className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ top: 0, left: '50%', transform: 'translate(-50%, -50%)' }}
             />
             <Handle
-                type="source"
+                type="target"
                 position={Position.Top}
-                id="top-source"
+                id="top-target"
                 className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ top: 0, left: '50%', transform: 'translate(-50%, -50%)' }}
             />
@@ -493,16 +493,16 @@ export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNod
             />
             {/* 좌측 꼭지점 */}
             <Handle
-                type="target"
+                type="source"
                 position={Position.Left}
                 id="left"
                 className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ top: '50%', left: 0, transform: 'translate(-50%, -50%)' }}
             />
             <Handle
-                type="source"
+                type="target"
                 position={Position.Left}
-                id="left-source"
+                id="left-target"
                 className="!bg-amber-400 !w-4 !h-4 !border-2 !border-white !rounded-full !opacity-0 hover:!opacity-100 hover:!bg-indigo-500 hover:scale-125 transition-all cursor-crosshair"
                 style={{ top: '50%', left: 0, transform: 'translate(-50%, -50%)' }}
             />

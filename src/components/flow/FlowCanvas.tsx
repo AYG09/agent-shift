@@ -16,7 +16,6 @@ import {
     Panel,
     NodeChange,
     NodePositionChange,
-    EdgeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -26,7 +25,7 @@ import NodeEditor from './NodeEditor';
 import NodeContextMenu from './NodeContextMenu';
 import EdgeContextMenu from './EdgeContextMenu';
 import { Button } from '@/components/ui/button';
-import { useAppStore, FlowNode, FlowEdge, DurationUnit } from '@/lib/store';
+import { useAppStore, FlowNode, FlowEdge, DurationUnit, getReversedEdgeHandles } from '@/lib/store';
 
 interface FlowCanvasProps {
     onGenerateFlow?: () => void;
@@ -38,10 +37,10 @@ interface FlowCanvasProps {
     onDrilldown?: (nodeId: string) => void;
 }
 
-export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onDrilldown }: FlowCanvasProps) {
+export default function FlowCanvas(props: FlowCanvasProps) {
+    const { onNodeSplit, onDrilldown } = props;
     const {
         viewMode,
-        setViewMode,
         drilldownPath,
         asIsNodes: storeAsIsNodes,
         asIsEdges: storeAsIsEdges,
@@ -54,7 +53,6 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
         setAsIsFlow,
         setToBeFlow,
         deleteEdge: storeDeleteEdge,
-        updateEdge: storeUpdateEdge,
         reverseEdge: storeReverseEdge,
         selectedToBeNodeId,
         setSelectedToBeNodeId,
@@ -317,15 +315,22 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
         // 로컬 상태도 업데이트 (source ↔ target 교환)
         setEdges((eds) => eds.map((e) => {
             if (e.id !== selectedEdgeId) return e;
-            
-            const newId = `edge-${e.target}-${e.source}${e.targetHandle && e.sourceHandle ? `-${e.targetHandle}-${e.sourceHandle}` : ''}`;
+
+            const reversedHandles = getReversedEdgeHandles({
+                sourceHandle: e.sourceHandle,
+                targetHandle: e.targetHandle,
+            });
+            const handleSuffix = reversedHandles.sourceHandle && reversedHandles.targetHandle
+                ? `-${reversedHandles.sourceHandle}-${reversedHandles.targetHandle}`
+                : '';
+            const newId = `edge-${e.target}-${e.source}${handleSuffix}`;
             return {
                 ...e,
                 id: newId,
                 source: e.target as string,
                 target: e.source as string,
-                sourceHandle: e.targetHandle,
-                targetHandle: e.sourceHandle,
+                sourceHandle: reversedHandles.sourceHandle,
+                targetHandle: reversedHandles.targetHandle,
             };
         }));
         
@@ -733,6 +738,7 @@ export default function FlowCanvas({ onGenerateFlow, isLoading, onNodeSplit, onD
                     onClose={closeContextMenu}
                     onEdit={handleEdit}
                     onDuplicate={handleDuplicate}
+                    onSplit={handleSplit}
                     onDrilldown={handleDrilldown}
                     onDelete={handleDelete}
                     isLoading={isSplitting}

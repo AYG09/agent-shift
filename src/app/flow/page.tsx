@@ -13,7 +13,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
     Command,
@@ -28,12 +28,12 @@ import { useAppStore, SCENARIO_INFO, type ScenarioType } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
 import { ShareDialog } from '@/components/collaboration/ShareDialog';
-import { Spinner } from '@/components/ui/spinner';
 import { Sparkles, Bot, Shield, Scale, Rocket, TrendingUp, Upload, FolderOpen, Save, Building2, Briefcase, FileText, Users, Clock, Wrench, AlertCircle, CheckCircle2, Layers, Zap, Settings2, ChevronRight, Eye, GitCompare, ArrowLeft, Check, ChevronsUpDown, X } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ENTERPRISE_PLATFORMS, PLATFORM_CATEGORIES, PLATFORM_CATEGORY_ORDER, type Platform, type PlatformCategory } from '@/lib/platforms';
+import { ENTERPRISE_PLATFORMS, PLATFORM_CATEGORIES, PLATFORM_CATEGORY_ORDER } from '@/lib/platforms';
 import { cn } from '@/lib/utils';
+import { useMounted } from '@/hooks/useMounted';
 
 // 한국어 시간 문자열 파싱 ("10분", "2시간" → { duration, durationUnit })
 type DurationUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
@@ -156,6 +156,17 @@ const timeScales = [
 ];
 
 export default function FlowPage() {
+    const mounted = useMounted();
+    const currentProjectId = useAppStore((state) => state.currentProjectId);
+
+    if (!mounted) {
+        return null;
+    }
+
+    return <FlowPageContent key={currentProjectId ?? 'flow'} />;
+}
+
+function FlowPageContent() {
     const {
         context,
         setContext,
@@ -177,8 +188,32 @@ export default function FlowPage() {
     
     // 자동 저장 debounce (2초)
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const flushPendingSaveRef = useRef<() => void>(() => {});
     const [isSaving, setIsSaving] = useState(false);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+    const commitSave = useCallback(() => {
+        if (!currentProjectId) {
+            return;
+        }
+
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+
+        updateCurrentProject();
+        setIsSaving(false);
+        setLastSaved(new Date());
+    }, [currentProjectId, updateCurrentProject]);
+
+    const flushPendingSave = useCallback(() => {
+        if (!saveTimeoutRef.current) {
+            return;
+        }
+
+        commitSave();
+    }, [commitSave]);
 
     const debouncedSave = useCallback(() => {
         if (!currentProjectId) return;
@@ -186,32 +221,52 @@ export default function FlowPage() {
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
         }
-        
-        setIsSaving(true);
+
+        window.setTimeout(() => {
+            setIsSaving(true);
+        }, 0);
+
         saveTimeoutRef.current = setTimeout(() => {
-            updateCurrentProject();
-            setIsSaving(false);
-            setLastSaved(new Date());
+            commitSave();
         }, 2000);
-    }, [currentProjectId, updateCurrentProject]);
+    }, [commitSave, currentProjectId]);
+
+    useEffect(() => {
+        flushPendingSaveRef.current = flushPendingSave;
+    }, [flushPendingSave]);
 
     // 플로우 변경 시 자동 저장
     useEffect(() => {
         if (currentProjectId && (asIsNodes.length > 0 || toBeNodes.length > 0)) {
             debouncedSave();
         }
+
         return () => {
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
             }
         };
     }, [asIsNodes, asIsEdges, toBeNodes, toBeEdges, context, currentProjectId, debouncedSave]);
+
+    useEffect(() => {
+        return () => {
+            flushPendingSaveRef.current();
+        };
+    }, []);
+
+    useEffect(() => {
+        const handlePageHide = () => {
+            flushPendingSaveRef.current();
+        };
+
+        window.addEventListener('pagehide', handlePageHide);
+        return () => {
+            window.removeEventListener('pagehide', handlePageHide);
+        };
+    }, []);
     const { isLoading, error, generateAsIsFlow, generateToBeFlow, generateNodeSplit, generateDrilldown } =
         useAIGeneration();
-
-    // Hydration 안전 처리
-    const [mounted, setMounted] = useState(false);
-    const hasRestoredRef = useRef(false);
 
     // label로 value 찾기 헬퍼 함수
     const findIndustryValue = (label: string): string => {
@@ -224,65 +279,32 @@ export default function FlowPage() {
         return found ? found.value : 'other';
     };
 
-    const [industry, setIndustry] = useState('');
-    const [customIndustry, setCustomIndustry] = useState('');
-    const [role, setRole] = useState('');
-    const [customRole, setCustomRole] = useState('');
-    const [task, setTask] = useState('');
-    const [teamSize, setTeamSize] = useState('');
-    const [tooling, setTooling] = useState('');
-    const [painPoints, setPainPoints] = useState('');
-    const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+    const initialIndustryValue = context ? findIndustryValue(context.industry) : '';
+    const initialRoleValue = context ? findRoleValue(context.role) : '';
+    const [industry, setIndustry] = useState(initialIndustryValue);
+    const [customIndustry, setCustomIndustry] = useState(
+        context && initialIndustryValue === 'other' ? context.industry : ''
+    );
+    const [role, setRole] = useState(initialRoleValue);
+    const [customRole, setCustomRole] = useState(
+        context && initialRoleValue === 'other' ? context.role : ''
+    );
+    const [task, setTask] = useState(context?.task || '');
+    const [teamSize, setTeamSize] = useState(context?.teamSize || '');
+    const [tooling, setTooling] = useState(context?.tooling || '');
+    const [painPoints, setPainPoints] = useState(context?.painPoints || '');
+    const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(context?.platforms || []);
     const [platformsOpen, setPlatformsOpen] = useState(false);
     const [timeScale, setTimeScale] = useState<
         'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'project'
-    >('weekly');
-    const [step, setStep] = useState<'context' | 'canvas'>('context');
+    >(context?.timeScale || 'weekly');
+    const [step, setStep] = useState<'context' | 'canvas'>(asIsNodes.length > 0 ? 'canvas' : 'context');
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
     const [selectedScenario, setSelectedScenario] = useState<
         'conservative' | 'balanced' | 'aggressive'
     >('balanced');
     // 모바일 사이드바 토글 상태 (Hooks 순서 보장을 위해 상단에 선언)
     const [sidebarOpen, setSidebarOpen] = useState(false);
-
-    // Mounted 상태 설정
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    // Store context에서 form 필드 복원
-    useEffect(() => {
-        if (mounted && context && !hasRestoredRef.current) {
-            hasRestoredRef.current = true;
-
-            // 산업군 복원
-            const industryValue = findIndustryValue(context.industry);
-            setIndustry(industryValue);
-            if (industryValue === 'other') {
-                setCustomIndustry(context.industry);
-            }
-
-            // 직무 복원
-            const roleValue = findRoleValue(context.role);
-            setRole(roleValue);
-            if (roleValue === 'other') {
-                setCustomRole(context.role);
-            }
-
-            // 기타 필드 복원
-            setTask(context.task || '');
-            setTeamSize(context.teamSize || '');
-            setTooling(context.tooling || '');
-            setPainPoints(context.painPoints || '');
-            setSelectedPlatforms(context.platforms || []);
-            setTimeScale(context.timeScale || 'weekly');
-
-            // 이전 작업이 있으면 canvas 단계로 바로 이동
-            if (asIsNodes.length > 0) {
-                setStep('canvas');
-            }
-        }
-    }, [mounted, context, asIsNodes.length]);
 
     // Drilldown state
     const [drilldownNode, setDrilldownNode] = useState<{
@@ -1535,6 +1557,9 @@ export default function FlowPage() {
                 <DialogContent className="bg-white/90 backdrop-blur-xl border-white/50 shadow-xl">
                     <DialogHeader>
                         <DialogTitle>가치 분석</DialogTitle>
+                        <DialogDescription>
+                            선택한 노드의 기대 가치와 협업 방식을 요약합니다.
+                        </DialogDescription>
                     </DialogHeader>
                     <ValueCard
                         nodeLabel={(selectedNode?.data?.label as string) || ''}
@@ -1560,6 +1585,9 @@ export default function FlowPage() {
                                 {drilldownFlowType === 'as-is' ? 'As-Is' : 'To-Be'}
                             </span>
                         </DialogTitle>
+                        <DialogDescription>
+                            선택한 노드를 단계별로 분해해 세부 작업과 자동화 포인트를 보여줍니다.
+                        </DialogDescription>
                     </DialogHeader>
 
                     {drilldownNode && (

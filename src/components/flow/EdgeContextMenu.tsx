@@ -16,7 +16,6 @@ interface EdgeContextMenuProps {
 export default function EdgeContextMenu({
     x,
     y,
-    edgeId,
     onClose,
     onDelete,
     onReverseDirection,

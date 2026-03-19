@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ReactFlow,
     Background,
@@ -16,7 +16,6 @@ import {
     Panel,
     NodeChange,
     NodePositionChange,
-    EdgeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -61,21 +60,17 @@ export function CollaborativeFlowCanvas() {
         nodeLabel: string;
     } | null>(null);
 
-    const containerRef = useRef<HTMLDivElement>(null);
-
     const target = viewMode === 'tobe' ? 'tobe' : 'asis';
 
     // 커서 위치 업데이트 (throttle 적용 - 50ms)
     const handlePointerMove = useMemo(
         () =>
             throttle((e: React.PointerEvent) => {
-                if (containerRef.current) {
-                    const rect = containerRef.current.getBoundingClientRect();
-                    setCursor({
-                        x: e.clientX - rect.left,
-                        y: e.clientY - rect.top,
-                    });
-                }
+                const rect = e.currentTarget.getBoundingClientRect();
+                setCursor({
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top,
+                });
             }, 50),
         [setCursor]
     );
@@ -273,7 +268,6 @@ export function CollaborativeFlowCanvas() {
 
     return (
         <div
-            ref={containerRef}
             className="relative h-full w-full"
             onPointerMove={handlePointerMove}
             onPointerLeave={handlePointerLeave}

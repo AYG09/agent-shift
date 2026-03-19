@@ -84,6 +84,23 @@ export interface FlowEdge {
     animated?: boolean;
 }
 
+function toSourceHandle(handle: string | undefined): string {
+    if (!handle) return 'bottom';
+    return handle.endsWith('-target') ? handle.replace(/-target$/, '') : handle;
+}
+
+function toTargetHandle(handle: string | undefined): string {
+    if (!handle) return 'top-target';
+    return handle.endsWith('-target') ? handle : `${handle}-target`;
+}
+
+export function getReversedEdgeHandles(edge: Pick<FlowEdge, 'sourceHandle' | 'targetHandle'>) {
+    return {
+        sourceHandle: toSourceHandle(edge.targetHandle),
+        targetHandle: toTargetHandle(edge.sourceHandle),
+    };
+}
+
 // 유효한 target handle ID인지 확인 (신규 체계: xxx-target 형식)
 function isValidTargetHandle(handle: string | undefined): boolean {
     if (!handle) return false;
@@ -531,16 +548,19 @@ export const useAppStore = create<AppState>()(
                     return {
                         [target === 'asis' ? 'asIsEdges' : 'toBeEdges']: edges.map((edge) => {
                             if (edge.id !== id) return edge;
-                            
-                            // source와 target을 교환, handle도 적절히 교환
-                            const newId = `edge-${edge.target}-${edge.source}${edge.targetHandle && edge.sourceHandle ? `-${edge.targetHandle}-${edge.sourceHandle}` : ''}`;
+
+                            const reversedHandles = getReversedEdgeHandles(edge);
+                            const handleSuffix = reversedHandles.sourceHandle && reversedHandles.targetHandle
+                                ? `-${reversedHandles.sourceHandle}-${reversedHandles.targetHandle}`
+                                : '';
+                            const newId = `edge-${edge.target}-${edge.source}${handleSuffix}`;
                             return {
                                 ...edge,
                                 id: newId,
                                 source: edge.target,
                                 target: edge.source,
-                                sourceHandle: edge.targetHandle,
-                                targetHandle: edge.sourceHandle,
+                                sourceHandle: reversedHandles.sourceHandle,
+                                targetHandle: reversedHandles.targetHandle,
                             };
                         }),
                     };

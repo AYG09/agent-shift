@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, ReactNode } from 'react';
+import { useEffect, ReactNode } from 'react';
 import { useCollabStore } from '@/lib/collaboration-store';
 import { getRandomUserColor, getRandomUserName } from '@/lib/liveblocks.config';
 import { Spinner } from '@/components/ui/spinner';
@@ -10,14 +10,10 @@ interface RoomProviderProps {
     children: ReactNode;
 }
 
-type ConnectionStatus = 'connecting' | 'connected' | 'error' | 'reconnecting';
-
 export function RoomProvider({ roomId, children }: RoomProviderProps) {
-    const [status, setStatus] = useState<ConnectionStatus>('connecting');
-    const [error, setError] = useState<string | null>(null);
-    
     const enterRoom = useCollabStore((state) => state.liveblocks.enterRoom);
     const leaveRoom = useCollabStore((state) => state.liveblocks.leaveRoom);
+    const connectionStatus = useCollabStore((state) => state.liveblocks.status);
     const setUser = useCollabStore((state) => state.setUser);
     const syncFromLocalStore = useCollabStore((state) => state.syncFromLocalStore);
 
@@ -47,18 +43,7 @@ export function RoomProvider({ roomId, children }: RoomProviderProps) {
         
         setUser({ name: userName, color: userColor });
 
-        // Room 진입
-        setStatus('connecting');
-        setError(null);
-
-        try {
-            enterRoom(roomId);
-            setStatus('connected');
-        } catch (err) {
-            console.error('Room 연결 실패:', err);
-            setStatus('error');
-            setError(err instanceof Error ? err.message : '알 수 없는 오류');
-        }
+        enterRoom(roomId);
 
         // 클린업: Room 퇴장
         return () => {
@@ -67,7 +52,7 @@ export function RoomProvider({ roomId, children }: RoomProviderProps) {
     }, [roomId, enterRoom, leaveRoom, setUser, syncFromLocalStore]);
 
     // 연결 중 상태
-    if (status === 'connecting') {
+    if (connectionStatus === 'initial' || connectionStatus === 'connecting') {
         return (
             <div className="flex h-screen w-full items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
                 <div className="flex flex-col items-center gap-4">
@@ -79,8 +64,20 @@ export function RoomProvider({ roomId, children }: RoomProviderProps) {
         );
     }
 
+    if (connectionStatus === 'reconnecting') {
+        return (
+            <div className="flex h-screen w-full items-center justify-center bg-gradient-to-br from-slate-50 to-amber-50">
+                <div className="flex flex-col items-center gap-4">
+                    <Spinner className="h-8 w-8" />
+                    <p className="text-sm text-gray-600">연결을 다시 시도하는 중...</p>
+                    <p className="text-xs text-gray-400">Room: {roomId}</p>
+                </div>
+            </div>
+        );
+    }
+
     // 에러 상태
-    if (status === 'error') {
+    if (connectionStatus === 'disconnected') {
         return (
             <div className="flex h-screen w-full items-center justify-center bg-gradient-to-br from-slate-50 to-red-50">
                 <div className="flex flex-col items-center gap-4 rounded-lg bg-white/80 p-8 shadow-lg backdrop-blur-sm">
@@ -100,7 +97,7 @@ export function RoomProvider({ roomId, children }: RoomProviderProps) {
                         </svg>
                     </div>
                     <h2 className="text-lg font-semibold text-gray-900">연결 실패</h2>
-                    <p className="text-sm text-gray-600">{error || '협업 세션에 연결할 수 없습니다.'}</p>
+                    <p className="text-sm text-gray-600">협업 세션에 연결할 수 없습니다.</p>
                     <button
                         onClick={() => window.location.reload()}
                         className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"

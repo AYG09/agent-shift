@@ -52,6 +52,7 @@ interface NodeMetrics {
     timeMinutes?: number;
     duration?: number;
     durationUnit?: DurationUnit;
+    skillMultipliers?: Partial<Record<SkillLevel, number>>;
 }
 
 interface FlowNodeData {
@@ -143,12 +144,13 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
     const [skillLevel, setSkillLevel] = useState<SkillLevel>('mid');
 
     const metrics = useMemo(() => {
-        const multiplier = SKILL_MULTIPLIERS[skillLevel];
+        const getSkillMultiplier = (nodeMetrics?: NodeMetrics) =>
+            nodeMetrics?.skillMultipliers?.[skillLevel] ?? SKILL_MULTIPLIERS[skillLevel];
 
         // Calculate As-Is totals with skill multiplier
         const asIsTotals = asIsNodes.reduce(
             (acc, node) => ({
-                time: acc.time + Math.round(getTimeInMinutes(node.metrics) * multiplier),
+                time: acc.time + Math.round(getTimeInMinutes(node.metrics) * getSkillMultiplier(node.metrics)),
             }),
             { time: 0 }
         );
@@ -156,7 +158,7 @@ export default function GapAnalysisSummary({ asIsNodes, toBeNodes }: GapAnalysis
         // Calculate To-Be totals with skill multiplier
         const toBeTotals = toBeNodes.reduce(
             (acc, node) => ({
-                time: acc.time + Math.round(getTimeInMinutes(node.metrics) * multiplier),
+                time: acc.time + Math.round(getTimeInMinutes(node.metrics) * getSkillMultiplier(node.metrics)),
             }),
             { time: 0 }
         );

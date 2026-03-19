@@ -17,6 +17,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
     DialogFooter,
 } from '@/components/ui/dialog';
 
@@ -67,7 +68,6 @@ export default function NodeEditor({
         useState<NodeData['collaborationType']>('copilot');
     const [duration, setDuration] = useState<number | undefined>(undefined);
     const [durationUnit, setDurationUnit] = useState<DurationUnit>('minutes');
-    const [timeMinutes, setTimeMinutes] = useState<number | undefined>(undefined); // 하위 호환성
     const [skillMultipliers, setSkillMultipliers] = useState<SkillMultipliers>({ ...DEFAULT_SKILL_MULTIPLIERS });
     const [showMultiplierEdit, setShowMultiplierEdit] = useState(false);
 
@@ -80,7 +80,6 @@ export default function NodeEditor({
         setCollaborationType('copilot');
         setDuration(undefined);
         setDurationUnit('minutes');
-        setTimeMinutes(undefined);
         setSkillMultipliers({ ...DEFAULT_SKILL_MULTIPLIERS });
         setShowMultiplierEdit(false);
     };
@@ -98,16 +97,13 @@ export default function NodeEditor({
             if (initialData.metrics?.duration !== undefined) {
                 setDuration(initialData.metrics.duration);
                 setDurationUnit(initialData.metrics.durationUnit || 'minutes');
-                setTimeMinutes(undefined);
             } else if (initialData.metrics?.timeMinutes !== undefined) {
                 // 기존 데이터 변환
                 setDuration(initialData.metrics.timeMinutes);
                 setDurationUnit('minutes');
-                setTimeMinutes(initialData.metrics.timeMinutes);
             } else {
                 setDuration(undefined);
                 setDurationUnit('minutes');
-                setTimeMinutes(undefined);
             }
             // 역량 승수 로드
             setSkillMultipliers(initialData.metrics?.skillMultipliers || { ...DEFAULT_SKILL_MULTIPLIERS });
@@ -143,6 +139,9 @@ export default function NodeEditor({
                     <DialogTitle className="text-[#18181B]">
                         {mode === 'create' ? '✨ 새 노드 추가' : '✏️ 노드 편집'}
                     </DialogTitle>
+                    <DialogDescription className="text-[#71717A]">
+                        노드의 이름, 유형, 시간 메트릭을 입력해 플로우에 반영합니다.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
