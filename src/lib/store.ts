@@ -84,17 +84,20 @@ export interface FlowEdge {
     animated?: boolean;
 }
 
-function toSourceHandle(handle: string | undefined): string {
+function toSourceHandle(handle: string | null | undefined): string {
     if (!handle) return 'bottom';
     return handle.endsWith('-target') ? handle.replace(/-target$/, '') : handle;
 }
 
-function toTargetHandle(handle: string | undefined): string {
+function toTargetHandle(handle: string | null | undefined): string {
     if (!handle) return 'top-target';
     return handle.endsWith('-target') ? handle : `${handle}-target`;
 }
 
-export function getReversedEdgeHandles(edge: Pick<FlowEdge, 'sourceHandle' | 'targetHandle'>) {
+export function getReversedEdgeHandles(edge: {
+    sourceHandle?: string | null;
+    targetHandle?: string | null;
+}) {
     return {
         sourceHandle: toSourceHandle(edge.targetHandle),
         targetHandle: toTargetHandle(edge.sourceHandle),
