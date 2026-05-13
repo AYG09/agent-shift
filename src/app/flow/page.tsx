@@ -24,7 +24,13 @@ import {
     CommandList,
 } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
-import { useAppStore, SCENARIO_INFO, type ScenarioType } from '@/lib/store';
+import {
+    useAppStore,
+    SCENARIO_INFO,
+    type ScenarioType,
+    type FlowNode as StoreFlowNode,
+    type FlowEdge as StoreFlowEdge,
+} from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
 import { ShareDialog } from '@/components/collaboration/ShareDialog';
@@ -154,6 +160,129 @@ const timeScales = [
     { value: 'yearly', label: '연간 (Yearly)' },
     { value: 'project', label: '프로젝트 단위 (Project-based)' },
 ];
+
+type AiFlowNodePayload = {
+    id: string;
+    type: string;
+    terminalType?: string;
+    ioType?: string;
+    label: string;
+    description?: string;
+    stressLevel?: string;
+    collaborationType?: string;
+    agentDescription?: string;
+    position: { x: number; y: number };
+    metrics?: StoreFlowNode['metrics'];
+};
+
+type AiFlowEdgePayload = {
+    id: string;
+    source: string;
+    target: string;
+    sourceHandle?: string;
+    targetHandle?: string;
+};
+
+const FLOW_NODE_TYPES = [
+    'terminal',
+    'process',
+    'decision',
+    'io',
+    'agent',
+    'task',
+    'subprocess',
+] as const;
+
+const STRESS_LEVELS = ['low', 'medium', 'high'] as const;
+const COLLABORATION_TYPES = ['copilot', 'monitor', 'autonomous'] as const;
+const TERMINAL_TYPES = ['start', 'end'] as const;
+const IO_TYPES = ['input', 'output'] as const;
+
+function isFlowNodeType(type: string): type is StoreFlowNode['type'] {
+    return FLOW_NODE_TYPES.some((value) => value === type);
+}
+
+function isStressLevel(value: string): value is NonNullable<StoreFlowNode['stressLevel']> {
+    return STRESS_LEVELS.some((item) => item === value);
+}
+
+function isCollaborationType(
+    value: string
+): value is NonNullable<StoreFlowNode['collaborationType']> {
+    return COLLABORATION_TYPES.some((item) => item === value);
+}
+
+function isTerminalType(value: string): value is NonNullable<StoreFlowNode['terminalType']> {
+    return TERMINAL_TYPES.some((item) => item === value);
+}
+
+function isIoType(value: string): value is NonNullable<StoreFlowNode['ioType']> {
+    return IO_TYPES.some((item) => item === value);
+}
+
+function normalizeNodeType(type: string): StoreFlowNode['type'] {
+    return isFlowNodeType(type) ? type : 'task';
+}
+
+function normalizeStressLevel(stressLevel?: string): StoreFlowNode['stressLevel'] {
+    if (!stressLevel) return undefined;
+    return isStressLevel(stressLevel) ? stressLevel : undefined;
+}
+
+function normalizeCollaborationType(
+    collaborationType?: string
+): StoreFlowNode['collaborationType'] {
+    if (!collaborationType) return undefined;
+    return isCollaborationType(collaborationType) ? collaborationType : undefined;
+}
+
+function normalizeTerminalType(
+    terminalType?: string
+): StoreFlowNode['terminalType'] {
+    if (!terminalType) return undefined;
+    return isTerminalType(terminalType) ? terminalType : undefined;
+}
+
+function normalizeIoType(ioType?: string): StoreFlowNode['ioType'] {
+    if (!ioType) return undefined;
+    return isIoType(ioType) ? ioType : undefined;
+}
+
+function mapAiNodesToStoreNodes(nodes: AiFlowNodePayload[]): StoreFlowNode[] {
+    return nodes.map((node) => ({
+        id: node.id,
+        type: normalizeNodeType(node.type),
+        terminalType: normalizeTerminalType(node.terminalType),
+        ioType: normalizeIoType(node.ioType),
+        label: node.label,
+        description: node.description,
+        stressLevel: normalizeStressLevel(node.stressLevel),
+        collaborationType: normalizeCollaborationType(node.collaborationType),
+        agentDescription: node.agentDescription,
+        position: node.position,
+        metrics: node.metrics,
+    }));
+}
+
+function mapAiEdgesToStoreEdges(edges: AiFlowEdgePayload[]): StoreFlowEdge[] {
+    return edges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+    }));
+}
+
+function mapStoreEdgesToReactFlowEdges(edges: StoreFlowEdge[]): Edge[] {
+    return edges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+    }));
+}
 
 export default function FlowPage() {
     const mounted = useMounted();
@@ -391,21 +520,9 @@ function FlowPageContent() {
         });
 
         if (result) {
-            // AI 응답을 Zustand FlowNode 형식으로 변환 (label이 루트 레벨)
-            const storeNodes = result.nodes.map((node) => ({
-                id: node.id,
-                type: node.type as 'task' | 'decision' | 'subprocess' | 'agent',
-                label: node.label,
-                description: node.description,
-                stressLevel: node.stressLevel as 'low' | 'medium' | 'high' | undefined,
-                position: node.position,
-                metrics: node.metrics,
-            }));
-            const storeEdges = result.edges.map((edge) => ({
-                id: edge.id,
-                source: edge.source,
-                target: edge.target,
-            }));
+            // AI 응답을 Zustand FlowNode/FlowEdge 형식으로 변환
+            const storeNodes = mapAiNodesToStoreNodes(result.nodes);
+            const storeEdges = mapAiEdgesToStoreEdges(result.edges);
             setAsIsFlow(storeNodes, storeEdges);
         }
     };
@@ -438,26 +555,8 @@ function FlowPageContent() {
 
         if (result) {
             // AI 응답을 Zustand FlowNode 형식으로 변환
-            const storeNodes = result.nodes.map((node) => ({
-                id: node.id,
-                type: node.type as 'task' | 'decision' | 'subprocess' | 'agent',
-                label: node.label,
-                description: node.description,
-                stressLevel: node.stressLevel as 'low' | 'medium' | 'high' | undefined,
-                collaborationType: node.collaborationType as
-                    | 'copilot'
-                    | 'monitor'
-                    | 'autonomous'
-                    | undefined,
-                agentDescription: node.agentDescription,
-                position: node.position,
-                metrics: node.metrics,
-            }));
-            const storeEdges = result.edges.map((edge) => ({
-                id: edge.id,
-                source: edge.source,
-                target: edge.target,
-            }));
+            const storeNodes = mapAiNodesToStoreNodes(result.nodes);
+            const storeEdges = mapAiEdgesToStoreEdges(result.edges);
             setToBeFlow(storeNodes, storeEdges);
             // 자동으로 To-Be 뷰로 전환
             setViewMode('tobe');
@@ -485,6 +584,8 @@ function FlowPageContent() {
                         label: string;
                         description?: string;
                         type: string;
+                        terminalType?: string;
+                        ioType?: string;
                         stressLevel?: string;
                         duration?: number;
                         durationUnit?: 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
@@ -492,8 +593,10 @@ function FlowPageContent() {
                         id: n.id,
                         label: n.label,
                         description: n.description,
-                        type: n.type as 'task' | 'decision' | 'subprocess' | 'agent',
-                        stressLevel: n.stressLevel as 'low' | 'medium' | 'high' | undefined,
+                        type: normalizeNodeType(n.type),
+                        terminalType: normalizeTerminalType(n.terminalType),
+                        ioType: normalizeIoType(n.ioType),
+                        stressLevel: normalizeStressLevel(n.stressLevel),
                         position: { x: 0, y: 0 }, // FlowCanvas에서 재배치
                         metrics: n.duration ? {
                             duration: n.duration,
@@ -643,21 +746,23 @@ function FlowPageContent() {
             source: node.id,
             target: newNodes[idx + 1].id,
             sourceHandle: 'bottom',
-            targetHandle: 'top',
+            targetHandle: 'top-target',
         }));
 
         // 기존 incoming을 첫 번째 하위 노드로 연결
         const reconnectedIncoming = incomingEdges.map((e) => ({
             ...e,
             target: newNodes[0].id,
-            targetHandle: 'top',
+            sourceHandle: undefined,
+            targetHandle: undefined,
         }));
 
         // 기존 outgoing을 마지막 하위 노드에서 연결
         const reconnectedOutgoing = outgoingEdges.map((e) => ({
             ...e,
             source: newNodes[newNodes.length - 1].id,
-            sourceHandle: 'bottom',
+            sourceHandle: undefined,
+            targetHandle: undefined,
         }));
 
         // 업데이트된 노드/엣지 배열
@@ -1162,6 +1267,8 @@ function FlowPageContent() {
                 data: {
                     label: n.label,
                     description: n.description,
+                    terminalType: n.terminalType,
+                    ioType: n.ioType,
                     stressLevel: n.stressLevel,
                     metrics: n.metrics,
                 },
@@ -1177,13 +1284,7 @@ function FlowPageContent() {
 
     const displayAsIsEdges: Edge[] =
         asIsNodes.length > 0
-            ? asIsEdges.map((e) => ({ 
-                id: e.id, 
-                source: e.source, 
-                target: e.target,
-                sourceHandle: e.sourceHandle,
-                targetHandle: e.targetHandle,
-            }))
+            ? mapStoreEdgesToReactFlowEdges(asIsEdges)
             : [];
 
     const displayToBeNodes: Node[] =
@@ -1195,6 +1296,8 @@ function FlowPageContent() {
                 data: {
                     label: n.label,
                     description: n.description,
+                    terminalType: n.terminalType,
+                    ioType: n.ioType,
                     collaborationType: n.collaborationType,
                     agentDescription: n.agentDescription,
                     stressLevel: n.stressLevel,
@@ -1205,13 +1308,7 @@ function FlowPageContent() {
 
     const displayToBeEdges: Edge[] =
         toBeNodes.length > 0
-            ? toBeEdges.map((e) => ({ 
-                id: e.id, 
-                source: e.source, 
-                target: e.target,
-                sourceHandle: e.sourceHandle,
-                targetHandle: e.targetHandle,
-            }))
+            ? mapStoreEdgesToReactFlowEdges(toBeEdges)
             : displayAsIsEdges;
 
     // Canvas with Sidebar
@@ -1405,9 +1502,27 @@ function FlowPageContent() {
                                 <CollapsibleSection title="AI 자동화 수준" icon={Zap} defaultOpen={true}>
                                     <div className="space-y-1.5 mt-2">
                                         {[
-                                            { value: 'conservative' as ScenarioType, icon: Shield, color: 'amber' },
-                                            { value: 'balanced' as ScenarioType, icon: Scale, color: 'blue' },
-                                            { value: 'aggressive' as ScenarioType, icon: Rocket, color: 'emerald' },
+                                            {
+                                                value: 'conservative' as ScenarioType,
+                                                icon: Shield,
+                                                activeClasses:
+                                                    'bg-amber-50 text-amber-700 border-2 border-amber-200 shadow-sm',
+                                                iconActiveClass: 'text-amber-500',
+                                            },
+                                            {
+                                                value: 'balanced' as ScenarioType,
+                                                icon: Scale,
+                                                activeClasses:
+                                                    'bg-blue-50 text-blue-700 border-2 border-blue-200 shadow-sm',
+                                                iconActiveClass: 'text-blue-500',
+                                            },
+                                            {
+                                                value: 'aggressive' as ScenarioType,
+                                                icon: Rocket,
+                                                activeClasses:
+                                                    'bg-emerald-50 text-emerald-700 border-2 border-emerald-200 shadow-sm',
+                                                iconActiveClass: 'text-emerald-500',
+                                            },
                                         ].map((scenario) => {
                                             const info = SCENARIO_INFO[scenario.value];
                                             return (
@@ -1416,19 +1531,19 @@ function FlowPageContent() {
                                                 onClick={() => setSelectedScenario(scenario.value as typeof selectedScenario)}
                                                 className={`w-full text-left p-2.5 rounded-xl text-sm transition-all flex items-center gap-3 ${
                                                     selectedScenario === scenario.value
-                                                        ? `bg-${scenario.color}-50 text-${scenario.color}-700 border-2 border-${scenario.color}-200 shadow-sm`
+                                                        ? scenario.activeClasses
                                                         : 'text-gray-600 hover:bg-gray-50 border-2 border-transparent'
                                                 }`}
                                                 whileHover={{ x: 2 }}
                                                 whileTap={{ scale: 0.98 }}
                                             >
-                                                <scenario.icon className={`w-4 h-4 ${selectedScenario === scenario.value ? `text-${scenario.color}-500` : 'text-gray-400'}`} />
+                                                <scenario.icon className={`w-4 h-4 ${selectedScenario === scenario.value ? scenario.iconActiveClass : 'text-gray-400'}`} />
                                                 <div className="flex-1">
                                                     <div className="font-medium">{info.label}</div>
                                                     <div className="text-xs opacity-70">{info.desc}</div>
                                                 </div>
                                                 {selectedScenario === scenario.value && (
-                                                    <CheckCircle2 className={`w-4 h-4 text-${scenario.color}-500`} />
+                                                    <CheckCircle2 className={`w-4 h-4 ${scenario.iconActiveClass}`} />
                                                 )}
                                             </motion.button>
                                         )})}
@@ -1462,16 +1577,31 @@ function FlowPageContent() {
                     <CollapsibleSection title="플로우 뷰" icon={Eye} defaultOpen={true}>
                         <div className="grid grid-cols-3 gap-1.5 mt-2 bg-gray-100/80 rounded-xl p-1.5">
                             {[
-                                { mode: 'asis', label: 'As-Is', icon: Layers, color: 'blue' },
-                                { mode: 'tobe', label: 'To-Be', icon: Bot, color: 'emerald' },
-                                { mode: 'split', label: '비교', icon: GitCompare, color: 'purple' },
+                                {
+                                    mode: 'asis',
+                                    label: 'As-Is',
+                                    icon: Layers,
+                                    activeClasses: 'bg-white text-blue-600 shadow-md',
+                                },
+                                {
+                                    mode: 'tobe',
+                                    label: 'To-Be',
+                                    icon: Bot,
+                                    activeClasses: 'bg-white text-emerald-600 shadow-md',
+                                },
+                                {
+                                    mode: 'split',
+                                    label: '비교',
+                                    icon: GitCompare,
+                                    activeClasses: 'bg-white text-purple-600 shadow-md',
+                                },
                             ].map((view) => (
                                 <motion.button
                                     key={view.mode}
                                     onClick={() => setViewMode(view.mode as typeof viewMode)}
                                     className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium transition-all duration-200 ${
                                         viewMode === view.mode
-                                            ? `bg-white text-${view.color}-600 shadow-md`
+                                            ? view.activeClasses
                                             : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
                                     }`}
                                     whileHover={{ y: -1 }}
