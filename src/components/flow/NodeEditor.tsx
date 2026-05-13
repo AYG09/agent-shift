@@ -28,7 +28,9 @@ interface NodeData {
     id?: string;
     label: string;
     description?: string;
-    type: 'task' | 'decision' | 'subprocess' | 'agent';
+    type: 'terminal' | 'process' | 'decision' | 'io' | 'task' | 'subprocess' | 'agent';
+    terminalType?: 'start' | 'end';
+    ioType?: 'input' | 'output';
     shape?: 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
     stressLevel?: 'low' | 'medium' | 'high';
     collaborationType?: 'copilot' | 'monitor' | 'autonomous';
@@ -66,6 +68,8 @@ export default function NodeEditor({
     const [stressLevel, setStressLevel] = useState<NodeData['stressLevel']>('low');
     const [collaborationType, setCollaborationType] =
         useState<NodeData['collaborationType']>('copilot');
+    const [terminalType, setTerminalType] = useState<NodeData['terminalType']>('start');
+    const [ioType, setIoType] = useState<NodeData['ioType']>('input');
     const [duration, setDuration] = useState<number | undefined>(undefined);
     const [durationUnit, setDurationUnit] = useState<DurationUnit>('minutes');
     const [skillMultipliers, setSkillMultipliers] = useState<SkillMultipliers>({ ...DEFAULT_SKILL_MULTIPLIERS });
@@ -78,6 +82,8 @@ export default function NodeEditor({
         setShape(undefined); // Reset to default
         setStressLevel('low');
         setCollaborationType('copilot');
+        setTerminalType('start');
+        setIoType('input');
         setDuration(undefined);
         setDurationUnit('minutes');
         setSkillMultipliers({ ...DEFAULT_SKILL_MULTIPLIERS });
@@ -93,6 +99,8 @@ export default function NodeEditor({
             setShape(initialData.shape);
             setStressLevel(initialData.stressLevel || 'low');
             setCollaborationType(initialData.collaborationType || 'copilot');
+            setTerminalType(initialData.terminalType || 'start');
+            setIoType(initialData.ioType || 'input');
             // 새 필드 우선, 하위 호환성 유지
             if (initialData.metrics?.duration !== undefined) {
                 setDuration(initialData.metrics.duration);
@@ -119,6 +127,8 @@ export default function NodeEditor({
             label,
             description,
             type,
+            terminalType: type === 'terminal' ? terminalType : undefined,
+            ioType: type === 'io' ? ioType : undefined,
             shape, // Save shape
             stressLevel: type !== 'agent' ? stressLevel : undefined,
             collaborationType: type === 'agent' ? collaborationType : undefined,
@@ -176,13 +186,49 @@ export default function NodeEditor({
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
+                                <SelectItem value="terminal">🏁 시작/종료</SelectItem>
+                                <SelectItem value="process">⚙️ 프로세스</SelectItem>
                                 <SelectItem value="task">📋 일반 업무</SelectItem>
                                 <SelectItem value="decision">❓ 분기점</SelectItem>
+                                <SelectItem value="io">📥 입출력</SelectItem>
                                 <SelectItem value="subprocess">📦 하위 프로세스</SelectItem>
                                 <SelectItem value="agent">🤖 AI Agent</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
+
+                    {type === 'terminal' && (
+                        <div className="space-y-2">
+                            <Label className="text-[#71717A]">시작/종료 유형</Label>
+                            <Select
+                                value={terminalType}
+                                onValueChange={(v) => setTerminalType(v as NodeData['terminalType'])}
+                            >
+                                <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="start">Start</SelectItem>
+                                    <SelectItem value="end">End</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    {type === 'io' && (
+                        <div className="space-y-2">
+                            <Label className="text-[#71717A]">입출력 유형</Label>
+                            <Select value={ioType} onValueChange={(v) => setIoType(v as NodeData['ioType'])}>
+                                <SelectTrigger className="bg-white/50 border-[#E2E4E9] text-[#18181B]">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="input">Input</SelectItem>
+                                    <SelectItem value="output">Output</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {/* Shape Selection */}
                     <div className="space-y-2">

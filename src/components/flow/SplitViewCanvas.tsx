@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ReactFlow,
     Background,
@@ -26,6 +26,40 @@ interface SplitViewCanvasProps {
     toBeEdges: Edge[];
 }
 
+type MetricsType =
+    | {
+          timeMinutes?: number;
+          costKRW?: number;
+          peopleCount?: number;
+      }
+    | undefined;
+
+function toTokenFlowEdges(edges: Edge[], speed: 'slow' | 'fast'): Edge[] {
+    return edges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+        type: 'tokenFlow',
+        data: { speed },
+    }));
+}
+
+function withHeatmapFlag(nodes: Node[], isHeatmapMode: boolean): Node[] {
+    return nodes.map((node) => ({
+        ...node,
+        data: { ...node.data, isHeatmapMode },
+    }));
+}
+
+function extractMetrics(nodes: Node[]) {
+    return nodes.map((node) => ({
+        id: node.id,
+        metrics: (node.data as { metrics?: MetricsType })?.metrics,
+    }));
+}
+
 export default function SplitViewCanvas({
     asIsNodes,
     asIsEdges,
@@ -38,78 +72,33 @@ export default function SplitViewCanvas({
     // 모바일 하단 시트 상태
     const [bottomSheetOpen, setBottomSheetOpen] = useState(false);
 
-    const [nodesLeft, setNodesLeft, onNodesChangeLeft] = useNodesState(asIsNodes);
-    const [edgesLeft, setEdgesLeft, onEdgesChangeLeft] = useEdgesState(
-        asIsEdges.map((e) => ({
-            id: e.id,
-            source: e.source,
-            target: e.target,
-            sourceHandle: e.sourceHandle,
-            targetHandle: e.targetHandle,
-            type: 'tokenFlow',
-            data: { speed: 'slow' },
-        }))
-    );
+    const nodesLeft = useMemo(() => withHeatmapFlag(asIsNodes, isHeatmapMode), [asIsNodes, isHeatmapMode]);
+    const nodesRight = useMemo(() => withHeatmapFlag(toBeNodes, isHeatmapMode), [toBeNodes, isHeatmapMode]);
+    const edgesLeft = useMemo(() => toTokenFlowEdges(asIsEdges, 'slow'), [asIsEdges]);
+    const edgesRight = useMemo(() => toTokenFlowEdges(toBeEdges, 'fast'), [toBeEdges]);
+    const asIsMetrics = useMemo(() => extractMetrics(asIsNodes), [asIsNodes]);
+    const toBeMetrics = useMemo(() => extractMetrics(toBeNodes), [toBeNodes]);
 
-    const [nodesRight, setNodesRight, onNodesChangeRight] = useNodesState(toBeNodes);
-    const [edgesRight, setEdgesRight, onEdgesChangeRight] = useEdgesState(
-        toBeEdges.map((e) => ({
-            id: e.id,
-            source: e.source,
-            target: e.target,
-            sourceHandle: e.sourceHandle,
-            targetHandle: e.targetHandle,
-            type: 'tokenFlow',
-            data: { speed: 'fast' },
-        }))
-    );
-
-    // Props 변경 시 실시간 동기화
-    useEffect(() => {
-        setNodesLeft(asIsNodes.map((node) => ({
-            ...node,
-            data: { ...node.data, isHeatmapMode },
-        })));
-    }, [asIsNodes, isHeatmapMode, setNodesLeft]);
+    const [nodesLeftState, setNodesLeftState, onNodesChangeLeft] = useNodesState(nodesLeft);
+    const [nodesRightState, setNodesRightState, onNodesChangeRight] = useNodesState(nodesRight);
+    const [edgesLeftState, setEdgesLeftState, onEdgesChangeLeft] = useEdgesState(edgesLeft);
+    const [edgesRightState, setEdgesRightState, onEdgesChangeRight] = useEdgesState(edgesRight);
 
     useEffect(() => {
-        setNodesRight(toBeNodes.map((node) => ({
-            ...node,
-            data: { ...node.data, isHeatmapMode },
-        })));
-    }, [toBeNodes, isHeatmapMode, setNodesRight]);
+        setNodesLeftState(nodesLeft);
+    }, [nodesLeft, setNodesLeftState]);
 
     useEffect(() => {
-        setEdgesLeft(asIsEdges.map((e) => ({
-            id: e.id,
-            source: e.source,
-            target: e.target,
-            sourceHandle: e.sourceHandle,
-            targetHandle: e.targetHandle,
-            type: 'tokenFlow',
-            data: { speed: 'slow' },
-        })));
-    }, [asIsEdges, setEdgesLeft]);
+        setNodesRightState(nodesRight);
+    }, [nodesRight, setNodesRightState]);
 
     useEffect(() => {
-        setEdgesRight(toBeEdges.map((e) => ({
-            id: e.id,
-            source: e.source,
-            target: e.target,
-            sourceHandle: e.sourceHandle,
-            targetHandle: e.targetHandle,
-            type: 'tokenFlow',
-            data: { speed: 'fast' },
-        })));
-    }, [toBeEdges, setEdgesRight]);
+        setEdgesLeftState(edgesLeft);
+    }, [edgesLeft, setEdgesLeftState]);
 
-    // Type-safe metrics extraction
-    type MetricsType = { timeMinutes?: number; costKRW?: number; peopleCount?: number } | undefined;
-    const extractMetrics = (nodes: Node[]) =>
-        nodes.map((n) => ({
-            id: n.id,
-            metrics: (n.data as { metrics?: MetricsType })?.metrics,
-        }));
+    useEffect(() => {
+        setEdgesRightState(edgesRight);
+    }, [edgesRight, setEdgesRightState]);
 
     return (
         <div className="w-full h-full flex flex-col md:flex-row">
@@ -146,8 +135,8 @@ export default function SplitViewCanvas({
                     </div>
 
                     <ReactFlow
-                        nodes={nodesLeft}
-                        edges={edgesLeft}
+                        nodes={nodesLeftState}
+                        edges={edgesLeftState}
                         onNodesChange={onNodesChangeLeft}
                         onEdgesChange={onEdgesChangeLeft}
                         nodeTypes={nodeTypes}
@@ -173,8 +162,8 @@ export default function SplitViewCanvas({
                     </div>
 
                     <ReactFlow
-                        nodes={nodesRight}
-                        edges={edgesRight}
+                        nodes={nodesRightState}
+                        edges={edgesRightState}
                         onNodesChange={onNodesChangeRight}
                         onEdgesChange={onEdgesChangeRight}
                         nodeTypes={nodeTypes}
@@ -212,8 +201,8 @@ export default function SplitViewCanvas({
 
                 <div className="flex-shrink-0">
                     <GapAnalysisSummary
-                        asIsNodes={extractMetrics(asIsNodes)}
-                        toBeNodes={extractMetrics(toBeNodes)}
+                        asIsNodes={asIsMetrics}
+                        toBeNodes={toBeMetrics}
                     />
                 </div>
                 
@@ -270,8 +259,8 @@ export default function SplitViewCanvas({
                         </Button>
 
                         <GapAnalysisSummary
-                            asIsNodes={extractMetrics(asIsNodes)}
-                            toBeNodes={extractMetrics(toBeNodes)}
+                            asIsNodes={asIsMetrics}
+                            toBeNodes={toBeMetrics}
                         />
                         
                         {/* 시뮬레이션 속도 안내 */}

@@ -25,7 +25,16 @@ import NodeEditor from './NodeEditor';
 import NodeContextMenu from './NodeContextMenu';
 import EdgeContextMenu from './EdgeContextMenu';
 import { Button } from '@/components/ui/button';
+import { resolveConnectionHandles } from '@/lib/edge-handles';
 import { useAppStore, FlowNode, FlowEdge, DurationUnit, getReversedEdgeHandles } from '@/lib/store';
+
+function createNodeId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return `node-${crypto.randomUUID()}`;
+    }
+
+    return `node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 interface FlowCanvasProps {
     onGenerateFlow?: () => void;
@@ -96,6 +105,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
                 data: {
                     label: n.label,
                     description: n.description,
+                    terminalType: n.terminalType,
+                    ioType: n.ioType,
                     stressLevel: n.stressLevel,
                     collaborationType: n.collaborationType,
                     agentDescription: n.agentDescription,
@@ -113,6 +124,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
             data: {
                 label: n.label,
                 description: n.description,
+                terminalType: n.terminalType,
+                ioType: n.ioType,
                 stressLevel: n.stressLevel,
                 metrics: n.metrics,
                 isHeatmapMode,
@@ -172,53 +185,16 @@ export default function FlowCanvas(props: FlowCanvasProps) {
     // 노드 위치 기반으로 최적의 연결점(handle) 결정
     const determineOptimalHandles = useCallback(
         (sourceId: string, targetId: string, providedSourceHandle?: string | null, providedTargetHandle?: string | null) => {
-            // 사용자가 명시적으로 handle을 지정한 경우 그대로 사용
-            if (providedSourceHandle && providedTargetHandle) {
-                return { sourceHandle: providedSourceHandle, targetHandle: providedTargetHandle };
-            }
-
             const sourceNodes = target === 'asis' ? storeAsIsNodes : storeToBeNodes;
             const sourceNode = sourceNodes.find(n => n.id === sourceId);
             const targetNode = sourceNodes.find(n => n.id === targetId);
 
-            if (!sourceNode || !targetNode) {
-                // sourceHandle은 source 타입, targetHandle은 target 타입 (suffix: -target)
-                return { sourceHandle: 'bottom', targetHandle: 'top-target' };
-            }
-
-            const dx = targetNode.position.x - sourceNode.position.x;
-            const dy = targetNode.position.y - sourceNode.position.y;
-            const absDx = Math.abs(dx);
-            const absDy = Math.abs(dy);
-
-            // 마름모(decision) 노드 특별 처리: 분기점에서 나가는 연결
-            const isSourceDecision = sourceNode.type === 'decision';
-            
-            // 수직 이동이 더 큰 경우 (일반적인 위→아래 흐름)
-            if (absDy > absDx * 0.5) {
-                if (dy > 0) {
-                    // target이 아래에 있음: source의 bottom → target의 top
-                    return { sourceHandle: 'bottom', targetHandle: 'top-target' };
-                } else {
-                    // target이 위에 있음 (역방향): source의 top → target의 bottom
-                    return { sourceHandle: 'top', targetHandle: 'bottom-target' };
-                }
-            }
-            
-            // 수평 이동이 더 큰 경우 (분기)
-            if (dx > 0) {
-                // target이 오른쪽: source의 right → target의 left
-                return { 
-                    sourceHandle: isSourceDecision ? 'right' : 'right', 
-                    targetHandle: 'left-target' 
-                };
-            } else {
-                // target이 왼쪽: source의 left → target의 right
-                return { 
-                    sourceHandle: isSourceDecision ? 'left' : 'left', 
-                    targetHandle: 'right-target' 
-                };
-            }
+            return resolveConnectionHandles({
+                sourcePos: sourceNode?.position,
+                targetPos: targetNode?.position,
+                sourceHandle: providedSourceHandle,
+                targetHandle: providedTargetHandle,
+            });
         },
         [target, storeAsIsNodes, storeToBeNodes]
     );
@@ -420,7 +396,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
         if (foundNode) {
             const newNode: FlowNode = {
                 ...foundNode,
-                id: `node-${Date.now()}`,
+                id: createNodeId(),
                 label: `${foundNode.label} (복사본)`,
                 position: { x: foundNode.position.x + 50, y: foundNode.position.y + 50 },
             };
@@ -468,12 +444,16 @@ export default function FlowCanvas(props: FlowCanvasProps) {
                 const reconnectedIncoming: FlowEdge[] = incomingEdges.map((e) => ({
                     ...e,
                     target: newNodes[0].id,
+                    sourceHandle: undefined,
+                    targetHandle: undefined,
                 }));
 
                 // 기존 outgoing을 마지막 하위 노드에서 연결
                 const reconnectedOutgoing: FlowEdge[] = outgoingEdges.map((e) => ({
                     ...e,
                     source: newNodes[newNodes.length - 1].id,
+                    sourceHandle: undefined,
+                    targetHandle: undefined,
                 }));
 
                 // 원본 노드와 관련 엣지 제거 후 새 노드/엣지 추가
@@ -566,7 +546,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
             id?: string;
             label: string;
             description?: string;
-            type: 'task' | 'decision' | 'subprocess' | 'agent';
+            type: 'terminal' | 'process' | 'decision' | 'io' | 'task' | 'subprocess' | 'agent';
+            terminalType?: 'start' | 'end';
+            ioType?: 'input' | 'output';
             shape?: 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
             stressLevel?: 'low' | 'medium' | 'high';
             collaborationType?: 'copilot' | 'monitor' | 'autonomous';
@@ -574,10 +556,12 @@ export default function FlowCanvas(props: FlowCanvasProps) {
         }) => {
             if (editorMode === 'create') {
                 const newNode: FlowNode = {
-                    id: `node-${Date.now()}`,
+                    id: createNodeId(),
                     label: data.label,
                     description: data.description,
                     type: data.type,
+                    terminalType: data.terminalType,
+                    ioType: data.ioType,
                     shape: data.shape,
                     stressLevel: data.stressLevel,
                     collaborationType: data.collaborationType,
@@ -592,6 +576,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
                         label: data.label,
                         description: data.description,
                         type: data.type,
+                        terminalType: data.terminalType,
+                        ioType: data.ioType,
                         shape: data.shape,
                         stressLevel: data.stressLevel,
                         collaborationType: data.collaborationType,

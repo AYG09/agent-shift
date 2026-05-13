@@ -149,7 +149,7 @@ interface ExtendedStrategy {
 // ============================================================================
 interface ReportNode {
     id: string;
-    type: 'task' | 'decision' | 'subprocess' | 'agent';
+    type: 'terminal' | 'process' | 'decision' | 'io' | 'agent' | 'task' | 'subprocess';
     label: string;
     description?: string;
     metrics?: NodeMetrics;

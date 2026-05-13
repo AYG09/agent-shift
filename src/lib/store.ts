@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { DrilldownResponse } from './ai-schemas';
+import {
+    getReversedEdgeHandles as getReversedEdgeHandlesFromLib,
+    normalizeEdgeHandlesByNodePositions,
+} from './edge-handles';
 
 // 시나리오 정보 (프론트엔드 + API 공유)
 export const SCENARIO_INFO = {
@@ -63,7 +67,9 @@ export interface NodeMetrics {
 
 export interface FlowNode {
     id: string;
-    type: 'task' | 'decision' | 'subprocess' | 'agent';
+    type: 'terminal' | 'process' | 'decision' | 'io' | 'agent' | 'task' | 'subprocess';
+    terminalType?: 'start' | 'end';
+    ioType?: 'input' | 'output';
     label: string;
     description?: string;
     shape?: 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
@@ -84,95 +90,7 @@ export interface FlowEdge {
     animated?: boolean;
 }
 
-function toSourceHandle(handle: string | null | undefined): string {
-    if (!handle) return 'bottom';
-    return handle.endsWith('-target') ? handle.replace(/-target$/, '') : handle;
-}
-
-function toTargetHandle(handle: string | null | undefined): string {
-    if (!handle) return 'top-target';
-    return handle.endsWith('-target') ? handle : `${handle}-target`;
-}
-
-export function getReversedEdgeHandles(edge: {
-    sourceHandle?: string | null;
-    targetHandle?: string | null;
-}) {
-    return {
-        sourceHandle: toSourceHandle(edge.targetHandle),
-        targetHandle: toTargetHandle(edge.sourceHandle),
-    };
-}
-
-// 유효한 target handle ID인지 확인 (신규 체계: xxx-target 형식)
-function isValidTargetHandle(handle: string | undefined): boolean {
-    if (!handle) return false;
-    // 새 체계의 target handle은 -target suffix를 가짐
-    return handle.endsWith('-target');
-}
-
-// 노드 위치 기반으로 최적의 연결점(handle) 자동 계산
-function normalizeEdgeHandlesInStore(nodes: FlowNode[], edges: FlowEdge[]): FlowEdge[] {
-    const nodeMap = new Map(nodes.map(n => [n.id, n.position]));
-    
-    return edges.map(edge => {
-        // 새 체계의 handle이 제대로 지정되어 있으면 그대로 사용
-        // (sourceHandle은 top/bottom/left/right, targetHandle은 xxx-target 형식)
-        if (edge.sourceHandle && isValidTargetHandle(edge.targetHandle)) {
-            return edge;
-        }
-        
-        const sourcePos = nodeMap.get(edge.source);
-        const targetPos = nodeMap.get(edge.target);
-        
-        if (!sourcePos || !targetPos) {
-            // 노드를 찾을 수 없으면 기본값 (위→아래 흐름)
-            return {
-                ...edge,
-                sourceHandle: 'bottom',
-                targetHandle: 'top-target',
-            };
-        }
-        
-        const dx = targetPos.x - sourcePos.x;
-        const dy = targetPos.y - sourcePos.y;
-        const absDx = Math.abs(dx);
-        const absDy = Math.abs(dy);
-        
-        let sourceHandle: string;
-        let targetHandle: string;
-        
-        // 수직 이동이 더 큰 경우
-        if (absDy > absDx * 0.5) {
-            if (dy > 0) {
-                // target이 아래에 있음: source의 bottom → target의 top
-                sourceHandle = 'bottom';
-                targetHandle = 'top-target';
-            } else {
-                // target이 위에 있음: source의 top → target의 bottom
-                sourceHandle = 'top';
-                targetHandle = 'bottom-target';
-            }
-        } else {
-            // 수평 이동이 더 큰 경우
-            if (dx > 0) {
-                // target이 오른쪽: source의 right → target의 left
-                sourceHandle = 'right';
-                targetHandle = 'left-target';
-            } else {
-                // target이 왼쪽: source의 left → target의 right
-                sourceHandle = 'left';
-                targetHandle = 'right-target';
-            }
-        }
-        
-        return {
-            ...edge,
-            sourceHandle,
-            targetHandle,
-        };
-    });
-}
+export const getReversedEdgeHandles = getReversedEdgeHandlesFromLib;
 
 // 액션 아이템 정보
 export interface ActionItem {
@@ -361,8 +279,8 @@ export const useAppStore = create<AppState>()(
                 const project = state.projects.find((p) => p.id === id);
                 if (project) {
                     // 기존 저장된 엣지의 handle을 노드 위치 기반으로 재계산
-                    const normalizedAsIsEdges = normalizeEdgeHandlesInStore(project.asIsNodes, project.asIsEdges);
-                    const normalizedToBeEdges = normalizeEdgeHandlesInStore(project.toBeNodes, project.toBeEdges);
+                    const normalizedAsIsEdges = normalizeEdgeHandlesByNodePositions(project.asIsNodes, project.asIsEdges);
+                    const normalizedToBeEdges = normalizeEdgeHandlesByNodePositions(project.toBeNodes, project.toBeEdges);
                     
                     set({
                         currentProjectId: id,
@@ -443,11 +361,11 @@ export const useAppStore = create<AppState>()(
             
             // 엣지에 handle이 없으면 노드 위치 기반으로 최적 handle 자동 계산
             setAsIsFlow: (nodes, edges) => {
-                const normalizedEdges = normalizeEdgeHandlesInStore(nodes, edges);
+                const normalizedEdges = normalizeEdgeHandlesByNodePositions(nodes, edges);
                 set({ asIsNodes: nodes, asIsEdges: normalizedEdges });
             },
             setToBeFlow: (nodes, edges) => {
-                const normalizedEdges = normalizeEdgeHandlesInStore(nodes, edges);
+                const normalizedEdges = normalizeEdgeHandlesByNodePositions(nodes, edges);
                 set({ toBeNodes: nodes, toBeEdges: normalizedEdges });
             },
 
