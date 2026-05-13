@@ -9,6 +9,7 @@ import {
     type NodeSplitResponse,
 } from '@/lib/ai-schemas';
 import { generateCacheKey, getCachedData, setCachedData } from '@/lib/cache-utils';
+import { normalizeEdgeHandlesByNodePositions } from '@/lib/edge-handles';
 import { useAppStore } from '@/lib/store';
 
 // 드릴다운에 전달할 그래프 컨텍스트용 간소화된 타입
@@ -41,7 +42,31 @@ interface WorkContext {
     platforms?: string[];  // 사용자가 선택한 AI 플랫폼
 }
 
+function normalizeFlowPayloadHandles<
+    T extends {
+        nodes: Array<{ id: string; position: { x: number; y: number } }>;
+        edges: Array<{
+            id: string;
+            source: string;
+            target: string;
+            sourceHandle?: string;
+            targetHandle?: string;
+        }>;
+    },
+>(payload: T): T {
+    return {
+        ...payload,
+        edges: normalizeEdgeHandlesByNodePositions(payload.nodes, payload.edges),
+    };
+}
+
 const API_KEY_STORAGE_KEY = 'agent-shift-api-key';
+const isDev = process.env.NODE_ENV === 'development';
+
+function devLog(message: string, ...args: unknown[]) {
+    if (!isDev) return;
+    console.debug(message, ...args);
+}
 
 // localStorage 안전 접근 헬퍼
 function safeGetStorageItem(key: string): string | null {
@@ -53,80 +78,6 @@ function safeGetStorageItem(key: string): string | null {
         console.warn('[Storage] Access denied:', e);
         return null;
     }
-}
-
-// 유효한 target handle ID인지 확인 (신규 체계: xxx-target 형식)
-function isValidTargetHandle(handle: string | undefined): boolean {
-    if (!handle) return false;
-    return handle.endsWith('-target');
-}
-
-// 수직 플로우를 위한 엣지 핸들 보정 - 노드 위치 기반으로 최적의 연결점 계산
-function normalizeEdgeHandles<T extends { 
-    nodes: Array<{ id: string; position: { x: number; y: number } }>; 
-    edges: Array<{ id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }> 
-}>(data: T): T {
-    const nodeMap = new Map(data.nodes.map(n => [n.id, n.position]));
-    
-    return {
-        ...data,
-        edges: data.edges.map(edge => {
-            // 새 체계의 handle이 제대로 지정되어 있으면 그대로 사용
-            if (edge.sourceHandle && isValidTargetHandle(edge.targetHandle)) {
-                return edge;
-            }
-            
-            const sourcePos = nodeMap.get(edge.source);
-            const targetPos = nodeMap.get(edge.target);
-            
-            if (!sourcePos || !targetPos) {
-                // 노드를 찾을 수 없으면 기본값 (위→아래 흐름)
-                return {
-                    ...edge,
-                    sourceHandle: 'bottom',
-                    targetHandle: 'top-target',
-                };
-            }
-            
-            const dx = targetPos.x - sourcePos.x;
-            const dy = targetPos.y - sourcePos.y;
-            const absDx = Math.abs(dx);
-            const absDy = Math.abs(dy);
-            
-            let sourceHandle: string;
-            let targetHandle: string;
-            
-            // 수직 이동이 더 큰 경우
-            if (absDy > absDx * 0.5) {
-                if (dy > 0) {
-                    // target이 아래에 있음: source의 bottom → target의 top
-                    sourceHandle = 'bottom';
-                    targetHandle = 'top-target';
-                } else {
-                    // target이 위에 있음: source의 top → target의 bottom
-                    sourceHandle = 'top';
-                    targetHandle = 'bottom-target';
-                }
-            } else {
-                // 수평 이동이 더 큰 경우
-                if (dx > 0) {
-                    // target이 오른쪽: source의 right → target의 left
-                    sourceHandle = 'right';
-                    targetHandle = 'left-target';
-                } else {
-                    // target이 왼쪽: source의 left → target의 right
-                    sourceHandle = 'left';
-                    targetHandle = 'right-target';
-                }
-            }
-            
-            return {
-                ...edge,
-                sourceHandle,
-                targetHandle,
-            };
-        }),
-    };
 }
 
 export function useAIGeneration() {
@@ -173,7 +124,7 @@ export function useAIGeneration() {
                 const cacheKey = await generateCacheKey('generateAsIsFlow', context);
                 const cached = getCachedData<AsIsFlowResponse>(cacheKey);
                 if (cached) {
-                    console.log('⚡ Cache Hit: AsIsFlow');
+                    devLog('[AI Generation] Cache hit: AsIsFlow');
                     return cached;
                 }
 
@@ -195,7 +146,7 @@ export function useAIGeneration() {
 
                 const rawData = await response.json();
                 // 엣지 핸들 보정 (수직 플로우용 bottom→top)
-                const data = normalizeEdgeHandles(rawData);
+                const data = normalizeFlowPayloadHandles(rawData);
 
                 // 3. Save Cache
                 setCachedData(cacheKey, data);
@@ -225,7 +176,7 @@ export function useAIGeneration() {
                 const cacheKey = await generateCacheKey('generateToBeFlow', { context, asIsNodes: asIsNodes.map(n => n.id), scenario }); // Optimize key payload
                 const cached = getCachedData<ToBeFlowResponse>(cacheKey);
                 if (cached) {
-                    console.log('⚡ Cache Hit: ToBeFlow');
+                    devLog('[AI Generation] Cache hit: ToBeFlow');
                     return cached;
                 }
 
@@ -248,7 +199,7 @@ export function useAIGeneration() {
 
                 const rawData = await response.json();
                 // 엣지 핸들 보정 (수직 플로우용 bottom→top)
-                const data = normalizeEdgeHandles(rawData);
+                const data = normalizeFlowPayloadHandles(rawData);
                 setCachedData(cacheKey, data);
                 return data;
             } catch (err) {
@@ -270,7 +221,7 @@ export function useAIGeneration() {
                 const cacheKey = await generateCacheKey('generateChangeStrategy', { context, framework, totalWeeks });
                 const cached = getCachedData<ChangeStrategyResponse>(cacheKey);
                 if (cached) {
-                    console.log('⚡ Cache Hit: ChangeStrategy');
+                    devLog('[AI Generation] Cache hit: ChangeStrategy');
                     return cached;
                 }
 
@@ -321,7 +272,7 @@ export function useAIGeneration() {
                 const storeNodeId = `${flowType}-${node.id}`;
                 const storedResult = useAppStore.getState().getDrilldownResult(storeNodeId);
                 if (storedResult) {
-                    console.log('⚡ Store Cache Hit: Drilldown', storeNodeId);
+                    devLog('[AI Generation] Store cache hit: Drilldown', storeNodeId);
                     setIsLoading(false);
                     return storedResult;
                 }
@@ -337,7 +288,7 @@ export function useAIGeneration() {
                 });
                 const cached = getCachedData<DrilldownResponse>(cacheKey);
                 if (cached) {
-                    console.log('⚡ Session Cache Hit: Drilldown');
+                    devLog('[AI Generation] Session cache hit: Drilldown');
                     // 세션 캐시에서 찾으면 Zustand에도 저장
                     useAppStore.getState().setDrilldownResult(storeNodeId, cached);
                     return cached;
@@ -370,7 +321,7 @@ export function useAIGeneration() {
                 
                 // Zustand store에 영구 저장 (변화관리/내보내기용)
                 useAppStore.getState().setDrilldownResult(storeNodeId, data);
-                console.log('💾 Drilldown saved to store:', storeNodeId);
+                devLog('[AI Generation] Drilldown saved to store', storeNodeId);
                 
                 return data;
             } catch (err) {
@@ -390,25 +341,14 @@ export function useAIGeneration() {
             context: WorkContext,
             node: { id: string; label: string; description?: string; type: string; metrics?: { duration?: number; durationUnit?: string } },
             flowType: 'asis' | 'tobe'
-        ): Promise<{
-            nodes: Array<{
-                id: string;
-                label: string;
-                description?: string;
-                type: string;
-                stressLevel?: string;
-                duration?: number;
-                durationUnit?: 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
-            }>;
-            summary: string;
-        } | null> => {
+        ): Promise<NodeSplitResponse | null> => {
             setIsLoading(true);
             setError(null);
             try {
                 const cacheKey = await generateCacheKey('generateNodeSplit', { context, nodeId: node.id, flowType });
                 const cached = getCachedData<NodeSplitResponse>(cacheKey);
                 if (cached) {
-                    console.log('⚡ Cache Hit: NodeSplit');
+                    devLog('[AI Generation] Cache hit: NodeSplit');
                     return cached;
                 }
 

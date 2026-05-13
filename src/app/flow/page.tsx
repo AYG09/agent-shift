@@ -38,14 +38,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ENTERPRISE_PLATFORMS, PLATFORM_CATEGORIES, PLATFORM_CATEGORY_ORDER } from '@/lib/platforms';
 import { cn } from '@/lib/utils';
 import { useMounted } from '@/hooks/useMounted';
+import type { DrilldownResponse, NodeSplitResponse } from '@/lib/ai-schemas';
 import {
     mapAiEdgesToStoreEdges,
     mapAiNodesToStoreNodes,
     mapStoreEdgesToReactFlowEdges,
-    normalizeIoType,
     normalizeNodeType,
     normalizeStressLevel,
-    normalizeTerminalType,
     parseDurationString,
 } from '@/lib/flow-mappers';
 import { industries, roles, timeScales } from '@/lib/flow-options';
@@ -351,23 +350,11 @@ function FlowPageContent() {
             // FlowNode 형식으로 변환 (duration/durationUnit → metrics 변환)
             return {
                 nodes: result.nodes.map(
-                    (n: {
-                        id: string;
-                        label: string;
-                        description?: string;
-                        type: string;
-                        terminalType?: string;
-                        ioType?: string;
-                        stressLevel?: string;
-                        duration?: number;
-                        durationUnit?: 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
-                    }) => ({
+                    (n: NodeSplitResponse['nodes'][number]) => ({
                         id: n.id,
                         label: n.label,
                         description: n.description,
                         type: normalizeNodeType(n.type),
-                        terminalType: normalizeTerminalType(n.terminalType),
-                        ioType: normalizeIoType(n.ioType),
                         stressLevel: normalizeStressLevel(n.stressLevel),
                         position: { x: 0, y: 0 }, // FlowCanvas에서 재배치
                         metrics: n.duration ? {
@@ -443,26 +430,7 @@ function FlowPageContent() {
         if (result) {
             setDrilldownResult({
                 flowType: viewMode === 'tobe' ? 'tobe' : 'asis',
-                subSteps: result.subSteps.map((step: { 
-                    id: string; 
-                    label: string; 
-                    description: string; 
-                    duration?: string; 
-                    tools?: string[];
-                    painPoints?: string;
-                    aiImplementation?: {
-                        method: string;
-                        technology: string[];
-                        platforms?: string[];
-                        automationLevel?: 'full' | 'partial' | 'assisted';
-                    };
-                    resources?: Array<{
-                        type: 'youtube' | 'docs' | 'article' | 'tutorial';
-                        title: string;
-                        url?: string;
-                        description?: string;
-                    }>;
-                }) => ({
+                subSteps: result.subSteps.map((step: DrilldownResponse['subSteps'][number]) => ({
                     id: step.id,
                     label: step.label,
                     description: step.description,
