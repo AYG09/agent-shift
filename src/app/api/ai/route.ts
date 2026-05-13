@@ -10,6 +10,13 @@ import {
     NodeSplitResponseSchema,
 } from '@/lib/ai-schemas';
 
+const isDev = process.env.NODE_ENV === 'development';
+
+function devLog(message: string, ...args: unknown[]) {
+    if (!isDev) return;
+    console.log(message, ...args);
+}
+
 // AI 응답의 숫자 필드를 정규화 (부동소수점 오버플로우 방지)
 function normalizeMetrics(obj: unknown): unknown {
     if (obj === null || obj === undefined) return obj;
@@ -51,10 +58,10 @@ function tryParseFromError(error: unknown): unknown | null {
     if (NoObjectGeneratedError.isInstance(error) && error.text) {
         try {
             const parsed = JSON.parse(error.text);
-            console.log('[API Route] Fallback: parsed from error.text');
+            devLog('[API Route] Fallback: parsed from error.text');
             return normalizeArrayLengths(parsed);
         } catch {
-            console.log('[API Route] Fallback failed: could not parse error.text');
+            devLog('[API Route] Fallback failed: could not parse error.text');
             return null;
         }
     }
@@ -465,34 +472,22 @@ export async function POST(request: NextRequest) {
         // BYOK: 사용자 제공 키 또는 환경 변수 키 사용 (개행 문자 방지를 위해 trim)
         const trimmedApiKey = apiKey?.trim();
 
-        // 디버깅: 환경 변수 상태 확인
-        const rawEnvKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-        console.log('[API Route] Debug - Raw env key exists:', !!rawEnvKey);
-        console.log('[API Route] Debug - Raw env key length:', rawEnvKey?.length);
-        console.log('[API Route] Debug - Raw env key first 10 chars:', rawEnvKey?.substring(0, 10));
-        console.log(
-            '[API Route] Debug - Raw env key last 10 chars:',
-            rawEnvKey?.substring(rawEnvKey?.length - 10)
-        );
-        console.log('[API Route] Debug - User provided key exists:', !!trimmedApiKey);
-
         let model;
         if (trimmedApiKey) {
             // 사용자가 제공한 API 키로 새 클라이언트 생성
             const customGoogle = createGoogleGenerativeAI({ apiKey: trimmedApiKey });
             model = customGoogle('gemini-2.5-flash');
-            console.log('[API Route] Using user-provided API key');
+            devLog('[API Route] Using user-provided API key');
         } else {
             // 환경 변수의 기본 키 사용 (환경 변수도 trim)
             const envApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
-            console.log('[API Route] Debug - Trimmed env key length:', envApiKey?.length);
             if (envApiKey) {
                 const customGoogle = createGoogleGenerativeAI({ apiKey: envApiKey });
                 model = customGoogle('gemini-2.5-flash');
-                console.log('[API Route] Using env API key (trimmed)');
+                devLog('[API Route] Using env API key (trimmed)');
             } else {
                 model = google('gemini-2.5-flash');
-                console.log('[API Route] Using default google() - no API key found!');
+                devLog('[API Route] Using default google() - no API key found');
             }
         }
 
@@ -602,7 +597,7 @@ export async function POST(request: NextRequest) {
         if (NoObjectGeneratedError.isInstance(error)) {
             const fallbackResult = tryParseFromError(error);
             if (fallbackResult) {
-                console.log('[API Route] Using fallback result from error.text');
+                devLog('[API Route] Using fallback result from error.text');
                 return NextResponse.json(fallbackResult);
             }
             return NextResponse.json({ 

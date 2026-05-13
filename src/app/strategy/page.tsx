@@ -564,7 +564,7 @@ function StrategyPageContent() {
                                         <GanttChart
                                             phases={displayPhases}
                                             totalWeeks={totalWeeks}
-                                            onPhaseClick={(phase) => console.log('Phase clicked:', phase)}
+                                            onPhaseClick={() => undefined}
                                         />
                                     </div>
 

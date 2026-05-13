@@ -5,6 +5,8 @@ import { useCollabStore } from '@/lib/collaboration-store';
 import { getRandomUserColor, getRandomUserName } from '@/lib/liveblocks.config';
 import { Spinner } from '@/components/ui/spinner';
 
+const isDev = process.env.NODE_ENV === 'development';
+
 interface RoomProviderProps {
     roomId: string;
     children: ReactNode;
@@ -26,9 +28,13 @@ export function RoomProvider({ roomId, children }: RoomProviderProps) {
                     const parsed = JSON.parse(savedData);
                     syncFromLocalStore(parsed);
                     sessionStorage.removeItem('collab-initial-data'); // 일회용
-                    console.log('[RoomProvider] 로컬 데이터 동기화 완료');
+                    if (isDev) {
+                        console.log('[RoomProvider] 로컬 데이터 동기화 완료');
+                    }
                 } catch (e) {
-                    console.error('[RoomProvider] 초기 데이터 파싱 실패:', e);
+                    if (isDev) {
+                        console.error('[RoomProvider] 초기 데이터 파싱 실패:', e);
+                    }
                 }
             }
         }
