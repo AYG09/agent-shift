@@ -87,25 +87,34 @@ function FlowPageContent() {
     const currentProject = getCurrentProject();
     
     // 자동 저장 debounce (2초)
-    const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const saveTimeoutRef = useRef<number | null>(null);
+    const savingIndicatorTimeoutRef = useRef<number | null>(null);
     const flushPendingSaveRef = useRef<() => void>(() => {});
     const [isSaving, setIsSaving] = useState(false);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+    const clearAutosaveTimers = useCallback(() => {
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        if (savingIndicatorTimeoutRef.current) {
+            clearTimeout(savingIndicatorTimeoutRef.current);
+            savingIndicatorTimeoutRef.current = null;
+        }
+    }, []);
 
     const commitSave = useCallback(() => {
         if (!currentProjectId) {
             return;
         }
 
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-            saveTimeoutRef.current = null;
-        }
+        clearAutosaveTimers();
 
         updateCurrentProject();
         setIsSaving(false);
         setLastSaved(new Date());
-    }, [currentProjectId, updateCurrentProject]);
+    }, [clearAutosaveTimers, currentProjectId, updateCurrentProject]);
 
     const flushPendingSave = useCallback(() => {
         if (!saveTimeoutRef.current) {
@@ -117,19 +126,17 @@ function FlowPageContent() {
 
     const debouncedSave = useCallback(() => {
         if (!currentProjectId) return;
-        
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-        }
 
-        window.setTimeout(() => {
+        clearAutosaveTimers();
+
+        savingIndicatorTimeoutRef.current = window.setTimeout(() => {
             setIsSaving(true);
         }, 0);
 
-        saveTimeoutRef.current = setTimeout(() => {
+        saveTimeoutRef.current = window.setTimeout(() => {
             commitSave();
         }, 2000);
-    }, [commitSave, currentProjectId]);
+    }, [clearAutosaveTimers, commitSave, currentProjectId]);
 
     useEffect(() => {
         flushPendingSaveRef.current = flushPendingSave;
@@ -142,13 +149,11 @@ function FlowPageContent() {
         }
 
         return () => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-                saveTimeoutRef.current = null;
-            }
+            clearAutosaveTimers();
         };
-    }, [asIsNodes, asIsEdges, toBeNodes, toBeEdges, context, currentProjectId, debouncedSave]);
+    }, [asIsNodes, asIsEdges, clearAutosaveTimers, context, currentProjectId, debouncedSave, toBeNodes, toBeEdges]);
 
+    // 페이지 이탈 직전 마지막 변경을 즉시 flush해 저장 손실을 줄인다.
     useEffect(() => {
         return () => {
             flushPendingSaveRef.current();
