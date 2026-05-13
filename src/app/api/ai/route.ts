@@ -289,13 +289,18 @@ ${frameworkGuide[framework] || framework}
 }
 
 // AS-IS 전용 드릴다운 프롬프트: 인간 작업 과정만 상세 분석
-function getDrilldownPromptAsIs(
+function getHumanDrilldownPrompt(
     node: { id: string; label: string; description?: string; type: string },
     context: { industry: string; role: string; task: string },
-    graphContext: GraphContext | null = null
+    graphContextText: string,
+    options: {
+        flowType: 'asis' | 'tobe';
+        modeTitle: string;
+        noAiLine: string;
+        graphHint?: string;
+        summaryLine: string;
+    }
 ) {
-    const graphContextText = formatGraphContextForPrompt(graphContext);
-    
     return `당신은 업무 프로세스 분석 전문가입니다.
 다음 프로세스 단계를 **인간이 수행하는 관점**에서 세부적으로 분해해주세요.
 
@@ -311,19 +316,37 @@ function getDrilldownPromptAsIs(
 - 타입: ${node.type}
 ${graphContextText}
 ## 중요 지침 ⚠️
-이것은 **As-Is (현재 상태)** 분석입니다.
-- AI 자동화, AI 도입, AI 대체 가능성은 **절대 언급하지 마세요**
-- 오직 **인간이 현재 이 작업을 어떻게 수행하는지**만 분석하세요
-${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞는** 세부 단계를 도출하세요` : ''}
+이것은 **${options.modeTitle}** 분석입니다.
+${options.noAiLine}
+- 오직 **인간이 이 작업을 어떻게 수행하는지**만 분석하세요
+${options.graphHint || ''}
 
 ## 요구사항
 1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
 2. 각 하위 단계: description, duration, tools, painPoints
-3. summary: 전체 과정 요약과 주요 병목점
+3. summary: ${options.summaryLine}
 
 ## 응답 형식
-- flowType: "asis"
+- flowType: "${options.flowType}"
 - aiImplementation, resources 필드는 **생략**`;
+}
+
+function getDrilldownPromptAsIs(
+    node: { id: string; label: string; description?: string; type: string },
+    context: { industry: string; role: string; task: string },
+    graphContext: GraphContext | null = null
+) {
+    const graphContextText = formatGraphContextForPrompt(graphContext);
+
+    return getHumanDrilldownPrompt(node, context, graphContextText, {
+        flowType: 'asis',
+        modeTitle: 'As-Is (현재 상태)',
+        noAiLine: '- AI 자동화, AI 도입, AI 대체 가능성은 **절대 언급하지 마세요**',
+        graphHint: graphContext
+            ? '- 위의 이전/다음 단계를 참고하여 **흐름에 맞는** 세부 단계를 도출하세요'
+            : undefined,
+        summaryLine: '전체 과정 요약과 주요 병목점',
+    });
 }
 
 // TO-BE 전용 드릴다운 프롬프트: AI 자동화 구현 방법 상세 안내
@@ -363,36 +386,15 @@ ${asIsNodes.map(n => {
     const isHumanTask = node.type !== 'agent';
     
     if (isHumanTask) {
-        // TO-BE 플로우에서 인간이 수행하는 단계 (task, process, decision 등)
-        return `당신은 업무 프로세스 분석 전문가입니다.
-다음 프로세스 단계를 **인간이 수행하는 관점**에서 세부적으로 분해해주세요.
-
-## 업무 정보
-- 산업: ${context.industry}
-- 직무: ${context.role}  
-- 전체 업무: ${context.task}
-
-## 분석 대상 노드
-- ID: ${node.id}
-- 이름: ${node.label}
-- 설명: ${node.description || '없음'}
-- 타입: ${node.type}
-${graphContextText}
-## 중요 지침 ⚠️
-이것은 **To-Be 플로우에서 인간이 수행하는 단계**입니다.
-- 이 노드는 AI가 아닌 **인간 담당자**가 수행합니다
-- AI 자동화, AI 도입 가능성은 **언급하지 마세요** (이 단계는 인간 업무로 계획됨)
-- 오직 **인간이 이 작업을 어떻게 수행하는지**만 분석하세요
-${graphContext ? `- 위의 이전/다음 단계(일부는 AI 에이전트)와의 **연계**를 고려하세요` : ''}
-
-## 요구사항
-1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
-2. 각 하위 단계: description, duration, tools, painPoints
-3. summary: 전체 과정 요약과 AI 에이전트와의 협업 포인트
-
-## 응답 형식
-- flowType: "tobe"
-- aiImplementation, resources 필드는 **생략**`;
+        return getHumanDrilldownPrompt(node, context, graphContextText, {
+            flowType: 'tobe',
+            modeTitle: 'To-Be 플로우에서 인간이 수행하는 단계',
+            noAiLine: '- AI 자동화, AI 도입 가능성은 **언급하지 마세요** (이 단계는 인간 업무로 계획됨)',
+            graphHint: graphContext
+                ? '- 위의 이전/다음 단계(일부는 AI 에이전트)와의 **연계**를 고려하세요'
+                : undefined,
+            summaryLine: '전체 과정 요약과 AI 에이전트와의 협업 포인트',
+        });
     }
     
     // 노드 타입이 'agent'인 경우: AI 자동화 분석
