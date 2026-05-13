@@ -253,7 +253,6 @@ function FlowPageContent() {
     const drilldownFlowType: 'as-is' | 'to-be' = viewMode === 'tobe' ? 'to-be' : 'as-is';
 
     // ReactFlow 형식으로 변환
-    // Note: ReactFlow conversion helpers removed (unused)
 
     const handleStart = () => {
         const finalIndustry =
