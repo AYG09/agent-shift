@@ -500,15 +500,16 @@ export async function POST(request: NextRequest) {
         let prompt;
 
         switch (action) {
-            case 'generateAsIsFlow':
+            case 'generateAsIsFlow': {
                 if (!context) {
                     return NextResponse.json({ error: 'context is required' }, { status: 400 });
                 }
                 schema = AsIsFlowResponseSchema;
                 prompt = getAsIsPrompt(context);
                 break;
+            }
 
-            case 'generateToBeFlow':
+            case 'generateToBeFlow': {
                 if (!context || !asIsNodes) {
                     return NextResponse.json(
                         { error: 'context and asIsNodes are required' },
@@ -518,8 +519,9 @@ export async function POST(request: NextRequest) {
                 schema = ToBeFlowResponseSchema;
                 prompt = getToBePrompt(context, asIsNodes, scenario || 'balanced');
                 break;
+            }
 
-            case 'generateChangeStrategy':
+            case 'generateChangeStrategy': {
                 if (!context || !framework) {
                     return NextResponse.json(
                         { error: 'context and framework are required' },
@@ -530,8 +532,9 @@ export async function POST(request: NextRequest) {
                 schema = ChangeStrategyResponseSchema;
                 prompt = getStrategyPrompt(context, framework, totalWeeks);
                 break;
+            }
 
-            case 'generateDrilldown':
+            case 'generateDrilldown': {
                 if (!context || !node || !flowType) {
                     return NextResponse.json(
                         { error: 'context, node and flowType are required' },
@@ -543,8 +546,9 @@ export async function POST(request: NextRequest) {
                 // asIsNodes는 TO-BE 분석 시 시간 비교용
                 prompt = getDrilldownPrompt(node, context, flowType, body.allNodes, body.allEdges, body.asIsNodes);
                 break;
+            }
 
-            case 'generateNodeSplit':
+            case 'generateNodeSplit': {
                 if (!context || !node || !flowType) {
                     return NextResponse.json(
                         { error: 'context, node and flowType are required' },
@@ -575,6 +579,7 @@ export async function POST(request: NextRequest) {
 5. **각 노드에 duration(숫자)과 durationUnit(단위)을 반드시 설정하세요.**
 6. summary에 분할 이유와 전체 요약을 작성하세요.`;
                 break;
+            }
 
             default:
                 return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
