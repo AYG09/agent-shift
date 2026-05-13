@@ -28,6 +28,7 @@ import {
     useAppStore,
     SCENARIO_INFO,
     type ScenarioType,
+    type UserContext,
 } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
@@ -54,6 +55,16 @@ import CollapsibleSection from '@/components/flow/CollapsibleSection';
 const FlowCanvas = dynamic(() => import('@/components/flow/FlowCanvas'), { ssr: false });
 const SplitViewCanvas = dynamic(() => import('@/components/flow/SplitViewCanvas'), { ssr: false });
 const ValueCard = dynamic(() => import('@/components/flow/ValueCard'), { ssr: false });
+
+type CollaborationType = 'copilot' | 'monitor' | 'autonomous';
+
+function isTimeScale(value: string): value is UserContext['timeScale'] {
+    return timeScales.some((ts) => ts.value === value);
+}
+
+function isCollaborationType(value: unknown): value is CollaborationType {
+    return value === 'copilot' || value === 'monitor' || value === 'autonomous';
+}
 
 export default function FlowPage() {
     const mounted = useMounted();
@@ -170,6 +181,7 @@ function FlowPageContent() {
             window.removeEventListener('pagehide', handlePageHide);
         };
     }, []);
+
     const { isLoading, error, generateAsIsFlow, generateToBeFlow, generateNodeSplit, generateDrilldown } =
         useAIGeneration();
 
@@ -252,6 +264,22 @@ function FlowPageContent() {
     } | null>(null);
     const drilldownFlowType: 'as-is' | 'to-be' = viewMode === 'tobe' ? 'to-be' : 'as-is';
 
+    const selectedNodeData = selectedNode?.data;
+    const selectedNodeLabel =
+        selectedNodeData &&
+        typeof selectedNodeData === 'object' &&
+        'label' in selectedNodeData &&
+        typeof selectedNodeData.label === 'string'
+            ? selectedNodeData.label
+            : '';
+    const selectedNodeCollaborationType =
+        selectedNodeData &&
+        typeof selectedNodeData === 'object' &&
+        'collaborationType' in selectedNodeData &&
+        isCollaborationType(selectedNodeData.collaborationType)
+            ? selectedNodeData.collaborationType
+            : undefined;
+
     // ReactFlow 형식으로 변환
 
     const handleStart = () => {
@@ -270,7 +298,7 @@ function FlowPageContent() {
                 industry: finalIndustry,
                 role: finalRole,
                 task,
-                timeScale: timeScale as 'daily' | 'weekly' | 'monthly' | 'quarterly',
+                timeScale,
                 teamSize,
                 tooling,
                 painPoints,
@@ -766,7 +794,11 @@ function FlowPageContent() {
                                         </label>
                                         <Select
                                             value={timeScale}
-                                            onValueChange={(v) => setTimeScale(v as typeof timeScale)}
+                                            onValueChange={(v) => {
+                                                if (isTimeScale(v)) {
+                                                    setTimeScale(v);
+                                                }
+                                            }}
                                         >
                                             <SelectTrigger className="bg-white/70 border-2 border-[#E2E4E9] hover:border-blue-300 transition-all duration-200 text-[#18181B]">
                                                 <SelectValue />
@@ -1441,13 +1473,8 @@ function FlowPageContent() {
                         </DialogDescription>
                     </DialogHeader>
                     <ValueCard
-                        nodeLabel={(selectedNode?.data?.label as string) || ''}
-                        collaborationType={
-                            selectedNode?.data?.collaborationType as
-                            | 'copilot'
-                            | 'monitor'
-                            | 'autonomous'
-                        }
+                        nodeLabel={selectedNodeLabel}
+                        collaborationType={selectedNodeCollaborationType}
                     />
                 </DialogContent>
             </Dialog>
