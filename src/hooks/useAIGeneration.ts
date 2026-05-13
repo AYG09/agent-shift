@@ -112,29 +112,46 @@ export function useAIGeneration() {
         };
     }, []);
 
-
-
-    const generateAsIsFlow = useCallback(
-        async (context: WorkContext): Promise<AsIsFlowResponse | null> => {
+    const callAi = useCallback(
+        async <TRequest extends Record<string, unknown>, TResponse,>(options: {
+            action: string;
+            body: TRequest;
+            cache?: {
+                keyInput: unknown;
+                logLabel: string;
+            };
+            readCache?: () => TResponse | null;
+            onCacheHit?: (cached: TResponse) => void;
+            transform?: (raw: TResponse) => TResponse;
+            afterSuccess?: (data: TResponse) => void;
+        }): Promise<TResponse | null> => {
             setIsLoading(true);
             setError(null);
 
             try {
-                // 1. Check Cache
-                const cacheKey = await generateCacheKey('generateAsIsFlow', context);
-                const cached = getCachedData<AsIsFlowResponse>(cacheKey);
-                if (cached) {
-                    devLog('[AI Generation] Cache hit: AsIsFlow');
-                    return cached;
+                const localCached = options.readCache?.();
+                if (localCached) {
+                    options.onCacheHit?.(localCached);
+                    return localCached;
                 }
 
-                // 2. API Call
+                let cacheKey: string | null = null;
+                if (options.cache) {
+                    cacheKey = await generateCacheKey(options.action, options.cache.keyInput);
+                    const sessionCached = getCachedData<TResponse>(cacheKey);
+                    if (sessionCached) {
+                        devLog(`[AI Generation] Cache hit: ${options.cache.logLabel}`);
+                        options.onCacheHit?.(sessionCached);
+                        return sessionCached;
+                    }
+                }
+
                 const response = await fetch('/api/ai', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        action: 'generateAsIsFlow',
-                        context,
+                        action: options.action,
+                        ...options.body,
                         apiKey: apiKey || undefined,
                     }),
                 });
@@ -144,13 +161,14 @@ export function useAIGeneration() {
                     throw new Error(errorData.error || 'AI 생성 실패');
                 }
 
-                const rawData = await response.json();
-                // 엣지 핸들 보정 (수직 플로우용 bottom→top)
-                const data = normalizeFlowPayloadHandles(rawData);
+                const rawData = (await response.json()) as TResponse;
+                const data = options.transform ? options.transform(rawData) : rawData;
 
-                // 3. Save Cache
-                setCachedData(cacheKey, data);
+                if (cacheKey) {
+                    setCachedData(cacheKey, data);
+                }
 
+                options.afterSuccess?.(data);
                 return data;
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
@@ -161,6 +179,26 @@ export function useAIGeneration() {
             }
         },
         [apiKey]
+    );
+
+
+
+    const generateAsIsFlow = useCallback(
+        async (context: WorkContext): Promise<AsIsFlowResponse | null> => {
+            return callAi<
+                { context: WorkContext },
+                AsIsFlowResponse
+            >({
+                action: 'generateAsIsFlow',
+                body: { context },
+                cache: {
+                    keyInput: context,
+                    logLabel: 'AsIsFlow',
+                },
+                transform: (rawData) => normalizeFlowPayloadHandles(rawData),
+            });
+        },
+        [callAi]
     );
 
     const generateToBeFlow = useCallback(
@@ -169,91 +207,50 @@ export function useAIGeneration() {
             asIsNodes: AsIsFlowResponse['nodes'],
             scenario: 'conservative' | 'balanced' | 'aggressive' = 'balanced'
         ): Promise<ToBeFlowResponse | null> => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                // 1. Check Cache
-                const cacheKey = await generateCacheKey('generateToBeFlow', { context, asIsNodes: asIsNodes.map(n => n.id), scenario }); // Optimize key payload
-                const cached = getCachedData<ToBeFlowResponse>(cacheKey);
-                if (cached) {
-                    devLog('[AI Generation] Cache hit: ToBeFlow');
-                    return cached;
-                }
-
-                const response = await fetch('/api/ai', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'generateToBeFlow',
-                        context,
-                        asIsNodes,
-                        scenario,
-                        apiKey: apiKey || undefined,
-                    }),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'AI 생성 실패');
-                }
-
-                const rawData = await response.json();
-                // 엣지 핸들 보정 (수직 플로우용 bottom→top)
-                const data = normalizeFlowPayloadHandles(rawData);
-                setCachedData(cacheKey, data);
-                return data;
-            } catch (err) {
-                const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
-                setError(message);
-                return null;
-            } finally {
-                setIsLoading(false);
-            }
+            return callAi<
+                {
+                    context: WorkContext;
+                    asIsNodes: AsIsFlowResponse['nodes'];
+                    scenario: 'conservative' | 'balanced' | 'aggressive';
+                },
+                ToBeFlowResponse
+            >({
+                action: 'generateToBeFlow',
+                body: { context, asIsNodes, scenario },
+                cache: {
+                    // Cache key payload를 최소화해 키 안정성을 높인다.
+                    keyInput: { context, asIsNodes: asIsNodes.map((n) => n.id), scenario },
+                    logLabel: 'ToBeFlow',
+                },
+                transform: (rawData) => normalizeFlowPayloadHandles(rawData),
+            });
         },
-        [apiKey]
+        [callAi]
     );
 
     const generateChangeStrategy = useCallback(
-        async (context: WorkContext, framework: 'kotter' | 'adkar' | 'lewin', totalWeeks: number = 12) => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                const cacheKey = await generateCacheKey('generateChangeStrategy', { context, framework, totalWeeks });
-                const cached = getCachedData<ChangeStrategyResponse>(cacheKey);
-                if (cached) {
-                    devLog('[AI Generation] Cache hit: ChangeStrategy');
-                    return cached;
-                }
-
-                const response = await fetch('/api/ai', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'generateChangeStrategy',
-                        context,
-                        framework,
-                        totalWeeks,
-                        apiKey: apiKey || undefined,
-                    }),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'AI 생성 실패');
-                }
-
-                const data = await response.json();
-                setCachedData(cacheKey, data);
-                return data;
-            } catch (err) {
-                const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
-                setError(message);
-                return null;
-            } finally {
-                setIsLoading(false);
-            }
+        async (
+            context: WorkContext,
+            framework: 'kotter' | 'adkar' | 'lewin',
+            totalWeeks: number = 12
+        ): Promise<ChangeStrategyResponse | null> => {
+            return callAi<
+                {
+                    context: WorkContext;
+                    framework: 'kotter' | 'adkar' | 'lewin';
+                    totalWeeks: number;
+                },
+                ChangeStrategyResponse
+            >({
+                action: 'generateChangeStrategy',
+                body: { context, framework, totalWeeks },
+                cache: {
+                    keyInput: { context, framework, totalWeeks },
+                    logLabel: 'ChangeStrategy',
+                },
+            });
         },
-        [apiKey]
+        [callAi]
     );
 
     const generateDrilldown = useCallback(
@@ -264,75 +261,67 @@ export function useAIGeneration() {
             allNodes?: FlowNodeBasic[],
             allEdges?: FlowEdgeBasic[],
             asIsNodes?: FlowNodeBasic[]  // AS-IS 원본 노드들 (시간 비교용)
-        ) => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                // 1. Zustand store에서 영구 캐시 확인 (변화관리/내보내기용)
-                const storeNodeId = `${flowType}-${node.id}`;
-                const storedResult = useAppStore.getState().getDrilldownResult(storeNodeId);
-                if (storedResult) {
-                    devLog('[AI Generation] Store cache hit: Drilldown', storeNodeId);
-                    setIsLoading(false);
-                    return storedResult;
-                }
+        ): Promise<DrilldownResponse | null> => {
+            const storeNodeId = `${flowType}-${node.id}`;
 
-                // 2. 세션 캐시 확인
-                const cacheKey = await generateCacheKey('generateDrilldown', { 
-                    context, 
-                    nodeId: node.id, 
+            return callAi<
+                {
+                    context: WorkContext;
+                    node: {
+                        id: string;
+                        label: string;
+                        description?: string;
+                        type: string;
+                        collaborationType?: string;
+                        metrics?: { timeMinutes?: number };
+                    };
+                    flowType: 'as-is' | 'to-be';
+                    allNodes?: FlowNodeBasic[];
+                    allEdges?: FlowEdgeBasic[];
+                    asIsNodes?: FlowNodeBasic[];
+                },
+                DrilldownResponse
+            >({
+                action: 'generateDrilldown',
+                body: {
+                    context,
+                    node,
                     flowType,
-                    nodeCount: allNodes?.length ?? 0,
-                    edgeCount: allEdges?.length ?? 0,
-                    asIsNodeCount: asIsNodes?.length ?? 0
-                });
-                const cached = getCachedData<DrilldownResponse>(cacheKey);
-                if (cached) {
-                    devLog('[AI Generation] Session cache hit: Drilldown');
-                    // 세션 캐시에서 찾으면 Zustand에도 저장
-                    useAppStore.getState().setDrilldownResult(storeNodeId, cached);
-                    return cached;
-                }
-
-                const response = await fetch('/api/ai', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'generateDrilldown',
+                    allNodes,
+                    allEdges,
+                    asIsNodes,
+                },
+                cache: {
+                    keyInput: {
                         context,
-                        node,
+                        nodeId: node.id,
                         flowType,
-                        allNodes,
-                        allEdges,
-                        asIsNodes,  // AS-IS 원본 노드들 (시간 비교용)
-                        apiKey: apiKey || undefined,
-                    }),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'AI 생성 실패');
-                }
-
-                const data = await response.json();
-                
-                // 세션 캐시 저장
-                setCachedData(cacheKey, data);
-                
-                // Zustand store에 영구 저장 (변화관리/내보내기용)
-                useAppStore.getState().setDrilldownResult(storeNodeId, data);
-                devLog('[AI Generation] Drilldown saved to store', storeNodeId);
-                
-                return data;
-            } catch (err) {
-                const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
-                setError(message);
-                return null;
-            } finally {
-                setIsLoading(false);
-            }
+                        nodeCount: allNodes?.length ?? 0,
+                        edgeCount: allEdges?.length ?? 0,
+                        asIsNodeCount: asIsNodes?.length ?? 0,
+                    },
+                    logLabel: 'Drilldown',
+                },
+                readCache: () => {
+                    // Zustand store에서 영구 캐시 확인 (변화관리/내보내기용)
+                    const storedResult = useAppStore.getState().getDrilldownResult(storeNodeId);
+                    if (storedResult) {
+                        devLog('[AI Generation] Store cache hit: Drilldown', storeNodeId);
+                        return storedResult;
+                    }
+                    return null;
+                },
+                onCacheHit: (cached) => {
+                    // 세션 캐시/스토어 캐시 모두 store에 동기화해 후속 화면에서 재사용
+                    useAppStore.getState().setDrilldownResult(storeNodeId, cached);
+                },
+                afterSuccess: (data) => {
+                    useAppStore.getState().setDrilldownResult(storeNodeId, data);
+                    devLog('[AI Generation] Drilldown saved to store', storeNodeId);
+                },
+            });
         },
-        [apiKey]
+        [callAi]
     );
 
     // 노드 분할 (세분화) - 해당 노드를 4~5개 하위 노드로 분할
@@ -342,45 +331,27 @@ export function useAIGeneration() {
             node: { id: string; label: string; description?: string; type: string; metrics?: { duration?: number; durationUnit?: string } },
             flowType: 'asis' | 'tobe'
         ): Promise<NodeSplitResponse | null> => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                const cacheKey = await generateCacheKey('generateNodeSplit', { context, nodeId: node.id, flowType });
-                const cached = getCachedData<NodeSplitResponse>(cacheKey);
-                if (cached) {
-                    devLog('[AI Generation] Cache hit: NodeSplit');
-                    return cached;
-                }
-
-                const response = await fetch('/api/ai', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'generateNodeSplit',
-                        context,
-                        node,
-                        flowType: flowType === 'asis' ? 'as-is' : 'to-be',
-                        apiKey: apiKey || undefined,
-                    }),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'AI 생성 실패');
-                }
-
-                const data = await response.json();
-                setCachedData(cacheKey, data);
-                return data;
-            } catch (err) {
-                const message = err instanceof Error ? err.message : 'AI 생성 중 오류 발생';
-                setError(message);
-                return null;
-            } finally {
-                setIsLoading(false);
-            }
+            return callAi<
+                {
+                    context: WorkContext;
+                    node: { id: string; label: string; description?: string; type: string; metrics?: { duration?: number; durationUnit?: string } };
+                    flowType: 'as-is' | 'to-be';
+                },
+                NodeSplitResponse
+            >({
+                action: 'generateNodeSplit',
+                body: {
+                    context,
+                    node,
+                    flowType: flowType === 'asis' ? 'as-is' : 'to-be',
+                },
+                cache: {
+                    keyInput: { context, nodeId: node.id, flowType },
+                    logLabel: 'NodeSplit',
+                },
+            });
         },
-        [apiKey]
+        [callAi]
     );
 
     // API 키 갱신 함수

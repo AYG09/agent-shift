@@ -437,7 +437,12 @@ function FlowPageContent() {
                     duration: step.duration,
                     tools: step.tools,
                     painPoints: step.painPoints,
-                    aiImplementation: step.aiImplementation,
+                    aiImplementation: step.aiImplementation
+                        ? {
+                            ...step.aiImplementation,
+                            technology: step.aiImplementation.technology ?? [],
+                        }
+                        : undefined,
                     resources: step.resources,
                 })),
                 summary: result.summary,
