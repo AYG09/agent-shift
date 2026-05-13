@@ -28,8 +28,6 @@ import {
     useAppStore,
     SCENARIO_INFO,
     type ScenarioType,
-    type FlowNode as StoreFlowNode,
-    type FlowEdge as StoreFlowEdge,
 } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
@@ -40,249 +38,23 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ENTERPRISE_PLATFORMS, PLATFORM_CATEGORIES, PLATFORM_CATEGORY_ORDER } from '@/lib/platforms';
 import { cn } from '@/lib/utils';
 import { useMounted } from '@/hooks/useMounted';
-
-// 한국어 시간 문자열 파싱 ("10분", "2시간" → { duration, durationUnit })
-type DurationUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
-function parseDurationString(durationStr?: string): { duration: number; durationUnit: DurationUnit } | undefined {
-    if (!durationStr) return undefined;
-    const match = durationStr.match(/(\d+)\s*(분|시간|일|주|개월)/);
-    if (!match) return undefined;
-    const value = parseInt(match[1]);
-    const unitMap: Record<string, DurationUnit> = {
-        '분': 'minutes', '시간': 'hours', '일': 'days', '주': 'weeks', '개월': 'months'
-    };
-    return { duration: value, durationUnit: unitMap[match[2]] || 'minutes' };
-}
-
-// Collapsible Section Component
-const CollapsibleSection = ({ 
-    title, 
-    icon: Icon, 
-    children, 
-    defaultOpen = true,
-    badge,
-}: { 
-    title: string; 
-    icon: React.ComponentType<{ className?: string }>; 
-    children: React.ReactNode; 
-    defaultOpen?: boolean;
-    badge?: React.ReactNode;
-}) => {
-    const [isOpen, setIsOpen] = useState(defaultOpen);
-    return (
-        <div className="border border-gray-200/80 rounded-xl overflow-hidden bg-white/50 backdrop-blur-sm">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between p-3 hover:bg-gray-50/80 transition-colors"
-            >
-                <div className="flex items-center gap-2">
-                    <Icon className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm font-medium text-gray-700">{title}</span>
-                    {badge}
-                </div>
-                <motion.div
-                    animate={{ rotate: isOpen ? 180 : 0 }}
-                    transition={{ duration: 0.2 }}
-                >
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                </motion.div>
-            </button>
-            <AnimatePresence initial={false}>
-                {isOpen && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                    >
-                        <div className="p-3 pt-0 border-t border-gray-100">
-                            {children}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-};
+import {
+    mapAiEdgesToStoreEdges,
+    mapAiNodesToStoreNodes,
+    mapStoreEdgesToReactFlowEdges,
+    normalizeIoType,
+    normalizeNodeType,
+    normalizeStressLevel,
+    normalizeTerminalType,
+    parseDurationString,
+} from '@/lib/flow-mappers';
+import { industries, roles, timeScales } from '@/lib/flow-options';
+import CollapsibleSection from '@/components/flow/CollapsibleSection';
 
 // ReactFlow 동적 import
 const FlowCanvas = dynamic(() => import('@/components/flow/FlowCanvas'), { ssr: false });
 const SplitViewCanvas = dynamic(() => import('@/components/flow/SplitViewCanvas'), { ssr: false });
 const ValueCard = dynamic(() => import('@/components/flow/ValueCard'), { ssr: false });
-
-const industries = [
-    { value: 'manufacturing', label: '제조 (Manufacturing)' },
-    { value: 'it', label: 'IT/소프트웨어 (Software & Services)' },
-    { value: 'finance', label: '금융/보험 (Finance & Insurance)' },
-    { value: 'retail', label: '유통/소매 (Retail)' },
-    { value: 'healthcare', label: '의료/바이오 (Healthcare & Biotech)' },
-    { value: 'logistics', label: '물류/운송 (Logistics & Transport)' },
-    { value: 'construction', label: '건설/엔지니어링 (Construction)' },
-    { value: 'education', label: '교육 (Education)' },
-    { value: 'media', label: '미디어/엔터테인먼트 (Media)' },
-    { value: 'public', label: '공공/행정 (Public Sector)' },
-    { value: 'consulting', label: '컨설팅/전문서비스 (Professional Services)' },
-    { value: 'energy', label: '에너지/화학 (Energy & Chemicals)' },
-    { value: 'hospitality', label: '숙박/식음료 (Hospitality & F&B)' },
-    { value: 'other', label: '직접 입력 (Direct Input)' },
-];
-
-const roles = [
-    // C-Level / Exec
-    { value: 'cxo', label: 'C-Level (CEO, CTO, CFO...)' },
-    { value: 'head', label: '본부장/실장 (Head of Dept)' },
-    // Management
-    { value: 'manager', label: '팀장/매니저 (Team Lead)' },
-    { value: 'pm', label: 'PM/PO (Product/Project Manager)' },
-    // Specialized
-    { value: 'sales', label: '영업 (Sales)' },
-    { value: 'marketing', label: '마케팅 (Marketing)' },
-    { value: 'dev', label: '개발/엔지니어링 (Engineering)' },
-    { value: 'design', label: '디자인 (Design)' },
-    { value: 'hr', label: '인사/채용 (HR)' },
-    { value: 'finance_acc', label: '재무/회계 (Finance)' },
-    { value: 'ops', label: '운영/지원 (Operations)' },
-    { value: 'data', label: '데이터 분석 (Data Analyst)' },
-    { value: 'customer', label: '고객 지원 (CS)' },
-    { value: 'legal', label: '법무/총무 (Legal/Admin)' },
-    { value: 'student', label: '학생/연구원 (Student/Researcher)' },
-    { value: 'other', label: '직접 입력 (Direct Input)' },
-];
-
-const timeScales = [
-    { value: 'daily', label: '일일 (Daily)' },
-    { value: 'weekly', label: '주간 (Weekly)' },
-    { value: 'monthly', label: '월간 (Monthly)' },
-    { value: 'quarterly', label: '분기 (Quarterly)' },
-    { value: 'yearly', label: '연간 (Yearly)' },
-    { value: 'project', label: '프로젝트 단위 (Project-based)' },
-];
-
-type AiFlowNodePayload = {
-    id: string;
-    type: string;
-    terminalType?: string;
-    ioType?: string;
-    label: string;
-    description?: string;
-    stressLevel?: string;
-    collaborationType?: string;
-    agentDescription?: string;
-    position: { x: number; y: number };
-    metrics?: StoreFlowNode['metrics'];
-};
-
-type AiFlowEdgePayload = {
-    id: string;
-    source: string;
-    target: string;
-    sourceHandle?: string;
-    targetHandle?: string;
-};
-
-const FLOW_NODE_TYPES = [
-    'terminal',
-    'process',
-    'decision',
-    'io',
-    'agent',
-    'task',
-    'subprocess',
-] as const;
-
-const STRESS_LEVELS = ['low', 'medium', 'high'] as const;
-const COLLABORATION_TYPES = ['copilot', 'monitor', 'autonomous'] as const;
-const TERMINAL_TYPES = ['start', 'end'] as const;
-const IO_TYPES = ['input', 'output'] as const;
-
-function isFlowNodeType(type: string): type is StoreFlowNode['type'] {
-    return FLOW_NODE_TYPES.some((value) => value === type);
-}
-
-function isStressLevel(value: string): value is NonNullable<StoreFlowNode['stressLevel']> {
-    return STRESS_LEVELS.some((item) => item === value);
-}
-
-function isCollaborationType(
-    value: string
-): value is NonNullable<StoreFlowNode['collaborationType']> {
-    return COLLABORATION_TYPES.some((item) => item === value);
-}
-
-function isTerminalType(value: string): value is NonNullable<StoreFlowNode['terminalType']> {
-    return TERMINAL_TYPES.some((item) => item === value);
-}
-
-function isIoType(value: string): value is NonNullable<StoreFlowNode['ioType']> {
-    return IO_TYPES.some((item) => item === value);
-}
-
-function normalizeNodeType(type: string): StoreFlowNode['type'] {
-    return isFlowNodeType(type) ? type : 'task';
-}
-
-function normalizeStressLevel(stressLevel?: string): StoreFlowNode['stressLevel'] {
-    if (!stressLevel) return undefined;
-    return isStressLevel(stressLevel) ? stressLevel : undefined;
-}
-
-function normalizeCollaborationType(
-    collaborationType?: string
-): StoreFlowNode['collaborationType'] {
-    if (!collaborationType) return undefined;
-    return isCollaborationType(collaborationType) ? collaborationType : undefined;
-}
-
-function normalizeTerminalType(
-    terminalType?: string
-): StoreFlowNode['terminalType'] {
-    if (!terminalType) return undefined;
-    return isTerminalType(terminalType) ? terminalType : undefined;
-}
-
-function normalizeIoType(ioType?: string): StoreFlowNode['ioType'] {
-    if (!ioType) return undefined;
-    return isIoType(ioType) ? ioType : undefined;
-}
-
-function mapAiNodesToStoreNodes(nodes: AiFlowNodePayload[]): StoreFlowNode[] {
-    return nodes.map((node) => ({
-        id: node.id,
-        type: normalizeNodeType(node.type),
-        terminalType: normalizeTerminalType(node.terminalType),
-        ioType: normalizeIoType(node.ioType),
-        label: node.label,
-        description: node.description,
-        stressLevel: normalizeStressLevel(node.stressLevel),
-        collaborationType: normalizeCollaborationType(node.collaborationType),
-        agentDescription: node.agentDescription,
-        position: node.position,
-        metrics: node.metrics,
-    }));
-}
-
-function mapAiEdgesToStoreEdges(edges: AiFlowEdgePayload[]): StoreFlowEdge[] {
-    return edges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: edge.sourceHandle,
-        targetHandle: edge.targetHandle,
-    }));
-}
-
-function mapStoreEdgesToReactFlowEdges(edges: StoreFlowEdge[]): Edge[] {
-    return edges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: edge.sourceHandle,
-        targetHandle: edge.targetHandle,
-    }));
-}
 
 export default function FlowPage() {
     const mounted = useMounted();
