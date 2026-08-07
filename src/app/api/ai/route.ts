@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from '@ai-sdk/google';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject, NoObjectGeneratedError } from 'ai';
+import { z } from 'zod';
 import {
     AsIsFlowResponseSchema,
     ToBeFlowResponseSchema,
@@ -32,33 +33,96 @@ function normalizeMetrics(obj: unknown): unknown {
 }
 
 // 배열 길이 정규화 (AI가 권장 개수 초과 시 잘라내기)
-function normalizeArrayLengths(obj: unknown): unknown {
-    if (obj === null || obj === undefined) return obj;
-    if (Array.isArray(obj)) {
-        return obj.slice(0, 10).map(normalizeArrayLengths); // 모든 배열 최대 10개
+/** 경로를 따라 값을 읽는다. 중간에 끊기면 undefined. */
+function getAtPath(root: unknown, path: readonly PropertyKey[]): unknown {
+    let current: unknown = root;
+    for (const key of path) {
+        if (current === null || typeof current !== 'object') return undefined;
+        current = (current as Record<PropertyKey, unknown>)[key];
     }
-    if (typeof obj === 'object') {
-        const result: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-            result[key] = normalizeArrayLengths(value);
+    return current;
+}
+
+/** 경로에 값을 쓴다. 경로가 유효하지 않으면 false. */
+function setAtPath(root: unknown, path: readonly PropertyKey[], value: unknown): boolean {
+    if (path.length === 0) return false;
+    const parent = getAtPath(root, path.slice(0, -1));
+    if (parent === null || typeof parent !== 'object') return false;
+    (parent as Record<PropertyKey, unknown>)[path[path.length - 1]] = value;
+    return true;
+}
+
+/**
+ * Zod의 too_big 이슈를 근거로 초과분을 잘라 낸다.
+ *
+ * 상한값을 여기에 따로 적지 않고 이슈에 실려 온 maximum을 쓰기 때문에,
+ * 스키마의 .max()를 바꾸면 이 복구 로직도 자동으로 따라온다.
+ */
+function applyTooBigFixes(data: unknown, issues: readonly z.core.$ZodIssue[]): boolean {
+    let changed = false;
+
+    for (const issue of issues) {
+        if (issue.code !== 'too_big') continue;
+
+        const maximum = Number(issue.maximum);
+        if (!Number.isFinite(maximum)) continue;
+
+        const current = getAtPath(data, issue.path);
+
+        if (issue.origin === 'string' && typeof current === 'string' && current.length > maximum) {
+            changed = setAtPath(data, issue.path, current.slice(0, maximum)) || changed;
+        } else if (issue.origin === 'array' && Array.isArray(current) && current.length > maximum) {
+            changed = setAtPath(data, issue.path, current.slice(0, maximum)) || changed;
         }
-        return result;
     }
-    return obj;
+
+    return changed;
 }
 
 // NoObjectGeneratedError에서 raw text 파싱 시도
-function tryParseFromError(error: unknown): unknown | null {
-    if (NoObjectGeneratedError.isInstance(error) && error.text) {
-        try {
-            const parsed = JSON.parse(error.text);
-            console.log('[API Route] Fallback: parsed from error.text');
-            return normalizeArrayLengths(parsed);
-        } catch {
-            console.log('[API Route] Fallback failed: could not parse error.text');
+// 길이 초과를 잘라 내며 재검증하는 최대 횟수.
+// 한 번의 safeParse가 모든 위반을 보고하지 않을 수 있어 몇 차례 반복한다.
+const MAX_REPAIR_ROUNDS = 3;
+
+/**
+ * 스키마 검증에 실패한 응답을 살려 본다.
+ *
+ * 길이/개수 초과만 잘라 내고, 그 외의 위반(타입 불일치, 필수 필드 누락 등)은
+ * 복구하지 않는다. 반드시 schema.safeParse를 통과한 값만 반환하므로
+ * 검증되지 않은 데이터가 클라이언트로 나가는 일은 없다.
+ *
+ * 이전 구현은 JSON.parse만 성공하면 그대로 반환했다. 그 탓에 모델이 같은 단어를
+ * 끝없이 반복해 스키마 상한을 수십 배 넘긴 응답도 정상 결과처럼 화면에 표시됐다.
+ */
+function salvageFromError(error: unknown, schema: z.ZodType): unknown | null {
+    if (!NoObjectGeneratedError.isInstance(error) || !error.text) return null;
+
+    let candidate: unknown;
+    try {
+        candidate = JSON.parse(error.text);
+    } catch {
+        // 토큰 한도로 잘린 JSON 등 — 복구 대상이 아니다
+        console.log('[API Route] Salvage 실패: error.text가 JSON이 아님');
+        return null;
+    }
+
+    for (let round = 0; round < MAX_REPAIR_ROUNDS; round++) {
+        const result = schema.safeParse(candidate);
+        if (result.success) {
+            if (round > 0) {
+                console.log(`[API Route] Salvage 성공: 길이 초과 ${round}회 보정`);
+            }
+            return result.data;
+        }
+
+        if (!applyTooBigFixes(candidate, result.error.issues)) {
+            // 잘라 내서 해결되는 문제가 아니다
+            console.log('[API Route] Salvage 포기: 길이 초과 외의 스키마 위반');
             return null;
         }
     }
+
+    console.log('[API Route] Salvage 포기: 보정 후에도 검증 실패');
     return null;
 }
 
@@ -324,7 +388,11 @@ ${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞�
 
 ## 응답 형식
 - flowType: "asis"
-- aiImplementation, resources 필드는 **생략**`;
+- aiImplementation, resources 필드는 **생략**
+
+## 출력 제한 ⛔
+- tools는 **실제로 쓰는 도구 이름만 1~3개**. 일반 명사(module, platform, engine 등)를 나열하지 마세요.
+- 같은 단어나 표현을 반복하지 마세요. 채울 내용이 없으면 배열을 비우거나 필드를 생략하세요.`;
 }
 
 // TO-BE 전용 드릴다운 프롬프트: AI 자동화 구현 방법 상세 안내
@@ -393,7 +461,11 @@ ${graphContext ? `- 위의 이전/다음 단계(일부는 AI 에이전트)와의
 
 ## 응답 형식
 - flowType: "tobe"
-- aiImplementation, resources 필드는 **생략**`;
+- aiImplementation, resources 필드는 **생략**
+
+## 출력 제한 ⛔
+- tools는 **실제로 쓰는 도구 이름만 1~3개**. 일반 명사(module, platform, engine 등)를 나열하지 마세요.
+- 같은 단어나 표현을 반복하지 마세요. 채울 내용이 없으면 배열을 비우거나 필드를 생략하세요.`;
     }
     
     // 노드 타입이 'agent'인 경우: AI 자동화 분석
@@ -435,7 +507,12 @@ ${asIsNodes && asIsNodes.length > 0 ? `- AS-IS 단계 중 이 AI가 대체하는
 ## 응답 형식
 - flowType: "tobe"
 - subSteps + aiImplementation + resources
-- automationOverview.skillBasedReduction 필수`;
+- automationOverview.skillBasedReduction 필수
+
+## 출력 제한 ⛔
+- tools / technology / platforms는 **실제 제품·서비스 이름만 1~3개** (예: "Power Automate", "LangChain").
+  module, platform, engine, connector 같은 일반 명사를 나열하지 마세요.
+- 같은 단어나 표현을 반복하지 마세요. 채울 내용이 없으면 배열을 비우거나 필드를 생략하세요.`;
 }
 
 function getDrilldownPrompt(
@@ -457,6 +534,9 @@ function getDrilldownPrompt(
 }
 
 export async function POST(request: NextRequest) {
+    // 검증 실패 시 catch 블록에서도 스키마가 필요하므로 try 밖에 둔다
+    let schema: z.ZodType | undefined;
+
     try {
         const body = await request.json();
         const { action, context, asIsNodes, framework, apiKey, node, flowType, scenario } = body;
@@ -496,8 +576,7 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        let schema;
-        let prompt;
+        let prompt: string | undefined;
 
         switch (action) {
             case 'generateAsIsFlow':
@@ -580,6 +659,10 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
         }
 
+        if (!schema || !prompt) {
+            return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+        }
+
         const { object } = await generateObject({
             model,
             schema,
@@ -588,21 +671,21 @@ export async function POST(request: NextRequest) {
             ...(providerOptions ? { providerOptions } : {}),
         });
 
-        // 숫자 필드 + 배열 길이 정규화 후 반환
-        const normalizedObject = normalizeArrayLengths(normalizeMetrics(object));
-        return NextResponse.json(normalizedObject);
+        // 숫자 필드 정규화 후 반환.
+        // 배열 길이는 스키마의 .max()가 이미 강제하므로 여기서 다시 자르지 않는다.
+        return NextResponse.json(normalizeMetrics(object));
     } catch (error) {
         console.error('AI API Error:', error);
-        
-        // NoObjectGeneratedError: 스키마 검증 실패 시 raw text에서 파싱 시도
+
+        // 스키마 검증 실패: 길이 초과만 잘라 내고 재검증해 살릴 수 있으면 살린다.
+        // 검증을 통과하지 못한 응답은 절대 반환하지 않는다.
         if (NoObjectGeneratedError.isInstance(error)) {
-            const fallbackResult = tryParseFromError(error);
-            if (fallbackResult) {
-                console.log('[API Route] Using fallback result from error.text');
-                return NextResponse.json(fallbackResult);
+            const salvaged = schema ? salvageFromError(error, schema) : null;
+            if (salvaged) {
+                return NextResponse.json(normalizeMetrics(salvaged));
             }
-            return NextResponse.json({ 
-                error: 'AI 응답이 스키마와 일치하지 않습니다. 다시 시도해주세요.' 
+            return NextResponse.json({
+                error: 'AI 응답이 스키마와 일치하지 않습니다. 다시 시도해주세요.'
             }, { status: 500 });
         }
         
