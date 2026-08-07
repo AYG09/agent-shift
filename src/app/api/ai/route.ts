@@ -9,6 +9,7 @@ import {
     DrilldownResponseSchema,
     NodeSplitResponseSchema,
 } from '@/lib/ai-schemas';
+import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
 
 // AI 응답의 숫자 필드를 정규화 (부동소수점 오버플로우 방지)
 function normalizeMetrics(obj: unknown): unknown {
@@ -463,33 +464,34 @@ export async function POST(request: NextRequest) {
         // BYOK: 사용자 제공 키 또는 환경 변수 키 사용 (개행 문자 방지를 위해 trim)
         const trimmedApiKey = apiKey?.trim();
 
-        // 디버깅: 환경 변수 상태 확인
-        const rawEnvKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-        console.log('[API Route] Debug - Raw env key exists:', !!rawEnvKey);
-        console.log('[API Route] Debug - Raw env key length:', rawEnvKey?.length);
-        console.log('[API Route] Debug - Raw env key first 10 chars:', rawEnvKey?.substring(0, 10));
-        console.log(
-            '[API Route] Debug - Raw env key last 10 chars:',
-            rawEnvKey?.substring(rawEnvKey?.length - 10)
-        );
-        console.log('[API Route] Debug - User provided key exists:', !!trimmedApiKey);
+        // 클라이언트가 설정창에서 고른 모델. 형식이 어긋나거나 구형이면 기본 모델로 되돌린다.
+        const modelId = sanitizeModelId(body.model);
+
+        // 추론 깊이. Gemini 3.x는 thinkingLevel을 쓴다(2.5의 thinkingBudget과 다름).
+        // 'default'면 아무것도 보내지 않아 모델 기본 추론 수준을 그대로 쓴다.
+        const reasoningLevel = sanitizeReasoningLevel(body.reasoning);
+        const providerOptions =
+            reasoningLevel === 'default'
+                ? undefined
+                : { google: { thinkingConfig: { thinkingLevel: reasoningLevel } } };
+
+        console.log('[API Route] Model:', modelId, '| Reasoning:', reasoningLevel);
 
         let model;
         if (trimmedApiKey) {
             // 사용자가 제공한 API 키로 새 클라이언트 생성
             const customGoogle = createGoogleGenerativeAI({ apiKey: trimmedApiKey });
-            model = customGoogle('gemini-2.5-flash');
+            model = customGoogle(modelId);
             console.log('[API Route] Using user-provided API key');
         } else {
             // 환경 변수의 기본 키 사용 (환경 변수도 trim)
             const envApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
-            console.log('[API Route] Debug - Trimmed env key length:', envApiKey?.length);
             if (envApiKey) {
                 const customGoogle = createGoogleGenerativeAI({ apiKey: envApiKey });
-                model = customGoogle('gemini-2.5-flash');
+                model = customGoogle(modelId);
                 console.log('[API Route] Using env API key (trimmed)');
             } else {
-                model = google('gemini-2.5-flash');
+                model = google(modelId);
                 console.log('[API Route] Using default google() - no API key found!');
             }
         }
@@ -583,6 +585,7 @@ export async function POST(request: NextRequest) {
             schema,
             prompt,
             maxOutputTokens: 16384, // 실제 필요량 6,000 + 여유분
+            ...(providerOptions ? { providerOptions } : {}),
         });
 
         // 숫자 필드 + 배열 길이 정규화 후 반환
