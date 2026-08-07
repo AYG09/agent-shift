@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { FrameworkSelector } from '@/components/strategy/FrameworkCard';
 import { frameworkPhases } from '@/components/strategy/GanttChart';
+import { formatDuration, formatSkillReduction } from '@/lib/duration';
 import { useAppStore } from '@/lib/store';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import { useMounted } from '@/hooks/useMounted';
@@ -763,11 +764,13 @@ function StrategyPageContent() {
                                                                 {result.subSteps?.length || 0}개 단계
                                                             </p>
                                                         </div>
-                                                        {result.automationOverview?.totalTimeReduction && (
+                                                        {result.automationOverview && (
                                                             <div className="text-right">
                                                                 <div className="flex items-center gap-1 text-emerald-600">
                                                                     <Zap className="w-3.5 h-3.5" />
-                                                                    <span className="text-xs font-medium">시간 절감</span>
+                                                                    <span className="text-xs font-medium">
+                                                                        {result.automationOverview.reductionPercent}% 절감
+                                                                    </span>
                                                                 </div>
                                                             </div>
                                                         )}
@@ -786,13 +789,13 @@ function StrategyPageContent() {
                                                             >
                                                                 <div className="px-4 pb-4 space-y-4 border-t border-cyan-100 pt-4">
                                                                     {/* Time Reduction */}
-                                                                    {result.automationOverview?.totalTimeReduction && (
+                                                                    {result.automationOverview && (
                                                                         <div className="p-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-100">
                                                                             <div className="flex items-center gap-2 text-emerald-700">
                                                                                 <Zap className="w-4 h-4" />
                                                                                 <span className="text-sm font-medium">예상 시간 절감</span>
                                                                             </div>
-                                                                            <p className="text-sm text-emerald-600 mt-1">{result.automationOverview.totalTimeReduction}</p>
+                                                                            <p className="text-sm text-emerald-600 mt-1">{result.automationOverview.reductionPercent}% 절감</p>
                                                                         </div>
                                                                     )}
 
@@ -817,7 +820,7 @@ function StrategyPageContent() {
                                                                                             {step.duration && (
                                                                                                 <span className="text-[10px] text-gray-400 mt-1 inline-flex items-center gap-1">
                                                                                                     <Clock className="w-3 h-3" />
-                                                                                                    {step.duration}
+                                                                                                    {formatDuration(step.duration)}
                                                                                                 </span>
                                                                                             )}
                                                                                             {/* Tools from subStep */}
@@ -865,15 +868,15 @@ function StrategyPageContent() {
                                                                             <div className="grid grid-cols-3 gap-2">
                                                                                 <div className="p-2 bg-blue-50 rounded-lg text-center">
                                                                                     <p className="text-[10px] text-blue-600 font-medium">Junior</p>
-                                                                                    <p className="text-xs text-blue-700">{result.automationOverview.skillBasedReduction.junior}</p>
+                                                                                    <p className="text-xs text-blue-700">{formatSkillReduction(result.automationOverview.skillBasedReduction.junior)}</p>
                                                                                 </div>
                                                                                 <div className="p-2 bg-indigo-50 rounded-lg text-center">
                                                                                     <p className="text-[10px] text-indigo-600 font-medium">Mid</p>
-                                                                                    <p className="text-xs text-indigo-700">{result.automationOverview.skillBasedReduction.mid}</p>
+                                                                                    <p className="text-xs text-indigo-700">{formatSkillReduction(result.automationOverview.skillBasedReduction.mid)}</p>
                                                                                 </div>
                                                                                 <div className="p-2 bg-purple-50 rounded-lg text-center">
                                                                                     <p className="text-[10px] text-purple-600 font-medium">Senior</p>
-                                                                                    <p className="text-xs text-purple-700">{result.automationOverview.skillBasedReduction.senior}</p>
+                                                                                    <p className="text-xs text-purple-700">{formatSkillReduction(result.automationOverview.skillBasedReduction.senior)}</p>
                                                                                 </div>
                                                                             </div>
                                                                         </div>

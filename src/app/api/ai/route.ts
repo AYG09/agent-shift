@@ -7,7 +7,8 @@ import {
     AsIsFlowResponseSchema,
     ToBeFlowResponseSchema,
     ChangeStrategyResponseSchema,
-    DrilldownResponseSchema,
+    HumanDrilldownResponseSchema,
+    AgentDrilldownResponseSchema,
     NodeSplitResponseSchema,
 } from '@/lib/ai-schemas';
 import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
@@ -32,7 +33,6 @@ function normalizeMetrics(obj: unknown): unknown {
     return obj;
 }
 
-// 배열 길이 정규화 (AI가 권장 개수 초과 시 잘라내기)
 /** 경로를 따라 값을 읽는다. 중간에 끊기면 undefined. */
 function getAtPath(root: unknown, path: readonly PropertyKey[]): unknown {
     let current: unknown = root;
@@ -79,7 +79,6 @@ function applyTooBigFixes(data: unknown, issues: readonly z.core.$ZodIssue[]): b
     return changed;
 }
 
-// NoObjectGeneratedError에서 raw text 파싱 시도
 // 길이 초과를 잘라 내며 재검증하는 최대 횟수.
 // 한 번의 safeParse가 모든 위반을 보고하지 않을 수 있어 몇 차례 반복한다.
 const MAX_REPAIR_ROUNDS = 3;
@@ -386,13 +385,23 @@ ${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞�
 2. 각 하위 단계: description, duration, tools, painPoints
 3. summary: 전체 과정 요약과 주요 병목점
 
-## 응답 형식
-- flowType: "asis"
-- aiImplementation, resources 필드는 **생략**
+## JSON 구조 예시
+{
+  "parentNodeId": "${node.id}",
+  "flowType": "asis",
+  "subSteps": [{
+    "id": "step_1", "label": "단계명", "description": "설명",
+    "duration": { "value": 30, "unit": "minutes" },
+    "tools": ["Excel"],
+    "painPoints": "이 단계에서 겪는 어려움"
+  }],
+  "summary": "전체 요약"
+}
 
 ## 출력 제한 ⛔
+- duration은 **숫자와 단위를 분리**하세요. "30분" 같은 문자열은 안 됩니다.
 - tools는 **실제로 쓰는 도구 이름만 1~3개**. 일반 명사(module, platform, engine 등)를 나열하지 마세요.
-- 같은 단어나 표현을 반복하지 마세요. 채울 내용이 없으면 배열을 비우거나 필드를 생략하세요.`;
+- 같은 단어나 표현을 반복하지 마세요. 채울 내용이 없으면 배열을 비우세요.`;
 }
 
 // TO-BE 전용 드릴다운 프롬프트: AI 자동화 구현 방법 상세 안내
@@ -429,7 +438,7 @@ ${asIsNodes.map(n => {
         : '';
     
     // 노드 타입이 'agent'가 아니면 인간 작업으로 분석 (TO-BE에서도 인간이 수행하는 단계)
-    const isHumanTask = node.type !== 'agent';
+    const isHumanTask = !isAgentDrilldown(node, 'tobe');
     
     if (isHumanTask) {
         // TO-BE 플로우에서 인간이 수행하는 단계 (task, process, decision 등)
@@ -459,13 +468,23 @@ ${graphContext ? `- 위의 이전/다음 단계(일부는 AI 에이전트)와의
 2. 각 하위 단계: description, duration, tools, painPoints
 3. summary: 전체 과정 요약과 AI 에이전트와의 협업 포인트
 
-## 응답 형식
-- flowType: "tobe"
-- aiImplementation, resources 필드는 **생략**
+## JSON 구조 예시
+{
+  "parentNodeId": "${node.id}",
+  "flowType": "tobe",
+  "subSteps": [{
+    "id": "step_1", "label": "단계명", "description": "설명",
+    "duration": { "value": 30, "unit": "minutes" },
+    "tools": ["Excel"],
+    "painPoints": "이 단계에서 겪는 어려움"
+  }],
+  "summary": "전체 요약"
+}
 
 ## 출력 제한 ⛔
+- duration은 **숫자와 단위를 분리**하세요. "30분" 같은 문자열은 안 됩니다.
 - tools는 **실제로 쓰는 도구 이름만 1~3개**. 일반 명사(module, platform, engine 등)를 나열하지 마세요.
-- 같은 단어나 표현을 반복하지 마세요. 채울 내용이 없으면 배열을 비우거나 필드를 생략하세요.`;
+- 같은 단어나 표현을 반복하지 마세요. 채울 내용이 없으면 배열을 비우세요.`;
     }
     
     // 노드 타입이 'agent'인 경우: AI 자동화 분석
@@ -491,28 +510,53 @@ ${asIsInfo}
 ${graphContext ? `- 이전/다음 단계와의 데이터 흐름 고려` : ''}
 ${asIsNodes && asIsNodes.length > 0 ? `- AS-IS 단계 중 이 AI가 대체하는 단계 식별 + 역량별 시간 절감 계산` : ''}
 
-## 요구사항 (스키마가 길이를 강제함)
+## 요구사항 (길이·개수는 스키마가 강제함)
 1. 3~5개 세부 하위 단계 (subSteps)
-2. 각 subStep 내부에 aiImplementation 객체 포함
-3. tools: 구체적 제품명만 (예: Power Automate, Zapier)
-4. automationOverview.skillBasedReduction: 역량별 시간 절감
+2. 각 subStep에 aiImplementation 객체 포함
+3. automationOverview.skillBasedReduction: 역량별 시간 절감
 
 ## JSON 구조 예시
 {
-  "id": "step1", "label": "단계명", "description": "설명",
-  "tools": ["Power Automate"],
-  "aiImplementation": { "method": "처리방법", "technology": ["RPA"] }
+  "parentNodeId": "${node.id}",
+  "flowType": "tobe",
+  "subSteps": [{
+    "id": "step_1", "label": "단계명", "description": "설명",
+    "duration": { "value": 30, "unit": "seconds" },
+    "tools": ["Power Automate"],
+    "aiImplementation": {
+      "method": "처리 방법", "technology": ["OCR"],
+      "platforms": ["Azure AI"], "automationLevel": "full"
+    },
+    "resources": [{ "type": "docs", "title": "자료 제목", "searchQuery": "power automate ocr" }]
+  }],
+  "summary": "전체 요약",
+  "automationOverview": {
+    "replacedAsIsSteps": ["대체된 단계명"],
+    "skillBasedReduction": {
+      "junior": { "before": 90, "after": 5, "unit": "minutes" },
+      "mid":    { "before": 60, "after": 5, "unit": "minutes" },
+      "senior": { "before": 40, "after": 5, "unit": "minutes" }
+    },
+    "reductionPercent": 92,
+    "keyBenefits": ["핵심 이점"], "implementationTips": ["구현 팁"]
+  }
 }
 
-## 응답 형식
-- flowType: "tobe"
-- subSteps + aiImplementation + resources
-- automationOverview.skillBasedReduction 필수
-
 ## 출력 제한 ⛔
+- duration과 skillBasedReduction은 **숫자와 단위를 분리**하세요. "90분→5분" 같은 문자열은 안 됩니다.
+- searchQuery는 **URL이 아니라 검색어**입니다.
 - tools / technology / platforms는 **실제 제품·서비스 이름만 1~3개** (예: "Power Automate", "LangChain").
   module, platform, engine, connector 같은 일반 명사를 나열하지 마세요.
-- 같은 단어나 표현을 반복하지 마세요. 채울 내용이 없으면 배열을 비우거나 필드를 생략하세요.`;
+- 같은 단어나 표현을 반복하지 마세요. 채울 내용이 없으면 배열을 비우세요.`;
+}
+
+/**
+ * TO-BE 흐름의 AI 에이전트 노드인지 판별한다.
+ * 프롬프트와 응답 스키마가 같은 기준으로 변형을 고르도록 여기 한 곳에서만 정의한다.
+ */
+function isAgentDrilldown(node: { type: string }, flowType: string): boolean {
+    const isTobe = flowType === 'tobe' || flowType === 'to-be';
+    return isTobe && node.type === 'agent';
 }
 
 function getDrilldownPrompt(
@@ -617,7 +661,10 @@ export async function POST(request: NextRequest) {
                         { status: 400 }
                     );
                 }
-                schema = DrilldownResponseSchema;
+                // 프롬프트와 스키마가 같은 조건으로 변형을 고르도록 한 곳에서 판별한다
+                schema = isAgentDrilldown(node, flowType)
+                    ? AgentDrilldownResponseSchema
+                    : HumanDrilldownResponseSchema;
                 // allNodes, allEdges는 선택적 - 전체 플로우 컨텍스트 전달용
                 // asIsNodes는 TO-BE 분석 시 시간 비교용
                 prompt = getDrilldownPrompt(node, context, flowType, body.allNodes, body.allEdges, body.asIsNodes);
