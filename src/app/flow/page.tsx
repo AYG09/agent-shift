@@ -33,20 +33,9 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ENTERPRISE_PLATFORMS, PLATFORM_CATEGORIES, PLATFORM_CATEGORY_ORDER } from '@/lib/platforms';
 import { cn } from '@/lib/utils';
+import type { DrilldownResponse } from '@/lib/ai-schemas';
+import { formatDuration, toNodeMetrics } from '@/lib/duration';
 import { useMounted } from '@/hooks/useMounted';
-
-// 한국어 시간 문자열 파싱 ("10분", "2시간" → { duration, durationUnit })
-type DurationUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
-function parseDurationString(durationStr?: string): { duration: number; durationUnit: DurationUnit } | undefined {
-    if (!durationStr) return undefined;
-    const match = durationStr.match(/(\d+)\s*(분|시간|일|주|개월)/);
-    if (!match) return undefined;
-    const value = parseInt(match[1]);
-    const unitMap: Record<string, DurationUnit> = {
-        '분': 'minutes', '시간': 'hours', '일': 'days', '주': 'weeks', '개월': 'months'
-    };
-    return { duration: value, durationUnit: unitMap[match[2]] || 'minutes' };
-}
 
 // Collapsible Section Component
 const CollapsibleSection = ({ 
@@ -314,37 +303,7 @@ function FlowPageContent() {
         type: string;
         collaborationType?: string;
     } | null>(null);
-    const [drilldownResult, setDrilldownResult] = useState<{
-        flowType?: 'asis' | 'tobe';
-        subSteps: Array<{
-            id: string;
-            label: string;
-            description: string;
-            duration?: string;
-            tools?: string[];
-            // AS-IS 전용
-            painPoints?: string;
-            // TO-BE 전용
-            aiImplementation?: {
-                method: string;
-                technology: string[];
-                platforms?: string[];
-                automationLevel?: 'full' | 'partial' | 'assisted';
-            };
-            resources?: Array<{
-                type: 'youtube' | 'docs' | 'article' | 'tutorial';
-                title: string;
-                url?: string;
-                description?: string;
-            }>;
-        }>;
-        summary: string;
-        automationOverview?: {
-            totalTimeReduction?: string;
-            keyBenefits?: string[];
-            implementationTips?: string[];
-        };
-    } | null>(null);
+    const [drilldownResult, setDrilldownResult] = useState<DrilldownResponse | null>(null);
     const drilldownFlowType: 'as-is' | 'to-be' = viewMode === 'tobe' ? 'to-be' : 'as-is';
 
     // ReactFlow 형식으로 변환
@@ -566,40 +525,7 @@ function FlowPageContent() {
         );
 
         if (result) {
-            setDrilldownResult({
-                flowType: viewMode === 'tobe' ? 'tobe' : 'asis',
-                subSteps: result.subSteps.map((step: { 
-                    id: string; 
-                    label: string; 
-                    description: string; 
-                    duration?: string; 
-                    tools?: string[];
-                    painPoints?: string;
-                    aiImplementation?: {
-                        method: string;
-                        technology: string[];
-                        platforms?: string[];
-                        automationLevel?: 'full' | 'partial' | 'assisted';
-                    };
-                    resources?: Array<{
-                        type: 'youtube' | 'docs' | 'article' | 'tutorial';
-                        title: string;
-                        url?: string;
-                        description?: string;
-                    }>;
-                }) => ({
-                    id: step.id,
-                    label: step.label,
-                    description: step.description,
-                    duration: step.duration,
-                    tools: step.tools,
-                    painPoints: step.painPoints,
-                    aiImplementation: step.aiImplementation,
-                    resources: step.resources,
-                })),
-                summary: result.summary,
-                automationOverview: result.automationOverview,
-            });
+            setDrilldownResult(result);
         }
     };
 
@@ -618,7 +544,6 @@ function FlowPageContent() {
         const spacing = 100;
 
         const newNodes: typeof targetNodes = drilldownResult.subSteps.map((step, idx) => {
-            const parsed = parseDurationString(step.duration);
             return {
                 id: `${drilldownNode.id}-step-${idx}`,
                 type: 'task' as const, // FlowNode 타입에 맞게 'task' 사용
@@ -626,10 +551,7 @@ function FlowPageContent() {
                 description: step.description,
                 stressLevel: 'low' as const,
                 position: { x: originalNode.position.x, y: baseY + idx * spacing },
-                metrics: parsed ? {
-                    duration: parsed.duration,
-                    durationUnit: parsed.durationUnit,
-                } : undefined,
+                metrics: toNodeMetrics(step.duration),
             };
         });
 
@@ -1618,11 +1540,9 @@ function FlowPageContent() {
                             {drilldownFlowType === 'to-be' && drilldownResult.automationOverview && (
                                 <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
                                     <div className="text-sm font-semibold text-blue-800 mb-2">⚡ AI 자동화 효과</div>
-                                    {drilldownResult.automationOverview.totalTimeReduction && (
-                                        <div className="text-lg font-bold text-blue-600 mb-2">
-                                            {drilldownResult.automationOverview.totalTimeReduction}
-                                        </div>
-                                    )}
+                                    <div className="text-lg font-bold text-blue-600 mb-2">
+                                        시간 {drilldownResult.automationOverview.reductionPercent}% 절감
+                                    </div>
                                     {drilldownResult.automationOverview.keyBenefits && (
                                         <ul className="text-xs text-blue-700 space-y-1 mb-2">
                                             {drilldownResult.automationOverview.keyBenefits.map((benefit, i) => (
@@ -1661,7 +1581,7 @@ function FlowPageContent() {
                                             <div className="flex flex-wrap gap-2 mt-2">
                                                 {step.duration && (
                                                     <span className="text-xs bg-[#E2E4E9] px-2 py-1 rounded">
-                                                        ⏱️ {step.duration}
+                                                        ⏱️ {formatDuration(step.duration)}
                                                     </span>
                                                 )}
                                                 {step.tools?.map((tool) => (
@@ -1734,9 +1654,9 @@ function FlowPageContent() {
                                                                         </span>
                                                                         <span className="font-medium text-purple-800">{resource.title}</span>
                                                                     </div>
-                                                                    {resource.url && (
+                                                                    {resource.searchQuery && (
                                                                         <div className="text-[10px] text-purple-600 ml-4">
-                                                                            🔍 검색: {resource.url}
+                                                                            🔍 검색: {resource.searchQuery}
                                                                         </div>
                                                                     )}
                                                                     {resource.description && (

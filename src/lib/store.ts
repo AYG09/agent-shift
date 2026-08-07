@@ -596,6 +596,19 @@ export const useAppStore = create<AppState>()(
         }),
         {
             name: 'agent-shift-storage',
+            // v1: 드릴다운 응답 스키마 재설계.
+            // duration이 "30초" 문자열 → { value, unit } 객체로, skillBasedReduction이
+            // "90분→5분" 문자열 → { before, after, unit } 객체로 바뀌었다.
+            // 예전 형식이 남아 있으면 화면에 [object Object]가 뜨므로 버린다.
+            // 드릴다운 결과는 다시 생성 가능한 캐시라 폐기해도 사용자 작업물이 사라지지 않는다.
+            version: 1,
+            migrate: (persistedState, version) => {
+                const state = persistedState as Partial<AppState> | undefined;
+                if (state && version < 1) {
+                    return { ...state, drilldownResults: {} } as AppState;
+                }
+                return state as AppState;
+            },
             storage: createJSONStorage(() => {
                 // SSR 안전하게 처리
                 if (typeof window === 'undefined') {

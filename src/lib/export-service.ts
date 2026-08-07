@@ -2,6 +2,8 @@
 
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, AlignmentType, ShadingType, VerticalAlign, convertInchesToTwip } from 'docx';
 import ExcelJS from 'exceljs';
+// 이 파일에는 노드 metrics용 formatDuration이 따로 있어 이름 충돌을 피한다
+import { formatDuration as formatStepDuration, formatSkillReduction } from './duration';
 import type { DrilldownResponse } from './ai-schemas';
 
 // ============================================================================
@@ -668,11 +670,11 @@ export async function generateWordReport(data: {
                 );
 
                 // 시간 절감
-                if (result.automationOverview?.totalTimeReduction) {
+                if (result.automationOverview) {
                     docChildren.push(new Paragraph({
                         children: [
                             new TextRun({ text: '⏱ 예상 시간 절감: ', bold: true, size: 22 }),
-                            new TextRun({ text: result.automationOverview.totalTimeReduction, color: COLORS.SUCCESS, size: 22, bold: true }),
+                            new TextRun({ text: `${result.automationOverview.reductionPercent}% 절감`, color: COLORS.SUCCESS, size: 22, bold: true }),
                         ],
                         spacing: { after: 100 },
                     }));
@@ -687,7 +689,7 @@ export async function generateWordReport(data: {
                     
                     result.subSteps.forEach((step, idx) => {
                         const toolsStr = step.tools?.length ? ` [${step.tools.join(', ')}]` : '';
-                        const durationStr = step.duration ? ` (${step.duration})` : '';
+                        const durationStr = step.duration ? ` (${formatStepDuration(step.duration)})` : '';
                         docChildren.push(new Paragraph({
                             children: [
                                 new TextRun({ text: `${idx + 1}. ${step.label}`, bold: true, size: 20 }),
@@ -731,7 +733,7 @@ export async function generateWordReport(data: {
                     docChildren.push(new Paragraph({
                         children: [
                             new TextRun({ text: '• 저역량(Junior): ', size: 20 }),
-                            new TextRun({ text: sr.junior, color: COLORS.SUCCESS, size: 20 }),
+                            new TextRun({ text: formatSkillReduction(sr.junior), color: COLORS.SUCCESS, size: 20 }),
                         ],
                         spacing: { after: 40 },
                         indent: { left: convertInchesToTwip(0.25) },
@@ -739,7 +741,7 @@ export async function generateWordReport(data: {
                     docChildren.push(new Paragraph({
                         children: [
                             new TextRun({ text: '• 중역량(Mid): ', size: 20 }),
-                            new TextRun({ text: sr.mid, color: COLORS.SUCCESS, size: 20 }),
+                            new TextRun({ text: formatSkillReduction(sr.mid), color: COLORS.SUCCESS, size: 20 }),
                         ],
                         spacing: { after: 40 },
                         indent: { left: convertInchesToTwip(0.25) },
@@ -747,7 +749,7 @@ export async function generateWordReport(data: {
                     docChildren.push(new Paragraph({
                         children: [
                             new TextRun({ text: '• 고역량(Senior): ', size: 20 }),
-                            new TextRun({ text: sr.senior, color: COLORS.SUCCESS, size: 20 }),
+                            new TextRun({ text: formatSkillReduction(sr.senior), color: COLORS.SUCCESS, size: 20 }),
                         ],
                         spacing: { after: 100 },
                         indent: { left: convertInchesToTwip(0.25) },
@@ -1107,21 +1109,21 @@ export async function generateExcelWBS(data: {
                 const subStepsText = result.subSteps
                     ? result.subSteps.map((s, i) => {
                         const toolsStr = s.tools?.length ? ` [${s.tools.join(', ')}]` : '';
-                        return `${i + 1}. ${s.label}${s.duration ? ` (${s.duration})` : ''}${toolsStr}`;
+                        return `${i + 1}. ${s.label}${s.duration ? ` (${formatStepDuration(s.duration)})` : ''}${toolsStr}`;
                     }).join('\n')
                     : '-';
                 
                 const benefitsText = result.automationOverview?.keyBenefits?.join('\n') || '-';
                 
                 const skillReductionText = result.automationOverview?.skillBasedReduction
-                    ? `Junior: ${result.automationOverview.skillBasedReduction.junior}\nMid: ${result.automationOverview.skillBasedReduction.mid}\nSenior: ${result.automationOverview.skillBasedReduction.senior}`
+                    ? `Junior: ${formatSkillReduction(result.automationOverview.skillBasedReduction.junior)}\nMid: ${formatSkillReduction(result.automationOverview.skillBasedReduction.mid)}\nSenior: ${formatSkillReduction(result.automationOverview.skillBasedReduction.senior)}`
                     : '-';
 
                 const row = ws6.addRow({
                     label: node.label,
                     subSteps: subStepsText,
                     benefits: benefitsText,
-                    timeReduction: result.automationOverview?.totalTimeReduction || '-',
+                    timeReduction: result.automationOverview ? `${result.automationOverview.reductionPercent}% 절감` : '-',
                     skillReduction: skillReductionText,
                 });
                 
