@@ -175,7 +175,7 @@ function normalizeEdgeHandlesInStore(nodes: FlowNode[], edges: FlowEdge[]): Flow
 }
 
 // 액션 아이템 정보
-export interface ActionItem {
+interface ActionItem {
     action: string;
     rationale: string;
     value: string;

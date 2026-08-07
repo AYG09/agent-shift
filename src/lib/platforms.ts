@@ -6,7 +6,7 @@
  */
 
 // 플랫폼 카테고리 타입
-export type PlatformCategory = 
+type PlatformCategory =
     | 'productivity' 
     | 'crm' 
     | 'itsm' 
@@ -15,7 +15,7 @@ export type PlatformCategory =
     | 'automation';
 
 // 플랫폼 인터페이스
-export interface Platform {
+interface Platform {
     value: string;      // 고유 식별자
     label: string;      // 표시 이름
     category: PlatformCategory;
@@ -77,38 +77,3 @@ export const ENTERPRISE_PLATFORMS: Platform[] = [
     { value: 'jira-ai', label: 'Jira AI (Atlassian)', category: 'itsm' },
 ];
 
-/**
- * 플랫폼 value로 Platform 객체 찾기
- */
-export function getPlatformByValue(value: string): Platform | undefined {
-    return ENTERPRISE_PLATFORMS.find(p => p.value === value);
-}
-
-/**
- * 플랫폼 value 배열을 label 배열로 변환
- */
-export function getPlatformLabels(values: string[]): string[] {
-    return values
-        .map(v => getPlatformByValue(v)?.label)
-        .filter((label): label is string => label !== undefined);
-}
-
-/**
- * 카테고리별로 플랫폼 그룹핑
- */
-export function groupPlatformsByCategory(): Record<PlatformCategory, Platform[]> {
-    const grouped: Record<PlatformCategory, Platform[]> = {
-        productivity: [],
-        crm: [],
-        itsm: [],
-        communication: [],
-        knowledge: [],
-        automation: [],
-    };
-    
-    for (const platform of ENTERPRISE_PLATFORMS) {
-        grouped[platform.category].push(platform);
-    }
-    
-    return grouped;
-}

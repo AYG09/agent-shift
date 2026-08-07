@@ -1,14 +1,14 @@
 import { z } from 'zod';
 
 // 노드 메트릭 스키마 - 다양한 시간 단위 지원 (분/시간/일/주/월)
-export const NodeMetricsSchema = z.object({
+const NodeMetricsSchema = z.object({
     timeMinutes: z.number().int().optional().describe('사용하지 말 것 (하위 호환용)'),
     duration: z.number().int().describe('소요 시간 (정수, 예: 30)'),
     durationUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months']).describe('시간 단위 (예: minutes)'),
 }).describe('시간 메트릭 객체 - 모든 노드에 반드시 포함');
 
 // 노드 스키마 - .describe()로 모델에 명확한 지시, .max()로 JSON Schema maxLength 강제
-export const FlowNodeSchema = z.object({
+const FlowNodeSchema = z.object({
     id: z.string().describe('고유 ID'),
     label: z.string().max(30).describe('노드 이름 (30자 이내, 핵심만)'),
     description: z.string().max(60).optional().describe('간단 설명 (60자 이내)'),
@@ -26,7 +26,7 @@ export const FlowNodeSchema = z.object({
 });
 
 // 엣지 스키마
-export const FlowEdgeSchema = z.object({
+const FlowEdgeSchema = z.object({
     id: z.string(),
     source: z.string(),
     target: z.string(),
@@ -104,8 +104,6 @@ export const ChangeStrategyResponseSchema = z.object({
 });
 
 // 타입 추출
-export type FlowNode = z.infer<typeof FlowNodeSchema>;
-export type FlowEdge = z.infer<typeof FlowEdgeSchema>;
 export type AsIsFlowResponse = z.infer<typeof AsIsFlowResponseSchema>;
 export type ToBeFlowResponse = z.infer<typeof ToBeFlowResponseSchema>;
 export type ChangeStrategyResponse = z.infer<typeof ChangeStrategyResponseSchema>;

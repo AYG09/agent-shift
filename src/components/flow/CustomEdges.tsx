@@ -3,7 +3,7 @@
 import { BaseEdge, EdgeProps, getBezierPath, EdgeLabelRenderer } from '@xyflow/react';
 
 // 선택 가능한 기본 엣지 (호버/선택 시 강조)
-export function SelectableEdge({
+function SelectableEdge({
     id,
     sourceX,
     sourceY,
@@ -102,7 +102,7 @@ export function SelectableEdge({
 }
 
 // 토큰 시뮬레이션이 있는 애니메이션 엣지
-export function TokenFlowEdge({
+function TokenFlowEdge({
     id,
     sourceX,
     sourceY,
@@ -224,7 +224,7 @@ export function TokenFlowEdge({
 }
 
 // 기본 부드러운 엣지 (토큰 없음)
-export function SmoothEdge({
+function SmoothEdge({
     id,
     sourceX,
     sourceY,

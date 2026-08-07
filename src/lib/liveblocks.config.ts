@@ -1,7 +1,5 @@
 'use client';
 
-import { FlowNode, FlowEdge, UserContext, StrategyData } from './store';
-
 // Liveblocks Presence 타입 - 실시간 임시 상태
 export type Presence = {
     cursor: { x: number; y: number } | null;
@@ -12,35 +10,8 @@ export type Presence = {
     };
 };
 
-// Liveblocks Storage 타입 - 영구 동기화 상태
-export type Storage = {
-    asIsNodes: FlowNode[];
-    asIsEdges: FlowEdge[];
-    toBeNodes: FlowNode[];
-    toBeEdges: FlowEdge[];
-    context: UserContext | null;
-    strategy: StrategyData | null;
-};
-
-// 사용자 메타 정보
-export type UserMeta = {
-    id: string;
-    info: {
-        name: string;
-        color: string;
-        avatar?: string;
-    };
-};
-
-// Room 이벤트 타입
-export type RoomEvent = {
-    type: 'NODE_SELECTED' | 'NODE_EDITED' | 'CURSOR_MOVED';
-    nodeId?: string;
-    userId?: string;
-};
-
 // 협업 사용자 색상 팔레트
-export const USER_COLORS = [
+const USER_COLORS = [
     '#E57373', // Red
     '#64B5F6', // Blue
     '#81C784', // Green

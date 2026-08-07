@@ -312,6 +312,3 @@ export const useCollabStore = create<WithLiveblocks<CollabState, Presence>>()(
         }
     )
 );
-
-// 협업 상태 타입 export
-export type { CollabState };

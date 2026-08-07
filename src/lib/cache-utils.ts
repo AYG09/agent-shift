@@ -69,30 +69,3 @@ export function setCachedData<T>(key: string, data: T, ttlMinutes: number = DEFA
         // QuotaExceededError handling could go here
     }
 }
-
-/**
- * Clears all agent-shift cache items.
- */
-export function clearAppCache(): void {
-    if (typeof window === 'undefined') return;
-
-    try {
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith(CACHE_PREFIX)) {
-                keysToRemove.push(key);
-            }
-        }
-
-        keysToRemove.forEach((key) => {
-            try {
-                localStorage.removeItem(key);
-            } catch {
-                // ignore
-            }
-        });
-    } catch (e) {
-        console.warn('Cache clear error', e);
-    }
-}
