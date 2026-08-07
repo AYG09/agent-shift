@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,28 @@ import {
     DialogFooter,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_REASONING_LEVEL,
+    FALLBACK_MODEL_PRIORITY,
+    MODEL_STORAGE_KEY,
+    MODEL_UPDATED_EVENT,
+    REASONING_LEVELS,
+    REASONING_LEVEL_LABELS,
+    REASONING_STORAGE_KEY,
+    REASONING_UPDATED_EVENT,
+    resolveModelId,
+    sanitizeReasoningLevel,
+    type GeminiModelListResult,
+    type ReasoningLevel,
+} from '@/lib/gemini-models';
 
 const API_KEY_STORAGE_KEY = 'agent-shift-api-key';
 
@@ -57,11 +79,39 @@ function dispatchApiKeyUpdate() {
     }
 }
 
+function dispatchModelUpdate() {
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
+    }
+}
+
+function dispatchReasoningUpdate() {
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(REASONING_UPDATED_EVENT));
+    }
+}
+
+// 모델 목록 조회가 fallback으로 떨어진 이유를 사용자 문구로 변환
+function resolveModelListWarning(result: GeminiModelListResult): string {
+    switch (result.reason) {
+        case 'missing-api-key':
+            return 'API 키가 없어 모델 목록을 조회하지 못했습니다. 기본 목록을 표시합니다.';
+        case 'api-error':
+            return '저장된 API 키로 Google 모델 목록 조회에 실패했습니다. 기본 목록을 표시합니다.';
+        case 'empty-api-result':
+            return 'Google API가 모델 목록을 반환하지 않았습니다. 기본 목록을 표시합니다.';
+        case 'filter-empty':
+            return 'Google 응답은 있었지만 생성 가능한 Gemini 모델을 찾지 못했습니다.';
+        default:
+            return '모델 목록을 조회할 수 없어 기본 목록을 표시합니다.';
+    }
+}
+
 interface ApiKeySettingsProps {
     trigger?: React.ReactNode;
 }
 
-export function useApiKey() {
+function useApiKey() {
     const [apiKey, setApiKey] = useState<string | null>(null);
     const [isLoaded, setIsLoaded] = useState(() => typeof window !== 'undefined');
 
@@ -97,22 +147,71 @@ export default function ApiKeySettings({ trigger }: ApiKeySettingsProps) {
     const [open, setOpen] = useState(false);
     const [showKey, setShowKey] = useState(false);
 
+    // 모델 선택 상태
+    const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_GEMINI_MODEL);
+    const [availableModels, setAvailableModels] = useState<string[]>([...FALLBACK_MODEL_PRIORITY]);
+    const [isLoadingModels, setIsLoadingModels] = useState(false);
+    const [modelWarning, setModelWarning] = useState<string | null>(null);
+
+    // 추론 깊이 (Gemini 3.x thinking_level)
+    const [reasoning, setReasoning] = useState<ReasoningLevel>(DEFAULT_REASONING_LEVEL);
+
+    // Google에서 현재 사용 가능한 모델 목록을 조회한다.
+    // 키를 넘기지 않으면 서버가 환경 변수 키로 조회한다.
+    const loadModels = useCallback(async (keyForLookup?: string) => {
+        setIsLoadingModels(true);
+        setModelWarning(null);
+        try {
+            const response = await fetch('/api/models', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ apiKey: keyForLookup?.trim() || undefined }),
+            });
+            const result: GeminiModelListResult = await response.json();
+
+            setAvailableModels(result.models);
+            // 저장된 모델이 목록에 없으면 alias → 기본값 순으로 이동시킨다
+            setSelectedModel((prev) => resolveModelId(prev, result.models));
+
+            if (result.source === 'fallback') {
+                setModelWarning(resolveModelListWarning(result));
+            }
+        } catch (e) {
+            console.warn('[ApiKeySettings] 모델 목록 로드 실패:', e);
+            setModelWarning('모델 목록을 불러오지 못해 기본 목록을 표시합니다.');
+        } finally {
+            setIsLoadingModels(false);
+        }
+    }, []);
+
     const handleOpenChange = (nextOpen: boolean) => {
         setOpen(nextOpen);
         if (nextOpen) {
             const stored = loadApiKey();
             setInputKey(stored ?? apiKey ?? '');
+            setSelectedModel(safeGetStorageItem(MODEL_STORAGE_KEY) ?? DEFAULT_GEMINI_MODEL);
+            setReasoning(sanitizeReasoningLevel(safeGetStorageItem(REASONING_STORAGE_KEY)));
+            // 설정창을 열 때마다 최신 목록을 다시 조회한다
+            void loadModels(stored ?? apiKey ?? undefined);
             return;
         }
         setInputKey('');
         setShowKey(false);
+        setModelWarning(null);
     };
 
     const handleSave = () => {
-        if (inputKey.trim()) {
-            saveApiKey(inputKey.trim());
-            setOpen(false);
+        const trimmed = inputKey.trim();
+        if (trimmed) {
+            saveApiKey(trimmed);
         }
+        if (safeSetStorageItem(MODEL_STORAGE_KEY, selectedModel)) {
+            dispatchModelUpdate();
+        }
+        if (safeSetStorageItem(REASONING_STORAGE_KEY, reasoning)) {
+            dispatchReasoningUpdate();
+        }
+        setOpen(false);
     };
 
     const handleClear = () => {
@@ -186,9 +285,95 @@ export default function ApiKeySettings({ trigger }: ApiKeySettingsProps) {
                         </CardContent>
                     </Card>
 
+                    <Card className="bg-slate-800/50 border-slate-700">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm text-slate-300">AI 모델 선택</CardTitle>
+                            <CardDescription className="text-xs text-slate-500">
+                                현재 Google에서 지원하는 Gemini 모델 중에서 고를 수 있습니다.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-sm text-slate-400">
+                                        모델
+                                        {isLoadingModels && (
+                                            <span className="ml-2 text-xs text-slate-500">
+                                                조회 중...
+                                            </span>
+                                        )}
+                                    </Label>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void loadModels(inputKey || undefined)}
+                                        disabled={isLoadingModels}
+                                        className="h-7 border-slate-600 text-xs"
+                                    >
+                                        🔄 목록 새로고침
+                                    </Button>
+                                </div>
+                                <Select
+                                    value={selectedModel}
+                                    onValueChange={setSelectedModel}
+                                    disabled={isLoadingModels}
+                                >
+                                    <SelectTrigger className="w-full bg-slate-800 border-slate-600 font-mono text-sm">
+                                        <SelectValue placeholder="모델을 선택하세요" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                                        {availableModels.map((model) => (
+                                            <SelectItem
+                                                key={model}
+                                                value={model}
+                                                className="font-mono text-sm"
+                                            >
+                                                {model}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {modelWarning && (
+                                <p className="text-xs text-amber-400">⚠️ {modelWarning}</p>
+                            )}
+
+                            <div className="space-y-2">
+                                <Label className="text-sm text-slate-400">추론 깊이</Label>
+                                <Select
+                                    value={reasoning}
+                                    onValueChange={(v) => setReasoning(v as ReasoningLevel)}
+                                >
+                                    <SelectTrigger className="w-full bg-slate-800 border-slate-600 text-sm">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                                        {REASONING_LEVELS.map((level) => (
+                                            <SelectItem
+                                                key={level}
+                                                value={level}
+                                                className="text-sm"
+                                            >
+                                                {REASONING_LEVEL_LABELS[level]}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-slate-500">
+                                    깊게 둘수록 분석 품질이 오르지만 응답이 느려지고 토큰을 더
+                                    씁니다.
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     <div className="text-xs text-slate-500 space-y-1">
-                        <p>• API 키는 브라우저 로컬 스토리지에 저장됩니다.</p>
-                        <p>• 서버로 전송되지 않으며 브라우저에서만 사용됩니다.</p>
+                        <p>• API 키와 선택한 모델은 브라우저 로컬 스토리지에 저장됩니다.</p>
+                        <p>
+                            • AI 생성 요청은 이 앱의 서버 라우트를 거치므로, 저장한 키는 요청마다
+                            서버로 전달됩니다. (외부에 저장되지는 않습니다)
+                        </p>
                         <p>
                             •{' '}
                             <a
@@ -225,7 +410,7 @@ export default function ApiKeySettings({ trigger }: ApiKeySettingsProps) {
                         </Button>
                         <Button
                             onClick={handleSave}
-                            disabled={!inputKey.trim()}
+                            disabled={!inputKey.trim() && !apiKey}
                             className="bg-indigo-600 hover:bg-indigo-500"
                         >
                             저장

@@ -10,6 +10,14 @@ import {
 } from '@/lib/ai-schemas';
 import { generateCacheKey, getCachedData, setCachedData } from '@/lib/cache-utils';
 import { useAppStore } from '@/lib/store';
+import {
+    MODEL_STORAGE_KEY,
+    MODEL_UPDATED_EVENT,
+    REASONING_STORAGE_KEY,
+    REASONING_UPDATED_EVENT,
+    sanitizeReasoningLevel,
+    type ReasoningLevel,
+} from '@/lib/gemini-models';
 
 // 드릴다운에 전달할 그래프 컨텍스트용 간소화된 타입
 interface FlowNodeBasic {
@@ -133,31 +141,79 @@ export function useAIGeneration() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [apiKey, setApiKey] = useState<string | null>(null);
+    const [model, setModel] = useState<string | null>(null);
+    const [reasoning, setReasoning] = useState<ReasoningLevel>('default');
 
     // 로컬 스토리지에서 API 키 로드 (클라이언트에서만)
     useEffect(() => {
         const stored = safeGetStorageItem(API_KEY_STORAGE_KEY);
         setApiKey(stored);
-        
+
         // storage 이벤트 리스너로 다른 탭/컴포넌트에서 변경 감지
         const handleStorageChange = (e: StorageEvent) => {
             if (e.key === API_KEY_STORAGE_KEY) {
                 setApiKey(e.newValue);
             }
         };
-        
+
         // 커스텀 이벤트로 같은 탭에서 변경 감지
         const handleApiKeyUpdate = () => {
             const updated = safeGetStorageItem(API_KEY_STORAGE_KEY);
             setApiKey(updated);
         };
-        
+
         window.addEventListener('storage', handleStorageChange);
         window.addEventListener('apikey-updated', handleApiKeyUpdate);
-        
+
         return () => {
             window.removeEventListener('storage', handleStorageChange);
             window.removeEventListener('apikey-updated', handleApiKeyUpdate);
+        };
+    }, []);
+
+    // 선택한 모델 로드 (API 키와 동일한 감지 방식)
+    useEffect(() => {
+        setModel(safeGetStorageItem(MODEL_STORAGE_KEY));
+
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === MODEL_STORAGE_KEY) {
+                setModel(e.newValue);
+            }
+        };
+
+        const handleModelUpdate = () => {
+            setModel(safeGetStorageItem(MODEL_STORAGE_KEY));
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        window.addEventListener(MODEL_UPDATED_EVENT, handleModelUpdate);
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            window.removeEventListener(MODEL_UPDATED_EVENT, handleModelUpdate);
+        };
+    }, []);
+
+    // 선택한 추론 깊이 로드
+    useEffect(() => {
+        setReasoning(sanitizeReasoningLevel(safeGetStorageItem(REASONING_STORAGE_KEY)));
+
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === REASONING_STORAGE_KEY) {
+                setReasoning(sanitizeReasoningLevel(e.newValue));
+            }
+        };
+
+        const handleReasoningUpdate = () => {
+            setReasoning(sanitizeReasoningLevel(safeGetStorageItem(REASONING_STORAGE_KEY)));
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        window.addEventListener(REASONING_UPDATED_EVENT, handleReasoningUpdate);
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            window.removeEventListener(REASONING_UPDATED_EVENT, handleReasoningUpdate);
         };
     }, []);
 
@@ -170,7 +226,8 @@ export function useAIGeneration() {
 
             try {
                 // 1. Check Cache
-                const cacheKey = await generateCacheKey('generateAsIsFlow', context);
+                // 모델/추론 깊이가 바뀌면 다른 결과가 나오므로 캐시 키에 함께 포함한다
+                const cacheKey = await generateCacheKey('generateAsIsFlow', { context, model, reasoning });
                 const cached = getCachedData<AsIsFlowResponse>(cacheKey);
                 if (cached) {
                     console.log('⚡ Cache Hit: AsIsFlow');
@@ -185,6 +242,8 @@ export function useAIGeneration() {
                         action: 'generateAsIsFlow',
                         context,
                         apiKey: apiKey || undefined,
+                        model: model || undefined,
+                        reasoning,
                     }),
                 });
 
@@ -209,7 +268,7 @@ export function useAIGeneration() {
                 setIsLoading(false);
             }
         },
-        [apiKey]
+        [apiKey, model, reasoning]
     );
 
     const generateToBeFlow = useCallback(
@@ -222,7 +281,7 @@ export function useAIGeneration() {
             setError(null);
             try {
                 // 1. Check Cache
-                const cacheKey = await generateCacheKey('generateToBeFlow', { context, asIsNodes: asIsNodes.map(n => n.id), scenario }); // Optimize key payload
+                const cacheKey = await generateCacheKey('generateToBeFlow', { context, asIsNodes: asIsNodes.map(n => n.id), scenario, model, reasoning }); // Optimize key payload
                 const cached = getCachedData<ToBeFlowResponse>(cacheKey);
                 if (cached) {
                     console.log('⚡ Cache Hit: ToBeFlow');
@@ -238,6 +297,8 @@ export function useAIGeneration() {
                         asIsNodes,
                         scenario,
                         apiKey: apiKey || undefined,
+                        model: model || undefined,
+                        reasoning,
                     }),
                 });
 
@@ -259,7 +320,7 @@ export function useAIGeneration() {
                 setIsLoading(false);
             }
         },
-        [apiKey]
+        [apiKey, model, reasoning]
     );
 
     const generateChangeStrategy = useCallback(
@@ -267,7 +328,7 @@ export function useAIGeneration() {
             setIsLoading(true);
             setError(null);
             try {
-                const cacheKey = await generateCacheKey('generateChangeStrategy', { context, framework, totalWeeks });
+                const cacheKey = await generateCacheKey('generateChangeStrategy', { context, framework, totalWeeks, model, reasoning });
                 const cached = getCachedData<ChangeStrategyResponse>(cacheKey);
                 if (cached) {
                     console.log('⚡ Cache Hit: ChangeStrategy');
@@ -283,6 +344,8 @@ export function useAIGeneration() {
                         framework,
                         totalWeeks,
                         apiKey: apiKey || undefined,
+                        model: model || undefined,
+                        reasoning,
                     }),
                 });
 
@@ -302,7 +365,7 @@ export function useAIGeneration() {
                 setIsLoading(false);
             }
         },
-        [apiKey]
+        [apiKey, model, reasoning]
     );
 
     const generateDrilldown = useCallback(
@@ -333,7 +396,9 @@ export function useAIGeneration() {
                     flowType,
                     nodeCount: allNodes?.length ?? 0,
                     edgeCount: allEdges?.length ?? 0,
-                    asIsNodeCount: asIsNodes?.length ?? 0
+                    asIsNodeCount: asIsNodes?.length ?? 0,
+                    model,
+                    reasoning
                 });
                 const cached = getCachedData<DrilldownResponse>(cacheKey);
                 if (cached) {
@@ -355,6 +420,8 @@ export function useAIGeneration() {
                         allEdges,
                         asIsNodes,  // AS-IS 원본 노드들 (시간 비교용)
                         apiKey: apiKey || undefined,
+                        model: model || undefined,
+                        reasoning,
                     }),
                 });
 
@@ -381,7 +448,7 @@ export function useAIGeneration() {
                 setIsLoading(false);
             }
         },
-        [apiKey]
+        [apiKey, model, reasoning]
     );
 
     // 노드 분할 (세분화) - 해당 노드를 4~5개 하위 노드로 분할
@@ -405,7 +472,7 @@ export function useAIGeneration() {
             setIsLoading(true);
             setError(null);
             try {
-                const cacheKey = await generateCacheKey('generateNodeSplit', { context, nodeId: node.id, flowType });
+                const cacheKey = await generateCacheKey('generateNodeSplit', { context, nodeId: node.id, flowType, model, reasoning });
                 const cached = getCachedData<NodeSplitResponse>(cacheKey);
                 if (cached) {
                     console.log('⚡ Cache Hit: NodeSplit');
@@ -421,6 +488,8 @@ export function useAIGeneration() {
                         node,
                         flowType: flowType === 'asis' ? 'as-is' : 'to-be',
                         apiKey: apiKey || undefined,
+                        model: model || undefined,
+                        reasoning,
                     }),
                 });
 
@@ -440,7 +509,7 @@ export function useAIGeneration() {
                 setIsLoading(false);
             }
         },
-        [apiKey]
+        [apiKey, model, reasoning]
     );
 
     // API 키 갱신 함수
@@ -455,6 +524,8 @@ export function useAIGeneration() {
         isLoading,
         error,
         hasApiKey: !!apiKey,
+        selectedModel: model,
+        reasoningLevel: reasoning,
         generateAsIsFlow,
         generateToBeFlow,
         generateChangeStrategy,

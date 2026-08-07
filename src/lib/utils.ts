@@ -35,20 +35,3 @@ export function throttle<T extends (...args: Parameters<T>) => void>(
         }
     };
 }
-
-// Debounce 함수 - 마지막 호출 후 지정된 시간이 지나면 실행
-export function debounce<T extends (...args: Parameters<T>) => void>(
-    fn: T,
-    ms: number
-): (...args: Parameters<T>) => void {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    return (...args: Parameters<T>) => {
-        if (timeoutId) {
-            clearTimeout(timeoutId);
-        }
-        timeoutId = setTimeout(() => {
-            fn(...args);
-        }, ms);
-    };
-}

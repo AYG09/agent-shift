@@ -49,8 +49,7 @@ Agent Shift는 조직의 현행 업무 프로세스를 분석하고, AI 에이�
 
 ### 6. 📤 Export 기능
 
-- **Word/Excel**: 문서 형태로 결과 내보내기
-- **PDF 리포트**: React-PDF 기반 보고서 생성
+- **Word/Excel**: 문서 형태로 결과 내보내기 (docx / xlsx)
 
 ---
 
@@ -62,10 +61,10 @@ Agent Shift는 조직의 현행 업무 프로세스를 분석하고, AI 에이�
 | **UI** | React 19, Tailwind CSS 4, Radix UI |
 | **State** | Zustand (persist middleware) |
 | **Flow Editor** | @xyflow/react (React Flow) |
-| **AI** | Google Gemini (gemini-2.5-flash) via AI SDK |
+| **AI** | Google Gemini 3.x via AI SDK (설정창에서 모델·추론 깊이 선택, 기본 `gemini-3.6-flash`) |
 | **Collaboration** | Liveblocks |
 | **Animation** | Framer Motion |
-| **Export** | docx, xlsx, @react-pdf/renderer |
+| **Export** | docx, exceljs |
 | **Validation** | Zod |
 
 ---
@@ -127,7 +126,7 @@ src/
 │   └── ui/               # 공통 UI 컴포넌트
 ├── lib/
 │   ├── store.ts          # Zustand 전역 상태
-│   ├── ai-service.ts     # AI 서비스 로직
+│   ├── gemini-models.ts  # 모델 목록/추론 깊이 해석 규칙
 │   ├── ai-schemas.ts     # AI 응답 Zod 스키마
 │   ├── export-service.ts # Export 로직
 │   ├── platforms.ts      # AI 플랫폼 정의

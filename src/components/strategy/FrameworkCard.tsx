@@ -66,7 +66,7 @@ const frameworks = {
     },
 };
 
-export default function FrameworkCard({ id, selected, onSelect }: FrameworkCardProps) {
+function FrameworkCard({ id, selected, onSelect }: FrameworkCardProps) {
     const fw = frameworks[id];
     const hasSchein = 'scheinApproaches' in fw;
 

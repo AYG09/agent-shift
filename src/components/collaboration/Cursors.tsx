@@ -59,20 +59,3 @@ export function Cursors({ others }: CursorsProps) {
         </div>
     );
 }
-
-// 커서 아이콘 SVG 컴포넌트 (Lucide 아이콘 대안)
-export function CursorIcon({ color }: { color: string }) {
-    return (
-        <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill={color}
-            stroke="white"
-            strokeWidth="1.5"
-            className="drop-shadow-md"
-        >
-            <path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.48 0 .72-.58.38-.92L6.35 2.85a.5.5 0 0 0-.85.36Z" />
-        </svg>
-    );
-}

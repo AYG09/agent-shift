@@ -97,7 +97,7 @@ const formatDurationWithMultiplier = (metrics?: NodeMetrics, multiplier: number 
     return `${adjusted}${DURATION_UNIT_LABELS[unit]}`;
 };
 
-export type ShapeType = 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
+type ShapeType = 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
 
 // ============================================
 // Node Shape Wrapper (공통 모양 & 핸들 관리)
@@ -272,7 +272,7 @@ const NodeShapeWrapper = ({
 // ============================================
 // Terminal Node (타원형 - 시작/종료)
 // ============================================
-export const TerminalNode = memo(({ data, selected }: NodeProps<Node<TerminalNodeData>>) => {
+const TerminalNode = memo(({ data, selected }: NodeProps<Node<TerminalNodeData>>) => {
     const isStart = data.terminalType !== 'end';
     const shape = data.shape || 'pill';
 
@@ -313,7 +313,7 @@ const getSkillMultiplier = (
 // ============================================
 // Process Node (직사각형 - 처리) - 아코디언 확장
 // ============================================
-export const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeData>>) => {
+const ProcessNode = memo(({ data, selected }: NodeProps<Node<ProcessNodeData>>) => {
     const [expanded, setExpanded] = useState(false);
     const [skillExpanded, setSkillExpanded] = useState(false);
 
@@ -418,7 +418,7 @@ ProcessNode.displayName = 'ProcessNode';
 // ============================================
 // 마름모는 꼭지점에 연결점이 있어야 하므로 별도 구현
 // ============================================
-export const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNodeData>>) => {
+const DecisionNode = memo(({ data, selected }: NodeProps<Node<DecisionNodeData>>) => {
     // 마름모 노드 - 꼭지점에 Handle 배치를 위해 커스텀 렌더링
     const size = 100; // 마름모 크기
     const half = size / 2;
@@ -525,7 +525,7 @@ DecisionNode.displayName = 'DecisionNode';
 // ============================================
 // IO Node (평행사변형 - 입출력) - 아코디언 확장
 // ============================================
-export const IONode = memo(({ data, selected }: NodeProps<Node<IONodeData>>) => {
+const IONode = memo(({ data, selected }: NodeProps<Node<IONodeData>>) => {
     const [expanded, setExpanded] = useState(false);
     const isInput = data.ioType !== 'output';
     const hasDescription = !!data.description;
@@ -579,7 +579,7 @@ IONode.displayName = 'IONode';
 // ============================================
 // Agent Node (팔각형 - AI Agent) - 아코디언 확장
 // ============================================
-export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>>) => {
+const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>>) => {
     const [showPopover, setShowPopover] = useState(false);
     const [skillExpanded, setSkillExpanded] = useState(false);
 
@@ -775,12 +775,6 @@ export const AgentNode = memo(({ data, selected }: NodeProps<Node<AgentNodeData>
     );
 });
 AgentNode.displayName = 'AgentNode';
-
-// ============================================
-// Legacy Support - Task/SubProcess (기존 호환)
-// ============================================
-export const TaskNode = ProcessNode;
-export const SubProcessNode = ProcessNode;
 
 // ============================================
 // Node Types Export
