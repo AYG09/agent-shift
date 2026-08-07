@@ -50,6 +50,16 @@ export interface RawModelEntry {
     supportedGenerationMethods?: string[];
 }
 
+/**
+ * generateContent를 지원하더라도 이 앱의 구조화 출력에는 쓸 수 없는 모델들.
+ *
+ * image는 `-image`로 끝나는 것만이 아니라 `gemini-3-pro-image-preview`처럼
+ * 접미사가 더 붙는 형태가 있어 세그먼트 단위로 매칭한다.
+ * customtools는 별도 도구 설정을 전제한 변형이라 일반 선택지에서 제외한다.
+ */
+const EXCLUDED_MODEL_PATTERN =
+    /embedding|tts|live|vision-only|imagen|customtools|(?:^|-)image(?:-|$)/;
+
 /** 'models/gemini-3.5-flash' → 'gemini-3.5-flash' */
 function normalizeModelId(modelName: string): string {
     return modelName.replace(/^models\//, '').trim();
@@ -98,7 +108,7 @@ export function filterOfficialGeminiModels(models: RawModelEntry[]): string[] {
         .filter(({ id, supportsGenerate }) => {
             if (!id || !isSupportedGeneration(id)) return false;
             if (!supportsGenerate) return false;
-            if (/embedding|tts|live|vision-only|imagen|-image$/.test(id)) return false;
+            if (EXCLUDED_MODEL_PATTERN.test(id)) return false;
             return true;
         });
 
