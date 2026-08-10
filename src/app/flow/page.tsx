@@ -24,7 +24,8 @@ import {
     CommandList,
 } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
-import { useAppStore, SCENARIO_INFO, type ScenarioType } from '@/lib/store';
+import { useAppStore, SCENARIO_INFO, type ScenarioType, aiNodeToFlowNode, flowNodeToAiContext } from '@/lib/store';
+import { FLOW_SHAPES } from '@/lib/flow-shapes';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
 import { ShareDialog } from '@/components/collaboration/ShareDialog';
@@ -350,20 +351,14 @@ function FlowPageContent() {
         });
 
         if (result) {
-            // AI 응답을 Zustand FlowNode 형식으로 변환 (label이 루트 레벨)
-            const storeNodes = result.nodes.map((node) => ({
-                id: node.id,
-                type: node.type as 'task' | 'decision' | 'subprocess' | 'agent',
-                label: node.label,
-                description: node.description,
-                stressLevel: node.stressLevel as 'low' | 'medium' | 'high' | undefined,
-                position: node.position,
-                metrics: node.metrics,
-            }));
-            const storeEdges = result.edges.map((edge) => ({
+            // AI 응답을 공통 aiNodeToFlowNode를 통해 완벽히 보존 및 변환
+            const storeNodes = result.nodes.map((node: Record<string, unknown>) => aiNodeToFlowNode(node));
+            const storeEdges = result.edges.map((edge: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }) => ({
                 id: edge.id,
                 source: edge.source,
                 target: edge.target,
+                sourceHandle: edge.sourceHandle,
+                targetHandle: edge.targetHandle,
             }));
             setAsIsFlow(storeNodes, storeEdges);
         }
@@ -384,38 +379,19 @@ function FlowPageContent() {
                 painPoints: context.painPoints,
                 platforms: context.platforms,  // 사용자 선택 AI 플랫폼
             },
-            asIsNodes.map((n) => ({
-                id: n.id,
-                label: n.label,
-                description: n.description,
-                type: n.type,
-                stressLevel: n.stressLevel,
-                position: n.position,
-            })),
+            asIsNodes.map((n) => flowNodeToAiContext(n)),
             selectedScenario
         );
 
         if (result) {
-            // AI 응답을 Zustand FlowNode 형식으로 변환
-            const storeNodes = result.nodes.map((node) => ({
-                id: node.id,
-                type: node.type as 'task' | 'decision' | 'subprocess' | 'agent',
-                label: node.label,
-                description: node.description,
-                stressLevel: node.stressLevel as 'low' | 'medium' | 'high' | undefined,
-                collaborationType: node.collaborationType as
-                    | 'copilot'
-                    | 'monitor'
-                    | 'autonomous'
-                    | undefined,
-                agentDescription: node.agentDescription,
-                position: node.position,
-                metrics: node.metrics,
-            }));
-            const storeEdges = result.edges.map((edge) => ({
+            // AI 응답을 공통 aiNodeToFlowNode를 통해 완벽히 보존 및 변환
+            const storeNodes = result.nodes.map((node: Record<string, unknown>) => aiNodeToFlowNode(node));
+            const storeEdges = result.edges.map((edge: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }) => ({
                 id: edge.id,
                 source: edge.source,
                 target: edge.target,
+                sourceHandle: edge.sourceHandle,
+                targetHandle: edge.targetHandle,
             }));
             setToBeFlow(storeNodes, storeEdges);
             // 자동으로 To-Be 뷰로 전환
@@ -436,31 +412,8 @@ function FlowPageContent() {
         );
 
         if (result) {
-            // FlowNode 형식으로 변환 (duration/durationUnit → metrics 변환)
             return {
-                nodes: result.nodes.map(
-                    (n: {
-                        id: string;
-                        label: string;
-                        description?: string;
-                        type: string;
-                        stressLevel?: string;
-                        duration?: number;
-                        durationUnit?: 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
-                    }) => ({
-                        id: n.id,
-                        label: n.label,
-                        description: n.description,
-                        type: n.type as 'task' | 'decision' | 'subprocess' | 'agent',
-                        stressLevel: n.stressLevel as 'low' | 'medium' | 'high' | undefined,
-                        position: { x: 0, y: 0 }, // FlowCanvas에서 재배치
-                        metrics: n.duration ? {
-                            duration: n.duration,
-                            durationUnit: n.durationUnit || 'minutes',
-                            timeMinutes: n.durationUnit === 'minutes' ? n.duration : undefined,
-                        } : undefined,
-                    })
-                ),
+                nodes: result.nodes.map((n: Record<string, unknown>) => aiNodeToFlowNode(n)),
                 edges: [] as { id: string; source: string; target: string }[],
             };
         }
@@ -485,14 +438,7 @@ function FlowPageContent() {
         const flowType = viewMode === 'tobe' ? 'to-be' : 'as-is';
 
         // 전체 노드/엣지를 API에 전달하여 플로우 컨텍스트 파악 (metrics 포함)
-        const allNodesForContext = nodes.map(n => ({
-            id: n.id,
-            label: n.label,
-            description: n.description,
-            type: n.type,
-            collaborationType: n.collaborationType,
-            metrics: n.metrics,  // 시간 정보 포함
-        }));
+        const allNodesForContext = nodes.map(n => flowNodeToAiContext(n));
         const allEdgesForContext = edges.map(e => ({
             id: e.id,
             source: e.source,
@@ -500,13 +446,7 @@ function FlowPageContent() {
         }));
 
         // AS-IS 원본 노드들 (TO-BE 분석 시 시간 비교용)
-        const asIsNodesForContext = asIsNodes.map(n => ({
-            id: n.id,
-            label: n.label,
-            description: n.description,
-            type: n.type,
-            metrics: n.metrics,  // 시간 정보 포함!
-        }));
+        const asIsNodesForContext = asIsNodes.map(n => flowNodeToAiContext(n));
 
         const result = await generateDrilldown(
             { industry: context.industry, role: context.role, task: context.task, platforms: context.platforms },
@@ -539,20 +479,32 @@ function FlowPageContent() {
         const originalNode = targetNodes.find((n) => n.id === drilldownNode.id);
         if (!originalNode) return;
 
-        // 새 노드들 생성 (기존 노드 위치 기준으로 배치)
-        const baseY = originalNode.position.y;
-        const spacing = 100;
+        // 새 노드들 생성 (도형 높이를 고려하여 하위 노드가 겹치지 않게 가변 간격 배치)
+        let currentY = originalNode.position.y;
 
         const newNodes: typeof targetNodes = drilldownResult.subSteps.map((step, idx) => {
-            return {
+            const rawNode = {
                 id: `${drilldownNode.id}-step-${idx}`,
-                type: 'task' as const, // FlowNode 타입에 맞게 'task' 사용
                 label: step.label,
                 description: step.description,
-                stressLevel: 'low' as const,
-                position: { x: originalNode.position.x, y: baseY + idx * spacing },
+                type: step.type || 'process',
+                shape: step.shape,
+                terminalType: step.terminalType,
+                ioType: step.ioType,
+                stressLevel: step.stressLevel || 'low',
+                collaborationType: step.collaborationType,
+                agentDescription: step.agentDescription,
                 metrics: toNodeMetrics(step.duration),
+                position: { x: originalNode.position.x, y: currentY },
             };
+
+            const flowNode = aiNodeToFlowNode(rawNode as Record<string, unknown>, { x: originalNode.position.x, y: currentY });
+
+            // 도형 높이에 기반한 수직 간격 계산 (도형 높이 + 40px 여백)
+            const nodeHeight = (flowNode.shape ? FLOW_SHAPES[flowNode.shape]?.defaultHeight : undefined) || 80;
+            currentY += nodeHeight + 40;
+
+            return flowNode;
         });
 
         // 기존 엣지에서 원본 노드 연결 찾기
@@ -565,14 +517,14 @@ function FlowPageContent() {
             source: node.id,
             target: newNodes[idx + 1].id,
             sourceHandle: 'bottom',
-            targetHandle: 'top',
+            targetHandle: 'top-target',
         }));
 
         // 기존 incoming을 첫 번째 하위 노드로 연결
         const reconnectedIncoming = incomingEdges.map((e) => ({
             ...e,
             target: newNodes[0].id,
-            targetHandle: 'top',
+            targetHandle: 'top-target',
         }));
 
         // 기존 outgoing을 마지막 하위 노드에서 연결
@@ -1084,6 +1036,9 @@ function FlowPageContent() {
                 data: {
                     label: n.label,
                     description: n.description,
+                    shape: n.shape,
+                    terminalType: n.terminalType,
+                    ioType: n.ioType,
                     stressLevel: n.stressLevel,
                     metrics: n.metrics,
                 },
@@ -1117,6 +1072,9 @@ function FlowPageContent() {
                 data: {
                     label: n.label,
                     description: n.description,
+                    shape: n.shape,
+                    terminalType: n.terminalType,
+                    ioType: n.ioType,
                     collaborationType: n.collaborationType,
                     agentDescription: n.agentDescription,
                     stressLevel: n.stressLevel,

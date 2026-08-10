@@ -12,6 +12,8 @@ import {
     NodeSplitResponseSchema,
 } from '@/lib/ai-schemas';
 import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
+import { normalizeFlowShape } from '@/lib/flow-shapes';
+import { QUEUE_LOOP_SHAPE_GUIDE } from '@/lib/ai-shape-guide';
 
 // AI 응답의 숫자 필드를 정규화 (부동소수점 오버플로우 방지)
 function normalizeMetrics(obj: unknown): unknown {
@@ -29,6 +31,29 @@ function normalizeMetrics(obj: unknown): unknown {
             result[key] = normalizeMetrics(value);
         }
         return result;
+    }
+    return obj;
+}
+
+// AI 응답 노드의 도형(shape) 정규화
+function sanitizeResponseShapes(obj: unknown): unknown {
+    if (obj === null || typeof obj !== 'object') return obj;
+    const rec = obj as Record<string, unknown>;
+    if (Array.isArray(rec.nodes)) {
+        const sanitizedNodes = rec.nodes.map((node) => {
+            if (node && typeof node === 'object') {
+                const n = node as Record<string, unknown>;
+                const shape = normalizeFlowShape(
+                    n.shape as string | undefined,
+                    n.type as string | undefined,
+                    n.terminalType as string | undefined,
+                    n.ioType as string | undefined
+                );
+                return { ...n, shape };
+            }
+            return node;
+        });
+        return { ...rec, nodes: sanitizedNodes };
     }
     return obj;
 }
@@ -200,7 +225,7 @@ function formatGraphContextForPrompt(graphContext: GraphContext | null): string 
 }
 
 // 프롬프트 템플릿들
-function getAsIsPrompt(context: {
+export function getAsIsPrompt(context: {
     industry: string;
     role: string;
     task: string;
@@ -221,11 +246,26 @@ ${context.teamSize ? `- 팀 규모: ${context.teamSize}` : ''}
 ${context.tooling ? `- 현재 사용 도구: ${context.tooling}` : ''}
 ${context.painPoints ? `- 주요 고충/문제점: ${context.painPoints}` : ''}
 
-## 노드 타입 (표준 도식 도형)
-- terminal: 시작/종료 노드 (타원형). terminalType='start' 또는 'end' 설정
-- process: 처리/작업 노드 (직사각형). 일반적인 업무 단계
-- decision: 판단/분기 노드 (마름모). 조건에 따른 분기점
-- io: 입출력 노드 (평행사변형). 데이터 입력/출력. ioType='input' 또는 'output'
+## 노드 타입 및 표준 도형 (shape) 선택 규칙
+각 단계의 의미와 실제 수행 기능에 맞는 shape를 반드시 지정하세요:
+- 시작/종료: type='terminal', terminalType='start' 또는 'end', shape='terminal'
+- 일반 업무 수행: type='process', shape='process'
+- 질문, 승인 여부, 조건 판단, 분기: type='decision', shape='decision'
+- 데이터 입출력/수신/전송: type='io', ioType='input' 또는 'output', shape='data'
+- 보고서, 계약서, 신청서 등 문서 생성/검토: shape='document'
+- 하위 절차/모듈 호출: type='subprocess', shape='predefinedProcess'
+- DB 조회/저장/갱신: shape='database'
+- 시스템 내부 저장: shape='internalStorage'
+- 외부/파일 보관 데이터: shape='storedData'
+- 사용자가 직접 키보드/마우스 입력: shape='manualInput'
+- 사람이 시스템 밖에서 수동으로 처리: shape='manualOperation'
+- 환경 설정, 초기화, 준비: shape='preparation'
+- 대기, 보류, 지연: shape='delay'
+- 화면/대시보드 표시: shape='display'
+- 흐름 참조: shape='connector' 또는 'offPageConnector'
+- 흐름 병합/추출/정렬/취합: shape='merge' | 'extract' | 'sort' | 'collate' | 'or' | 'card' | 'stream'
+${QUEUE_LOOP_SHAPE_GUIDE}
+- 모호한 단계는 기본값 shape='process'를 적용하세요.
 
 ## 요구사항
 1. 반드시 시작(terminal, terminalType='start')과 종료(terminal, terminalType='end') 노드를 포함하세요.
@@ -245,7 +285,7 @@ ${context.painPoints ? `- 주요 고충/문제점: ${context.painPoints}` : ''}
 - 엣지: sourceHandle='bottom', targetHandle='top'`;
 }
 
-function getToBePrompt(
+export function getToBePrompt(
     context: {
         industry: string;
         role: string;
@@ -300,6 +340,24 @@ ${scenarioGuide[scenario]}
 ## 현재 As-Is 프로세스
 ${JSON.stringify(asIsNodes, null, 2)}
 
+## 노드 타입 및 표준 도형 (shape) 선택 규칙
+- As-Is의 shape는 단계의 실제 기능을 판단하는 중요 의미 정보입니다:
+  - type='process', shape='document' -> 문서 작성/기안/인쇄 단계로 해석
+  - type='process', shape='database' -> DB 저장/조회/마이그레이션 단계로 해석
+  - type='terminal', terminalType='end' -> 최종 종료 단계로 해석
+  - type='io', ioType='output' -> 데이터 출력/전송 단계로 해석
+  - type='agent', shape='decision' -> AI 조건 판단 단계로 해석
+- To-Be 설계 시 위 의미 정보(shape, terminalType, ioType, stressLevel, collaborationType, agentDescription, metrics)를 적극 활용하여 알맞게 발전시키세요.
+- AI Agent 노드: type='agent', collaborationType='copilot'|'monitor'|'autonomous'
+  - AI Agent 노드라고 무조건 동일 도형을 쓰지 말고, 해당 단계의 실질적 역할에 어울리는 shape를 명시적으로 할당하세요 (예: AI 문서 요약 -> shape='document', AI DB 조회/저장 -> shape='database', AI 판단 -> shape='decision', AI 처리 -> shape='process').
+- 시작/종료 -> shape='terminal'
+- 질문, 승인, 조건 판단 -> shape='decision'
+- 입출력 -> shape='data'
+- 문서 처리 -> shape='document'
+- 수동 처리/입력 -> shape='manualInput' 또는 'manualOperation'
+- DB 작업 -> shape='database'
+${QUEUE_LOOP_SHAPE_GUIDE}
+
 ## 요구사항
 1. 위 시나리오(${scenario})에 맞게 AI Agent를 배치하세요.
 2. AI Agent의 협업 유형을 시나리오에 맞게 지정:
@@ -353,7 +411,7 @@ ${frameworkGuide[framework] || framework}
 }
 
 // AS-IS 전용 드릴다운 프롬프트: 인간 작업 과정만 상세 분석
-function getDrilldownPromptAsIs(
+export function getDrilldownPromptAsIs(
     node: { id: string; label: string; description?: string; type: string },
     context: { industry: string; role: string; task: string },
     graphContext: GraphContext | null = null
@@ -378,11 +436,13 @@ ${graphContextText}
 이것은 **As-Is (현재 상태)** 분석입니다.
 - AI 자동화, AI 도입, AI 대체 가능성은 **절대 언급하지 마세요**
 - 오직 **인간이 현재 이 작업을 어떻게 수행하는지**만 분석하세요
+- 각 하위 단계에 기능에 부합하는 type과 shape를 명시적으로 부여하세요 (예: 입력 -> type='io', ioType='input', shape='data'; 검증/판단 -> type='decision', shape='decision'; 문서작성 -> type='process', shape='document'; 모호하면 type='process', shape='process')
+${QUEUE_LOOP_SHAPE_GUIDE}
 ${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞는** 세부 단계를 도출하세요` : ''}
 
 ## 요구사항
 1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
-2. 각 하위 단계: description, duration, tools, painPoints
+2. 각 하위 단계: label, description, type, shape, duration, tools, painPoints
 3. summary: 전체 과정 요약과 주요 병목점
 
 ## JSON 구조 예시
@@ -391,6 +451,7 @@ ${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞�
   "flowType": "asis",
   "subSteps": [{
     "id": "step_1", "label": "단계명", "description": "설명",
+    "type": "process", "shape": "document",
     "duration": { "value": 30, "unit": "minutes" },
     "tools": ["Excel"],
     "painPoints": "이 단계에서 겪는 어려움"
@@ -406,7 +467,7 @@ ${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞�
 
 // TO-BE 전용 드릴다운 프롬프트: AI 자동화 구현 방법 상세 안내
 // 단, 노드 타입이 'agent'가 아니면 인간 작업으로 분석
-function getDrilldownPromptToBe(
+export function getDrilldownPromptToBe(
     node: { id: string; label: string; description?: string; type: string; collaborationType?: string; metrics?: { timeMinutes?: number } },
     context: { industry: string; role: string; task: string; platforms?: string[] },
     graphContext: GraphContext | null = null,
@@ -461,11 +522,13 @@ ${graphContextText}
 - 이 노드는 AI가 아닌 **인간 담당자**가 수행합니다
 - AI 자동화, AI 도입 가능성은 **언급하지 마세요** (이 단계는 인간 업무로 계획됨)
 - 오직 **인간이 이 작업을 어떻게 수행하는지**만 분석하세요
+- 각 하위 단계에 기능에 부합하는 type과 shape를 명시적으로 부여하세요
+${QUEUE_LOOP_SHAPE_GUIDE}
 ${graphContext ? `- 위의 이전/다음 단계(일부는 AI 에이전트)와의 **연계**를 고려하세요` : ''}
 
 ## 요구사항
 1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
-2. 각 하위 단계: description, duration, tools, painPoints
+2. 각 하위 단계: label, description, type, shape, duration, tools, painPoints
 3. summary: 전체 과정 요약과 AI 에이전트와의 협업 포인트
 
 ## JSON 구조 예시
@@ -474,6 +537,7 @@ ${graphContext ? `- 위의 이전/다음 단계(일부는 AI 에이전트)와의
   "flowType": "tobe",
   "subSteps": [{
     "id": "step_1", "label": "단계명", "description": "설명",
+    "type": "process", "shape": "document",
     "duration": { "value": 30, "unit": "minutes" },
     "tools": ["Excel"],
     "painPoints": "이 단계에서 겪는 어려움"
@@ -509,6 +573,10 @@ ${asIsInfo}
 - 비전문가도 이해할 수 있게 쉽게 설명
 ${graphContext ? `- 이전/다음 단계와의 데이터 흐름 고려` : ''}
 ${asIsNodes && asIsNodes.length > 0 ? `- AS-IS 단계 중 이 AI가 대체하는 단계 식별 + 역량별 시간 절감 계산` : ''}
+
+## 도형(shape) 선택 규칙
+각 하위 단계(subSteps)의 실제 기능에 맞는 shape를 지정하세요 (예: 처리 -> shape='process', 판단 -> shape='decision', 데이터 입출력 -> shape='data', 문서 처리 -> shape='document', DB 작업 -> shape='database').
+${QUEUE_LOOP_SHAPE_GUIDE}
 
 ## 요구사항 (길이·개수는 스키마가 강제함)
 1. 3~5개 세부 하위 단계 (subSteps)
@@ -575,6 +643,38 @@ function getDrilldownPrompt(
         return getDrilldownPromptToBe(node, context, graphContext, asIsNodes);
     }
     return getDrilldownPromptAsIs(node, context, graphContext);
+}
+
+// 노드 분할 프롬프트
+export function getNodeSplitPrompt(
+    context: { industry: string; role: string; task: string },
+    node: { label: string; description?: string; type: string; metrics?: { duration?: number; durationUnit?: string } },
+    flowType: string
+) {
+    return `당신은 업무 프로세스 분석 전문가입니다.
+다음 프로세스 단계를 4~5개의 하위 노드로 분할해주세요.
+
+## 업무 정보
+- 산업: ${context.industry}
+- 직무: ${context.role}
+- 전체 업무: ${context.task}
+
+## 분할 대상 노드
+- 이름: ${node.label}
+- 설명: ${node.description || '없음'}
+- 현재 타입: ${node.type}
+- 현재 소요시간: ${node.metrics?.duration ? `${node.metrics.duration}${node.metrics.durationUnit || 'minutes'}` : '미정'}
+- 플로우 종류: ${flowType}
+
+## 요구사항
+1. 이 단계를 4~5개의 순차적인 하위 단계로 분할하세요.
+2. 각 노드에 고유한 id (sub-1, sub-2 등), label, description을 부여하세요.
+3. type은 process(일반 작업), decision(분기점), io(입출력), terminal(시작/종료), agent(AI가 수행하는 작업) 중 적절히 선택하세요.
+4. 각 노드의 역할에 알맞은 표준 도형(shape)을 선택하세요 (예: document, database, manualInput, process, decision, data, predefinedProcess 등).
+${QUEUE_LOOP_SHAPE_GUIDE}
+5. 병목이나 어려운 단계는 stressLevel을 'medium' 또는 'high'로 설정하세요.
+6. **각 노드에 duration(숫자)과 durationUnit(단위)을 반드시 설정하세요.**
+7. summary에 분할 이유와 전체 요약을 작성하세요.`;
 }
 
 export async function POST(request: NextRequest) {
@@ -678,28 +778,7 @@ export async function POST(request: NextRequest) {
                     );
                 }
                 schema = NodeSplitResponseSchema;
-                prompt = `당신은 업무 프로세스 분석 전문가입니다.
-다음 프로세스 단계를 4~5개의 하위 노드로 분할해주세요.
-
-## 업무 정보
-- 산업: ${context.industry}
-- 직무: ${context.role}
-- 전체 업무: ${context.task}
-
-## 분할 대상 노드
-- 이름: ${node.label}
-- 설명: ${node.description || '없음'}
-- 현재 타입: ${node.type}
-- 현재 소요시간: ${node.metrics?.duration ? `${node.metrics.duration}${node.metrics.durationUnit || 'minutes'}` : '미정'}
-- 플로우 종류: ${flowType}
-
-## 요구사항
-1. 이 단계를 4~5개의 순차적인 하위 단계로 분할하세요.
-2. 각 노드에 고유한 id (sub-1, sub-2 등), label, description을 부여하세요.
-3. type은 process(일반 작업), decision(분기점), io(입출력) 중 적절히 선택하세요.
-4. 병목이나 어려운 단계는 stressLevel을 'medium' 또는 'high'로 설정하세요.
-5. **각 노드에 duration(숫자)과 durationUnit(단위)을 반드시 설정하세요.**
-6. summary에 분할 이유와 전체 요약을 작성하세요.`;
+                prompt = getNodeSplitPrompt(context, node, flowType);
                 break;
 
             default:
@@ -718,9 +797,8 @@ export async function POST(request: NextRequest) {
             ...(providerOptions ? { providerOptions } : {}),
         });
 
-        // 숫자 필드 정규화 후 반환.
-        // 배열 길이는 스키마의 .max()가 이미 강제하므로 여기서 다시 자르지 않는다.
-        return NextResponse.json(normalizeMetrics(object));
+        // 숫자 및 도형 필드 정규화 후 반환
+        return NextResponse.json(normalizeMetrics(sanitizeResponseShapes(object)));
     } catch (error) {
         console.error('AI API Error:', error);
 
@@ -729,7 +807,7 @@ export async function POST(request: NextRequest) {
         if (NoObjectGeneratedError.isInstance(error)) {
             const salvaged = schema ? salvageFromError(error, schema) : null;
             if (salvaged) {
-                return NextResponse.json(normalizeMetrics(salvaged));
+                return NextResponse.json(normalizeMetrics(sanitizeResponseShapes(salvaged)));
             }
             return NextResponse.json({
                 error: 'AI 응답이 스키마와 일치하지 않습니다. 다시 시도해주세요.'

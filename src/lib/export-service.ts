@@ -146,14 +146,18 @@ interface ExtendedStrategy {
     scheinApproaches?: ScheinApproach[];
 }
 
+import type { FlowNodeType } from './store';
+import type { FlowShape } from './flow-shapes';
+
 // ============================================================================
 // Word 보고서용 노드 타입
 // ============================================================================
 interface ReportNode {
     id: string;
-    type: 'task' | 'decision' | 'subprocess' | 'agent';
+    type: FlowNodeType | string;
     label: string;
     description?: string;
+    shape?: FlowShape | string;
     metrics?: NodeMetrics;
 }
 

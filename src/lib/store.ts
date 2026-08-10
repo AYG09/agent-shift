@@ -61,18 +61,119 @@ export interface NodeMetrics {
     skillMultipliers?: SkillMultipliers; // 역량별 시간 승수
 }
 
+import { type FlowShape, normalizeFlowShape } from './flow-shapes';
+
+export type FlowNodeType =
+    | 'terminal'
+    | 'process'
+    | 'decision'
+    | 'io'
+    | 'agent'
+    | 'task'
+    | 'subprocess';
+
 export interface FlowNode {
     id: string;
-    type: 'task' | 'decision' | 'subprocess' | 'agent';
+    type: FlowNodeType;
     label: string;
     description?: string;
-    shape?: 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
+    shape?: FlowShape;
+    shapeMode?: 'auto' | 'manual';
+    terminalType?: 'start' | 'end';
+    ioType?: 'input' | 'output';
     stressLevel?: 'low' | 'medium' | 'high';
     position: { x: number; y: number };
     children?: FlowNode[];
     collaborationType?: 'copilot' | 'monitor' | 'autonomous';
     agentDescription?: string;
     metrics?: NodeMetrics;
+}
+
+export function normalizeFlowNode(node: FlowNode): FlowNode {
+    const rawShapeMode = node.shapeMode;
+    const isExplicit = !!node.shape;
+    const shapeMode: 'auto' | 'manual' = rawShapeMode || (isExplicit ? 'manual' : 'auto');
+
+    const shape = normalizeFlowShape(
+        node.shape,
+        node.type,
+        node.terminalType,
+        node.ioType
+    );
+
+    return {
+        ...node,
+        shape,
+        shapeMode,
+    };
+}
+
+export function aiNodeToFlowNode(
+    node: Record<string, unknown>,
+    fallbackPosition: { x: number; y: number } = { x: 250, y: 100 }
+): FlowNode {
+    const rawType = node.type || 'process';
+    const validTypes: FlowNodeType[] = ['terminal', 'process', 'decision', 'io', 'agent', 'task', 'subprocess'];
+    const type: FlowNodeType = validTypes.includes(rawType as FlowNodeType)
+        ? (rawType as FlowNodeType)
+        : 'process';
+
+    const shapeMode: 'auto' | 'manual' = node.shapeMode === 'manual' ? 'manual' : 'auto';
+
+    const shape = normalizeFlowShape(
+        typeof node.shape === 'string' ? node.shape : undefined,
+        type,
+        node.terminalType === 'start' || node.terminalType === 'end' ? node.terminalType : undefined,
+        node.ioType === 'input' || node.ioType === 'output' ? node.ioType : undefined
+    );
+
+    let metrics = node.metrics as FlowNode['metrics'];
+    if (!metrics && (node.duration !== undefined || node.timeMinutes !== undefined)) {
+        const duration = Number(node.duration ?? node.timeMinutes) || 0;
+        const rawUnit = String(node.durationUnit || 'minutes');
+        const durationUnit: DurationUnit = (['minutes', 'hours', 'days', 'weeks', 'months'] as const).includes(rawUnit as DurationUnit)
+            ? (rawUnit as DurationUnit)
+            : 'minutes';
+        metrics = {
+            duration,
+            durationUnit,
+            timeMinutes: durationUnit === 'minutes' ? duration : undefined,
+        };
+    }
+
+    return {
+        id: String(node.id || `node-${Date.now()}`),
+        type,
+        label: String(node.label || '노드'),
+        description: typeof node.description === 'string' ? node.description : undefined,
+        shape,
+        shapeMode,
+        terminalType: node.terminalType === 'start' || node.terminalType === 'end' ? node.terminalType : undefined,
+        ioType: node.ioType === 'input' || node.ioType === 'output' ? node.ioType : undefined,
+        stressLevel: node.stressLevel === 'low' || node.stressLevel === 'medium' || node.stressLevel === 'high' ? node.stressLevel : undefined,
+        collaborationType: node.collaborationType === 'copilot' || node.collaborationType === 'monitor' || node.collaborationType === 'autonomous' ? node.collaborationType : undefined,
+        agentDescription: typeof node.agentDescription === 'string' ? node.agentDescription : undefined,
+        position: (node.position as { x: number; y: number }) || fallbackPosition,
+        metrics,
+    };
+}
+
+export function flowNodeToAiContext(node: FlowNode) {
+    return {
+        id: node.id,
+        label: node.label,
+        description: node.description,
+        type: node.type,
+        shape: node.shape,
+        shapeMode: node.shapeMode,
+        terminalType: node.terminalType,
+        ioType: node.ioType,
+        stressLevel: node.stressLevel,
+        collaborationType: node.collaborationType,
+        agentDescription: node.agentDescription,
+        position: node.position,
+        metrics: node.metrics,
+    };
 }
 
 export interface FlowEdge {
@@ -360,16 +461,18 @@ export const useAppStore = create<AppState>()(
                 const state = get();
                 const project = state.projects.find((p) => p.id === id);
                 if (project) {
+                    const normAsIsNodes = project.asIsNodes.map(normalizeFlowNode);
+                    const normToBeNodes = project.toBeNodes.map(normalizeFlowNode);
                     // 기존 저장된 엣지의 handle을 노드 위치 기반으로 재계산
-                    const normalizedAsIsEdges = normalizeEdgeHandlesInStore(project.asIsNodes, project.asIsEdges);
-                    const normalizedToBeEdges = normalizeEdgeHandlesInStore(project.toBeNodes, project.toBeEdges);
+                    const normalizedAsIsEdges = normalizeEdgeHandlesInStore(normAsIsNodes, project.asIsEdges);
+                    const normalizedToBeEdges = normalizeEdgeHandlesInStore(normToBeNodes, project.toBeEdges);
                     
                     set({
                         currentProjectId: id,
                         context: project.context,
-                        asIsNodes: project.asIsNodes,
+                        asIsNodes: normAsIsNodes,
                         asIsEdges: normalizedAsIsEdges,
-                        toBeNodes: project.toBeNodes,
+                        toBeNodes: normToBeNodes,
                         toBeEdges: normalizedToBeEdges,
                         strategy: project.strategy,
                         drilldownPath: [],
@@ -391,9 +494,9 @@ export const useAppStore = create<AppState>()(
                                   ...p,
                                   updatedAt: new Date().toISOString(),
                                   context: s.context,
-                                  asIsNodes: s.asIsNodes,
+                                  asIsNodes: s.asIsNodes.map(normalizeFlowNode),
                                   asIsEdges: s.asIsEdges,
-                                  toBeNodes: s.toBeNodes,
+                                  toBeNodes: s.toBeNodes.map(normalizeFlowNode),
                                   toBeEdges: s.toBeEdges,
                                   strategy: s.strategy,
                               }
@@ -443,12 +546,14 @@ export const useAppStore = create<AppState>()(
             
             // 엣지에 handle이 없으면 노드 위치 기반으로 최적 handle 자동 계산
             setAsIsFlow: (nodes, edges) => {
-                const normalizedEdges = normalizeEdgeHandlesInStore(nodes, edges);
-                set({ asIsNodes: nodes, asIsEdges: normalizedEdges });
+                const normNodes = nodes.map(normalizeFlowNode);
+                const normalizedEdges = normalizeEdgeHandlesInStore(normNodes, edges);
+                set({ asIsNodes: normNodes, asIsEdges: normalizedEdges });
             },
             setToBeFlow: (nodes, edges) => {
-                const normalizedEdges = normalizeEdgeHandlesInStore(nodes, edges);
-                set({ toBeNodes: nodes, toBeEdges: normalizedEdges });
+                const normNodes = nodes.map(normalizeFlowNode);
+                const normalizedEdges = normalizeEdgeHandlesInStore(normNodes, edges);
+                set({ toBeNodes: normNodes, toBeEdges: normalizedEdges });
             },
 
             pushDrilldown: (nodeId) =>
@@ -469,12 +574,15 @@ export const useAppStore = create<AppState>()(
 
             // 노드 추가
             addNode: (node, target) =>
-                set((state) => ({
-                    [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: [
-                        ...(target === 'asis' ? state.asIsNodes : state.toBeNodes),
-                        node,
-                    ],
-                })),
+                set((state) => {
+                    const normNode = normalizeFlowNode(node);
+                    return {
+                        [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: [
+                            ...(target === 'asis' ? state.asIsNodes : state.toBeNodes),
+                            normNode,
+                        ],
+                    };
+                }),
 
             // 노드 수정
             updateNode: (id, updates, target) =>
@@ -482,7 +590,7 @@ export const useAppStore = create<AppState>()(
                     const nodes = target === 'asis' ? state.asIsNodes : state.toBeNodes;
                     return {
                         [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: nodes.map((node) =>
-                            node.id === id ? { ...node, ...updates } : node
+                            node.id === id ? normalizeFlowNode({ ...node, ...updates }) : node
                         ),
                     };
                 }),
@@ -601,13 +709,38 @@ export const useAppStore = create<AppState>()(
             // "90분→5분" 문자열 → { before, after, unit } 객체로 바뀌었다.
             // 예전 형식이 남아 있으면 화면에 [object Object]가 뜨므로 버린다.
             // 드릴다운 결과는 다시 생성 가능한 캐시라 폐기해도 사용자 작업물이 사라지지 않는다.
-            version: 1,
+            version: 2,
             migrate: (persistedState, version) => {
-                const state = persistedState as Partial<AppState> | undefined;
-                if (state && version < 1) {
-                    return { ...state, drilldownResults: {} } as AppState;
+                let state = persistedState as Record<string, unknown> | undefined;
+                if (!state) return state as unknown as AppState;
+
+                if (version < 1) {
+                    state = { ...state, drilldownResults: {} };
                 }
-                return state as AppState;
+
+                if (version < 2 && state) {
+                    const rawAsIs = (state.asIsNodes as FlowNode[]) || [];
+                    const rawToBe = (state.toBeNodes as FlowNode[]) || [];
+                    const rawProjects = (state.projects as Record<string, unknown>[]) || [];
+
+                    const asIsNodes = rawAsIs.map((n: FlowNode) => normalizeFlowNode(n));
+                    const toBeNodes = rawToBe.map((n: FlowNode) => normalizeFlowNode(n));
+
+                    const projects = rawProjects.map((proj) => ({
+                        ...proj,
+                        asIsNodes: ((proj.asIsNodes as FlowNode[]) || []).map((n: FlowNode) => normalizeFlowNode(n)),
+                        toBeNodes: ((proj.toBeNodes as FlowNode[]) || []).map((n: FlowNode) => normalizeFlowNode(n)),
+                    }));
+
+                    state = {
+                        ...state,
+                        asIsNodes,
+                        toBeNodes,
+                        projects,
+                    };
+                }
+
+                return state as unknown as AppState;
             },
             storage: createJSONStorage(() => {
                 // SSR 안전하게 처리

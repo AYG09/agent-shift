@@ -25,7 +25,8 @@ import NodeEditor from './NodeEditor';
 import NodeContextMenu from './NodeContextMenu';
 import EdgeContextMenu from './EdgeContextMenu';
 import { Button } from '@/components/ui/button';
-import { useAppStore, FlowNode, FlowEdge, DurationUnit, getReversedEdgeHandles } from '@/lib/store';
+import { useAppStore, FlowNode, FlowEdge, FlowNodeType, DurationUnit, getReversedEdgeHandles } from '@/lib/store';
+import { type FlowShape } from '@/lib/flow-shapes';
 
 interface FlowCanvasProps {
     onGenerateFlow?: () => void;
@@ -96,6 +97,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
                 data: {
                     label: n.label,
                     description: n.description,
+                    shape: n.shape,
+                    terminalType: n.terminalType,
+                    ioType: n.ioType,
                     stressLevel: n.stressLevel,
                     collaborationType: n.collaborationType,
                     agentDescription: n.agentDescription,
@@ -113,6 +117,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
             data: {
                 label: n.label,
                 description: n.description,
+                shape: n.shape,
+                terminalType: n.terminalType,
+                ioType: n.ioType,
                 stressLevel: n.stressLevel,
                 metrics: n.metrics,
                 isHeatmapMode,
@@ -566,8 +573,11 @@ export default function FlowCanvas(props: FlowCanvasProps) {
             id?: string;
             label: string;
             description?: string;
-            type: 'task' | 'decision' | 'subprocess' | 'agent';
-            shape?: 'rectangle' | 'rounded' | 'pill' | 'diamond' | 'parallelogram' | 'hexagon';
+            type: FlowNodeType;
+            shape?: FlowShape;
+            shapeMode?: 'auto' | 'manual';
+            terminalType?: 'start' | 'end';
+            ioType?: 'input' | 'output';
             stressLevel?: 'low' | 'medium' | 'high';
             collaborationType?: 'copilot' | 'monitor' | 'autonomous';
             metrics?: { timeMinutes?: number; duration?: number; durationUnit?: DurationUnit };
@@ -579,6 +589,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
                     description: data.description,
                     type: data.type,
                     shape: data.shape,
+                    shapeMode: data.shapeMode,
+                    terminalType: data.terminalType,
+                    ioType: data.ioType,
                     stressLevel: data.stressLevel,
                     collaborationType: data.collaborationType,
                     metrics: data.metrics,
@@ -593,6 +606,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
                         description: data.description,
                         type: data.type,
                         shape: data.shape,
+                        shapeMode: data.shapeMode,
+                        terminalType: data.terminalType,
+                        ioType: data.ioType,
                         stressLevel: data.stressLevel,
                         collaborationType: data.collaborationType,
                         metrics: data.metrics,

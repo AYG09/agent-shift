@@ -274,14 +274,14 @@ export function useAIGeneration() {
     const generateToBeFlow = useCallback(
         async (
             context: WorkContext,
-            asIsNodes: AsIsFlowResponse['nodes'],
+            asIsNodes: Record<string, unknown>[],
             scenario: 'conservative' | 'balanced' | 'aggressive' = 'balanced'
         ): Promise<ToBeFlowResponse | null> => {
             setIsLoading(true);
             setError(null);
             try {
                 // 1. Check Cache
-                const cacheKey = await generateCacheKey('generateToBeFlow', { context, asIsNodes: asIsNodes.map(n => n.id), scenario, model, reasoning }); // Optimize key payload
+                const cacheKey = await generateCacheKey('generateToBeFlow', { context, asIsNodes: asIsNodes.map(n => (n as { id?: string }).id), scenario, model, reasoning }); // Optimize key payload
                 const cached = getCachedData<ToBeFlowResponse>(cacheKey);
                 if (cached) {
                     console.log('⚡ Cache Hit: ToBeFlow');

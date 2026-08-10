@@ -10,6 +10,7 @@ import {
     FlowEdge,
     UserContext,
     StrategyData,
+    normalizeFlowNode,
 } from './store';
 
 // 유효한 target handle ID인지 확인 (신규 체계: xxx-target 형식)
@@ -23,7 +24,6 @@ function normalizeEdgeHandlesInStore(nodes: FlowNode[], edges: FlowEdge[]): Flow
     const nodeMap = new Map(nodes.map(n => [n.id, n.position]));
     
     return edges.map(edge => {
-        // 새 체계의 handle이 제대로 지정되어 있으면 그대로 사용
         if (edge.sourceHandle && isValidTargetHandle(edge.targetHandle)) {
             return edge;
         }
@@ -94,7 +94,7 @@ interface CollabState {
     user: { name: string; color: string };
 
     // 기본 액션
-    setContext: (context: UserContext) => void;
+    setContext: (context: UserContext | null) => void;
     setStrategy: (strategy: StrategyData | null) => void;
     setAsIsFlow: (nodes: FlowNode[], edges: FlowEdge[]) => void;
     setToBeFlow: (nodes: FlowNode[], edges: FlowEdge[]) => void;
@@ -162,12 +162,14 @@ export const useCollabStore = create<WithLiveblocks<CollabState, Presence>>()(
             setContext: (context) => set({ context }),
             setStrategy: (strategy) => set({ strategy }),
             setAsIsFlow: (nodes, edges) => {
-                const normalizedEdges = normalizeEdgeHandlesInStore(nodes, edges);
-                set({ asIsNodes: nodes, asIsEdges: normalizedEdges });
+                const normNodes = nodes.map(normalizeFlowNode);
+                const normalizedEdges = normalizeEdgeHandlesInStore(normNodes, edges);
+                set({ asIsNodes: normNodes, asIsEdges: normalizedEdges });
             },
             setToBeFlow: (nodes, edges) => {
-                const normalizedEdges = normalizeEdgeHandlesInStore(nodes, edges);
-                set({ toBeNodes: nodes, toBeEdges: normalizedEdges });
+                const normNodes = nodes.map(normalizeFlowNode);
+                const normalizedEdges = normalizeEdgeHandlesInStore(normNodes, edges);
+                set({ toBeNodes: normNodes, toBeEdges: normalizedEdges });
             },
             setViewMode: (mode) => set({ viewMode: mode }),
             setIsGenerating: (loading) => set({ isGenerating: loading }),
@@ -185,12 +187,15 @@ export const useCollabStore = create<WithLiveblocks<CollabState, Presence>>()(
 
             // 노드 추가
             addNode: (node, target) =>
-                set((state) => ({
-                    [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: [
-                        ...(target === 'asis' ? state.asIsNodes : state.toBeNodes),
-                        node,
-                    ],
-                })),
+                set((state) => {
+                    const normNode = normalizeFlowNode(node);
+                    return {
+                        [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: [
+                            ...(target === 'asis' ? state.asIsNodes : state.toBeNodes),
+                            normNode,
+                        ],
+                    };
+                }),
 
             // 노드 수정
             updateNode: (id, updates, target) =>
@@ -198,7 +203,7 @@ export const useCollabStore = create<WithLiveblocks<CollabState, Presence>>()(
                     const nodes = target === 'asis' ? state.asIsNodes : state.toBeNodes;
                     return {
                         [target === 'asis' ? 'asIsNodes' : 'toBeNodes']: nodes.map((node) =>
-                            node.id === id ? { ...node, ...updates } : node
+                            node.id === id ? normalizeFlowNode({ ...node, ...updates }) : node
                         ),
                     };
                 }),
@@ -267,12 +272,14 @@ export const useCollabStore = create<WithLiveblocks<CollabState, Presence>>()(
 
             // 로컬 스토어에서 데이터 일괄 동기화 (협업 세션 시작 시)
             syncFromLocalStore: (localData) => {
-                const normalizedAsIsEdges = normalizeEdgeHandlesInStore(localData.asIsNodes, localData.asIsEdges);
-                const normalizedToBeEdges = normalizeEdgeHandlesInStore(localData.toBeNodes, localData.toBeEdges);
+                const normAsIsNodes = localData.asIsNodes.map(normalizeFlowNode);
+                const normToBeNodes = localData.toBeNodes.map(normalizeFlowNode);
+                const normalizedAsIsEdges = normalizeEdgeHandlesInStore(normAsIsNodes, localData.asIsEdges);
+                const normalizedToBeEdges = normalizeEdgeHandlesInStore(normToBeNodes, localData.toBeEdges);
                 set({
-                    asIsNodes: localData.asIsNodes,
+                    asIsNodes: normAsIsNodes,
                     asIsEdges: normalizedAsIsEdges,
-                    toBeNodes: localData.toBeNodes,
+                    toBeNodes: normToBeNodes,
                     toBeEdges: normalizedToBeEdges,
                     context: localData.context,
                     strategy: localData.strategy,
