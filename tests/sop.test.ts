@@ -402,6 +402,16 @@ assert(requestBody.apiKey === 'test-api-key-12345', 'apiKey must be included in 
 assert(requestBody.model === 'gemini-3.6-flash', 'model must be included in request body');
 assert(requestBody.reasoning === 'high', "valid reasoning level 'high' must be passed through unchanged");
 
+const taskScopeActivities = [
+    { name: '채용 요청 검토', description: '요청과 직무 요건을 확정합니다.', skills: [{ name: '직무 요건 정의' }] },
+    { name: '후보자 소싱', description: '후보자 풀을 구축합니다.', skills: [{ name: '후보자 소싱' }] },
+];
+const taskScopeRequest = buildSopGenerationRequestBody({ ...baseRequestParams, activities: taskScopeActivities });
+assert(taskScopeRequest.activities?.length === 2, 'Task-scope request must preserve every selected Activity, not just one activity name');
+const taskScopePrompt = getSopPrompt({ taskName: '채용 운영', activities: taskScopeActivities });
+assert(taskScopePrompt.includes('Task 전체 (2개 주요 Activity)'), 'Task-scope prompt must explicitly identify the full Task scope');
+assert(taskScopePrompt.includes('채용 요청 검토') && taskScopePrompt.includes('후보자 소싱'), 'Task-scope prompt must include every selected Activity');
+
 // 6b. reasoning='default'는 그대로 'default'로 처리된다 (필드 자체는 항상 포함)
 const requestBodyDefault = buildSopGenerationRequestBody({ ...baseRequestParams, reasoning: 'default' });
 assert(requestBodyDefault.reasoning === 'default', "reasoning='default' must be handled correctly, not dropped or mangled");
@@ -572,9 +582,16 @@ const multiRowLayoutDoc = createSopDocumentFromGeneration({
     setupConfig: { sourceType: 'task', detailLevel: 'standard', minSteps: 2, maxSteps: 16, branchPolicy: 'auto', maxBranches: 3, allowRework: true },
 });
 assert(new Set(multiRowLayoutDoc.steps.map((step) => step.position.y)).size >= 3, 'Long generated SOPs must use multiple rows instead of one long line');
-const reworkEdge = multiRowLayoutDoc.edges.find((edge) => edge.branchType === 'no' || edge.branchType === 'condition');
-assert(!!reworkEdge && !!reworkEdge.sourceHandle?.endsWith('-rework') && !!reworkEdge.targetHandle?.includes('-rework-target'), 'Backward/rework connections must use offset ports separate from primary connections');
-console.log('  ✅ AI coordinates are replaced with a collision-free multi-row layout and offset rework connection ports.');
+const routedReworkEdges = buildSopEdges(multiRowLayoutDoc, null).filter((edge) => edge.type === 'sopRework');
+assert(routedReworkEdges.length >= 2, 'Loop-closing NO/condition branches must use dedicated rework routes');
+assert(
+    routedReworkEdges.every((edge) => {
+        const route = edge.data?.reworkRoute as { points?: Array<{ x: number; y: number }> } | undefined;
+        return edge.sourceHandle?.endsWith('-rework') && edge.targetHandle?.includes('-rework-target') && (route?.points?.length || 0) >= 4;
+    }),
+    'Rework routes must use dedicated ports and an explicit multi-segment outer lane'
+);
+console.log('  ✅ AI coordinates are replaced with a collision-free multi-row layout and rework loops use dedicated outer lanes.');
 
 // ---------------------------------------------------------
 // 9(구). SAMPLE_SOP_DOCUMENT 회귀: 새 decision 분기 검증 규칙 아래서도 여전히 완전히 유효하다.

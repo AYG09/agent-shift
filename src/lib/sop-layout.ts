@@ -5,13 +5,6 @@ type Point = { x: number; y: number };
 
 const isSecondaryBranch = (edge: SopEdge) => edge.branchType === 'no' || edge.branchType === 'condition';
 
-function getOffsetReworkHandles(source: Point, target: Point) {
-    const primary = getDirectionalHandles(source, target);
-    const sourceHandle = `${primary.sourceHandle}-rework`;
-    const targetHandle = primary.targetHandle.replace('-target', '-rework-target');
-    return { sourceHandle, targetHandle };
-}
-
 /**
  * Places newly generated SOPs in a compact, multi-row reading path.
  * AI supplies sequence and branch semantics; this deterministic pass owns the
@@ -87,15 +80,11 @@ export function layoutSopGraph(steps: SopStepData[], edges: SopEdge[]): { steps:
     }
 
     const laidOutSteps = steps.map((step) => ({ ...step, position: positionById.get(step.id) || step.position }));
-    const order = new Map(primary.map((id, index) => [id, index]));
     const laidOutEdges = edges.map((edge) => {
         const source = positionById.get(edge.source);
         const target = positionById.get(edge.target);
         if (!source || !target) return edge;
-        const isRework = isSecondaryBranch(edge) && (order.get(edge.target) ?? Infinity) <= (order.get(edge.source) ?? -1);
-        return isRework
-            ? { ...edge, ...getOffsetReworkHandles(source, target) }
-            : { ...edge, ...getDirectionalHandles(source, target) };
+        return { ...edge, ...getDirectionalHandles(source, target) };
     });
 
     return { steps: laidOutSteps, edges: laidOutEdges };

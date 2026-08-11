@@ -1,6 +1,7 @@
 import { Node, Edge, MarkerType } from '@xyflow/react';
 import { SopDisplayMode, SopDocument, SopStepData } from './sop-types';
 import { getDirectionalHandles } from './flow-layout';
+import { isSopReworkEdge, routeSopReworkEdge } from './sop-rework-routing';
 
 /** SopStepNode와 연결선 좌표 계산이 공유하는 실제 노드 크기. */
 export function getSopNodeSize(step: Pick<SopStepData, 'shape'>, displayMode: SopDisplayMode) {
@@ -68,6 +69,8 @@ export function buildSopEdges(
     if (!doc) return [];
     const stepById = new Map(doc.steps.map((step) => [step.id, step]));
     const outgoingOrder = new Map<string, number>();
+    const occupiedReworkSegments = new Set<string>();
+    let reworkLaneIndex = 0;
 
     return doc.edges.map((edge) => {
         const isSelected = edge.id === selectedEdgeId;
@@ -86,6 +89,7 @@ export function buildSopEdges(
             edge.label?.includes('재검토') ||
             edge.label?.includes('재협의');
 
+        const isLoopRework = isSopReworkEdge(edge, doc.edges);
         let strokeColor = isSelected ? '#4f46e5' : '#64748b';
         if (!isSelected) {
             if (isYes) strokeColor = '#10b981';
@@ -113,16 +117,22 @@ export function buildSopEdges(
         const preserveExplicitHandles = !isLegacyDefaultHandlePair(edge.sourceHandle, edge.targetHandle);
         const routeIndex = outgoingOrder.get(edge.source) || 0;
         outgoingOrder.set(edge.source, routeIndex + 1);
+        const reworkRoute = isLoopRework
+            ? routeSopReworkEdge(edge, doc.steps, doc.displayMode, reworkLaneIndex++, occupiedReworkSegments)
+            : null;
 
         return {
             id: edge.id,
             source: edge.source,
             target: edge.target,
-            sourceHandle: preserveExplicitHandles ? edge.sourceHandle : autoHandles.sourceHandle,
-            targetHandle: preserveExplicitHandles ? edge.targetHandle : autoHandles.targetHandle,
-            type: 'smoothstep',
+            sourceHandle: reworkRoute?.sourceHandle || (preserveExplicitHandles ? edge.sourceHandle : autoHandles.sourceHandle),
+            targetHandle: reworkRoute?.targetHandle || (preserveExplicitHandles ? edge.targetHandle : autoHandles.targetHandle),
+            type: reworkRoute ? 'sopRework' : 'smoothstep',
             pathOptions: { borderRadius: 16, offset: 24 + (routeIndex % 3) * 12 },
             zIndex: 0,
+            data: reworkRoute
+                ? { branchType: edge.branchType, label: showBranchLabels ? edge.label : undefined, reworkRoute }
+                : undefined,
             label: showBranchLabels ? edge.label : undefined,
             labelStyle: { fill: strokeColor, fontWeight: 700, fontSize: 11 },
             labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9, rx: 4, ry: 4 },

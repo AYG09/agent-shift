@@ -17,6 +17,7 @@ import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { buildSopNodes, buildSopEdges, syncSopCanvasNodes } from '@/lib/sop-canvas-utils';
 import { classifySopStepType } from '@/lib/graph-validation';
 import { SopStepNode } from './SopStepNode';
+import { SopReworkEdge } from './SopReworkEdge';
 
 interface SopCanvasProps {
     showMiniMap: boolean;
@@ -25,6 +26,10 @@ interface SopCanvasProps {
 
 const nodeTypes = {
     sopStep: SopStepNode,
+};
+
+const edgeTypes = {
+    sopRework: SopReworkEdge,
 };
 
 export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLabels }) => {
@@ -178,6 +183,7 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeDragStop={handleNodeDragStop}

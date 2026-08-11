@@ -718,6 +718,7 @@ export function getSopPrompt(params: {
     memberRole?: string;
     taskName?: string;
     activityName?: string;
+    activities?: Array<{ name: string; description?: string; skills?: { name: string; description?: string }[] }>;
     skills?: { name: string; description?: string }[];
     context?: string;
     detailLevel?: string;
@@ -731,6 +732,12 @@ export function getSopPrompt(params: {
     splitComplexSteps?: boolean;
 }) {
     const skillsList = (params.skills || []).map((s) => `- ${s.name}: ${s.description || ''}`).join('\n');
+    const activitiesList = (params.activities || [])
+        .map((activity, index) => {
+            const activitySkills = (activity.skills || []).map((skill) => skill.name).join(', ');
+            return `${index + 1}. ${activity.name}${activity.description ? ` — ${activity.description}` : ''}${activitySkills ? `\n   - 유관 SKILL: ${activitySkills}` : ''}`;
+        })
+        .join('\n');
     // 0처럼 유효한 값이 falsy라서 기본값으로 덮어써지지 않도록 `||`가 아니라 `??`를 쓴다
     // (예: maxLoops=0은 "재작업 루프를 허용하지 않음"이라는 유효한 사용자 설정이다).
     const minSteps = params.minSteps ?? 6;
@@ -760,7 +767,10 @@ export function getSopPrompt(params: {
 ## 입력 정보
 - 담당 직무: ${params.memberRole || '담당자'}
 - 대상 Task: ${params.taskName || '업무'}
-- 대상 Activity: ${params.activityName || '상세 업무'}
+- SOP 생성 범위: ${params.activities && params.activities.length > 1 ? `Task 전체 (${params.activities.length}개 주요 Activity)` : '특정 Activity'}
+- 대상 Activity: ${params.activityName || '해당 Task의 전체 Activity'}
+- 반영 Activity 목록:
+${activitiesList || `1. ${params.activityName || '상세 업무'}`}
 - Work Library SKILL 목록:
 ${skillsList || '없음'}
 - 업무 맥락:
@@ -939,6 +949,7 @@ export async function POST(request: NextRequest) {
                     memberRole: body.memberRole,
                     taskName: body.taskName,
                     activityName: body.activityName,
+                    activities: body.activities,
                     skills: body.skills,
                     context: body.context,
                     detailLevel: body.detailLevel,

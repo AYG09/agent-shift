@@ -14,6 +14,7 @@ import {
     BookOpen,
     RefreshCw,
     X,
+    KeyRound,
 } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { buildSopGenerationRequestBody } from '@/lib/sop-ai-request';
@@ -23,6 +24,8 @@ import { validateSopSetupConfig } from '@/lib/sop-setup-validation';
 import { REASONING_LEVEL_LABELS } from '@/lib/gemini-models';
 import { WorkLibrarySelector } from './WorkLibrarySelector';
 import { SopGenerationSettings } from './SopGenerationSettings';
+import ApiKeySettings from '@/components/settings/ApiKeySettings';
+import type { WorkLibrarySkill } from '@/lib/sop-types';
 
 const CONTEXT_TOPICS = [
     { label: '선행 조건', snippet: '\n[선행 조건]\n- 필수 제출 서류 및 사전에 완료되어야 하는 작업' },
@@ -53,6 +56,16 @@ export const SopSetupGate: React.FC = () => {
     const [aiError, setAiError] = useState<string | null>(null);
 
     const { apiKey, model, reasoning } = useSopAiSettings();
+    const selectedTask = workLibrary.taskCatalog?.find((task) => task.id === workLibrary.taskId);
+    const selectedActivity = selectedTask?.activities.find((activity) => activity.id === workLibrary.activityId);
+    const selectedActivities = workLibrary.sourceType === 'task'
+        ? selectedTask?.activities || []
+        : selectedActivity
+          ? [selectedActivity]
+          : [];
+    const activitiesForGeneration: Array<{ name: string; description?: string; skills: WorkLibrarySkill[] }> = selectedActivities.length > 0
+        ? selectedActivities.map((activity) => ({ name: activity.name, description: activity.description, skills: activity.skills }))
+        : [{ name: workLibrary.activityName || '주요 Activity', skills: workLibrary.skills }];
 
     // 워크플로우 구조 설정(4·5번 카드) 오류가 있으면 AI 생성 자체를 막는다 - 서버(app/api/ai/route.ts)도
     // 동일한 validateSopSetupConfig로 같은 조건을 다시 검사하므로, UI 검증만 신뢰하지 않는다.
@@ -105,7 +118,8 @@ export const SopSetupGate: React.FC = () => {
         const requestBody = buildSopGenerationRequestBody({
             memberRole: memberInfo.jobRole,
             taskName: workLibrary.taskName,
-            activityName: workLibrary.activityName,
+            activityName: workLibrary.sourceType === 'activity' ? selectedActivity?.name || workLibrary.activityName : undefined,
+            activities: activitiesForGeneration,
             skills: workLibrary.skills,
             context,
             detailLevel: setupConfig.detailLevel,
@@ -157,13 +171,29 @@ export const SopSetupGate: React.FC = () => {
                             <p className="text-xs text-zinc-500">고객사 검토 및 사용자 테스트용 독립 프로토타입</p>
                         </div>
                     </div>
-                    <button
-                        type="button"
-                        onClick={handleExplicitLoadSample}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-semibold rounded-xl border border-zinc-300 transition-colors shadow-2xs"
-                    >
-                        <BookOpen className="w-4 h-4 text-indigo-600" /> 샘플 SOP 데이터로 열기
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <ApiKeySettings
+                            trigger={
+                                <button
+                                    type="button"
+                                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl border transition-colors shadow-2xs ${
+                                        apiKey
+                                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                                            : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600'
+                                    }`}
+                                >
+                                    <KeyRound className="w-4 h-4" /> {apiKey ? 'API KEY 변경' : 'API KEY 등록'}
+                                </button>
+                            }
+                        />
+                        <button
+                            type="button"
+                            onClick={handleExplicitLoadSample}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-semibold rounded-xl border border-zinc-300 transition-colors shadow-2xs"
+                        >
+                            <BookOpen className="w-4 h-4 text-indigo-600" /> 샘플 SOP 데이터로 열기
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -199,6 +229,18 @@ export const SopSetupGate: React.FC = () => {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-amber-200/80">
+                            {!apiKey && (
+                                <ApiKeySettings
+                                    trigger={
+                                        <button
+                                            type="button"
+                                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs"
+                                        >
+                                            <KeyRound className="w-3.5 h-3.5" /> API KEY 등록
+                                        </button>
+                                    }
+                                />
+                            )}
                             <button
                                 type="button"
                                 onClick={handleGenerateAiSop}
@@ -423,9 +465,21 @@ export const SopSetupGate: React.FC = () => {
                                 <strong className="text-zinc-900 block mb-1">2. Work Library Selection:</strong>
                                 <p className="bg-zinc-50 p-2.5 rounded-lg">
                                     기준: {workLibrary.sourceType === 'task' ? 'Task 전체' : '특정 Activity'} | Task:{' '}
-                                    {workLibrary.taskName} | Activity: {workLibrary.activityName} | 상태:{' '}
+                                    {workLibrary.taskName} | {workLibrary.sourceType === 'task' ? `Activity ${activitiesForGeneration.length}개 전체` : `Activity: ${activitiesForGeneration[0].name}`} | 상태:{' '}
                                     {workLibrary.confirmed ? '확정됨' : '미확정'}
                                 </p>
+                            </div>
+
+                            <div>
+                                <strong className="text-zinc-900 block mb-1">반영 Activity ({activitiesForGeneration.length}개):</strong>
+                                <ul className="bg-zinc-50 p-2.5 rounded-lg space-y-1">
+                                    {activitiesForGeneration.map((activity, index) => (
+                                        <li key={`${activity.name}-${index}`}>
+                                            {index + 1}. <strong>{activity.name}</strong>
+                                            {activity.description ? `: ${activity.description}` : ''} <span className="text-zinc-500">· SKILL {activity.skills.length}개</span>
+                                        </li>
+                                    ))}
+                                </ul>
                             </div>
 
                             <div>

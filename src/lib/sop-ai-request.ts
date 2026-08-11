@@ -11,6 +11,11 @@ export interface SopGenerationRequestBodyParams {
     memberRole: string;
     taskName: string;
     activityName?: string;
+    activities?: Array<{
+        name: string;
+        description?: string;
+        skills: Array<{ id?: string; name: string; description?: string }>;
+    }>;
     skills: Array<{ id?: string; name: string; description?: string }>;
     context: string;
     detailLevel: string;
@@ -33,6 +38,7 @@ export function buildSopGenerationRequestBody(params: SopGenerationRequestBodyPa
         memberRole: params.memberRole,
         taskName: params.taskName,
         activityName: params.activityName,
+        activities: params.activities,
         skills: params.skills,
         context: params.context,
         detailLevel: params.detailLevel,
