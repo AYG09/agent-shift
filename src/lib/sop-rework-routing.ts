@@ -55,16 +55,23 @@ function stepBounds(step: SopStepData, displayMode: 'compact' | 'standard' | 'de
 }
 
 function getPort(bounds: Bounds, side: Side, target: boolean) {
-    const centerX = (bounds.left + bounds.right) / 2;
-    const centerY = (bounds.top + bounds.bottom) / 2;
+    const width = bounds.right - bounds.left;
+    const height = bounds.bottom - bounds.top;
+    // SopStepNode deliberately offsets its hidden rework handles (35% / 65%)
+    // from the visible, primary-flow handles. The custom SVG route must use
+    // those exact coordinates; routing from the geometric centre creates a
+    // small diagonal segment at the node boundary and makes a clean route look
+    // as if it attaches to the wrong point.
+    const horizontalRatio = target ? (side === 'top' ? 0.35 : 0.65) : side === 'top' ? 0.65 : 0.35;
+    const verticalRatio = target ? (side === 'left' ? 0.35 : 0.65) : side === 'left' ? 0.65 : 0.35;
     const point =
         side === 'top'
-            ? { x: centerX, y: bounds.top }
+            ? { x: bounds.left + width * horizontalRatio, y: bounds.top }
             : side === 'right'
-              ? { x: bounds.right, y: centerY }
+              ? { x: bounds.right, y: bounds.top + height * verticalRatio }
               : side === 'bottom'
-                ? { x: centerX, y: bounds.bottom }
-                : { x: bounds.left, y: centerY };
+                ? { x: bounds.left + width * horizontalRatio, y: bounds.bottom }
+                : { x: bounds.left, y: bounds.top + height * verticalRatio };
     const exit =
         side === 'top'
             ? { x: point.x, y: point.y - CLEARANCE }
@@ -78,6 +85,39 @@ function getPort(bounds: Bounds, side: Side, target: boolean) {
         exit,
         handle: target ? `${side}-rework-target` : `${side}-rework`,
     };
+}
+
+function routeLength(points: SopRoutePoint[]) {
+    return points.slice(1).reduce(
+        (sum, point, index) => sum + Math.abs(point.x - points[index].x) + Math.abs(point.y - points[index].y),
+        0
+    );
+}
+
+function routeIsClear(points: SopRoutePoint[], obstacles: Bounds[], occupiedSegments: Set<string>) {
+    // The first and final mini-segments intentionally leave / enter their own
+    // node. All other segments must stay clear of every expanded node.
+    for (let index = 1; index < points.length - 2; index += 1) {
+        if (!isSegmentClear(points[index], points[index + 1], obstacles)) return false;
+        if (occupiedSegments.has(segmentKey(points[index], points[index + 1]))) return false;
+    }
+    return true;
+}
+
+function toRoute(
+    source: Bounds,
+    target: Bounds,
+    sourceSide: Side,
+    targetSide: Side,
+    waypoints: SopRoutePoint[],
+    obstacles: Bounds[],
+    occupiedSegments: Set<string>
+): SopReworkRoute | null {
+    const sourcePort = getPort(source, sourceSide, false);
+    const targetPort = getPort(target, targetSide, true);
+    const points = simplify([sourcePort.point, sourcePort.exit, ...waypoints, targetPort.exit, targetPort.point]);
+    if (!routeIsClear(points, obstacles, occupiedSegments)) return null;
+    return { points, sourceHandle: sourcePort.handle, targetHandle: targetPort.handle };
 }
 
 function expand(bounds: Bounds, amount: number): Bounds {
@@ -211,57 +251,142 @@ export function routeSopReworkEdge(
     const obstacles = routeNodes.map((node) => expand(node.bounds, 16));
     const minX = Math.min(...routeNodes.map((node) => node.bounds.left));
     const maxX = Math.max(...routeNodes.map((node) => node.bounds.right));
+    const minY = Math.min(...routeNodes.map((node) => node.bounds.top));
     const maxY = Math.max(...routeNodes.map((node) => node.bounds.bottom));
-    const laneY = maxY + OUTER_GUTTER + laneIndex * REWORK_LANE_GAP;
-    const railXs = [minX - OUTER_GUTTER - laneIndex * 24, maxX + OUTER_GUTTER + laneIndex * 24];
-
-    let bestRoute: SopReworkRoute | null = null;
-    let bestLength = Infinity;
     const sourceCenterX = (source.bounds.left + source.bounds.right) / 2;
     const targetCenterX = (target.bounds.left + target.bounds.right) / 2;
-    const sidePairs: Array<[Side, Side]> =
-        sourceCenterX >= targetCenterX
-            ? [
-                  ['right', 'left'],
-                  ['bottom', 'bottom'],
-              ]
-            : [
-                  ['left', 'right'],
-                  ['bottom', 'bottom'],
-              ];
+    const sourceCenterY = (source.bounds.top + source.bounds.bottom) / 2;
+    const targetCenterY = (target.bounds.top + target.bounds.bottom) / 2;
+    const localOffset = (laneIndex % 2) * 24;
 
+    // The previous implementation gave every loop a full-canvas outer rail.
+    // That makes three independent rework decisions look like one tangled
+    // perimeter. Prefer the nearest free reading channel first: above a
+    // rightward return, below a leftward return, and between adjacent rows for
+    // diagonal returns. Only the upper-right-to-upper-left return needs a
+    // single clear exterior rail to stay out of the primary reading path.
+    let preferred: SopReworkRoute | null = null;
+    if (sourceCenterY > targetCenterY + 40 && sourceCenterX > targetCenterX + 40) {
+        const sourcePort = getPort(source.bounds, 'right', false);
+        const targetPort = getPort(target.bounds, 'top', true);
+        const railX = maxX + OUTER_GUTTER + laneIndex * REWORK_LANE_GAP;
+        const railY = minY - OUTER_GUTTER - laneIndex * REWORK_LANE_GAP;
+        preferred = toRoute(
+            source.bounds,
+            target.bounds,
+            'right',
+            'top',
+            [
+                { x: railX, y: sourcePort.exit.y },
+                { x: railX, y: railY },
+                { x: targetPort.exit.x, y: railY },
+            ],
+            obstacles,
+            occupiedSegments
+        );
+    } else if (sourceCenterY > targetCenterY + 40 && sourceCenterX < targetCenterX - 40) {
+        const sourcePort = getPort(source.bounds, 'top', false);
+        const targetPort = getPort(target.bounds, 'bottom', true);
+        const channelY = (sourcePort.exit.y + targetPort.exit.y) / 2 - localOffset;
+        preferred = toRoute(
+            source.bounds,
+            target.bounds,
+            'top',
+            'bottom',
+            [
+                { x: sourcePort.exit.x, y: channelY },
+                { x: targetPort.exit.x, y: channelY },
+            ],
+            obstacles,
+            occupiedSegments
+        );
+    } else if (Math.abs(sourceCenterY - targetCenterY) <= 40 && sourceCenterX < targetCenterX) {
+        const sourcePort = getPort(source.bounds, 'top', false);
+        const targetPort = getPort(target.bounds, 'top', true);
+        const channelY = Math.min(source.bounds.top, target.bounds.top) - CLEARANCE - 20 - localOffset;
+        preferred = toRoute(
+            source.bounds,
+            target.bounds,
+            'top',
+            'top',
+            [
+                { x: sourcePort.exit.x, y: channelY },
+                { x: targetPort.exit.x, y: channelY },
+            ],
+            obstacles,
+            occupiedSegments
+        );
+    } else if (Math.abs(sourceCenterY - targetCenterY) <= 40 && sourceCenterX > targetCenterX) {
+        const sourcePort = getPort(source.bounds, 'bottom', false);
+        const targetPort = getPort(target.bounds, 'bottom', true);
+        const channelY = Math.max(source.bounds.bottom, target.bounds.bottom) + CLEARANCE + 20 + localOffset;
+        preferred = toRoute(
+            source.bounds,
+            target.bounds,
+            'bottom',
+            'bottom',
+            [
+                { x: sourcePort.exit.x, y: channelY },
+                { x: targetPort.exit.x, y: channelY },
+            ],
+            obstacles,
+            occupiedSegments
+        );
+    }
+
+    if (preferred) {
+        preferred.points.slice(1).forEach((point, index) => occupiedSegments.add(segmentKey(preferred!.points[index], point)));
+        return preferred;
+    }
+
+    // Non-serpentine or manually arranged graphs use a shortest clear path as
+    // a fallback. It considers local corridors before the far canvas boundary.
+    const sidePairs: Array<[Side, Side]> = [
+        ['top', 'top'], ['top', 'bottom'], ['top', 'left'], ['top', 'right'],
+        ['bottom', 'top'], ['bottom', 'bottom'], ['bottom', 'left'], ['bottom', 'right'],
+        ['left', 'top'], ['left', 'bottom'], ['left', 'left'], ['left', 'right'],
+        ['right', 'top'], ['right', 'bottom'], ['right', 'left'], ['right', 'right'],
+    ];
+    let bestRoute: SopReworkRoute | null = null;
+    let bestLength = Infinity;
     for (const [sourceSide, targetSide] of sidePairs) {
-            const sourcePort = getPort(source.bounds, sourceSide, false);
-            const targetPort = getPort(target.bounds, targetSide, true);
-            for (const [sourceRailX, targetRailX] of [
-                [railXs[0], railXs[1]],
-                [railXs[1], railXs[0]],
-            ]) {
-                const sourceAnchor = { x: sourceRailX, y: laneY };
-                const targetAnchor = { x: targetRailX, y: laneY };
-                const gridX = [...new Set([...routeNodes.flatMap((node) => [node.bounds.left - 16, node.bounds.right + 16]), sourcePort.exit.x, targetPort.exit.x, sourceAnchor.x, targetAnchor.x, minX - OUTER_GUTTER, maxX + OUTER_GUTTER])].sort((a, b) => a - b);
-                const gridY = [...new Set([...routeNodes.flatMap((node) => [node.bounds.top - 16, node.bounds.bottom + 16]), sourcePort.exit.y, targetPort.exit.y, sourceAnchor.y, maxY + OUTER_GUTTER])].sort((a, b) => a - b);
-                const first = findOrthogonalPath(sourcePort.exit, sourceAnchor, gridX, gridY, obstacles, occupiedSegments);
-                // The return leg must leave the lane vertically. Otherwise a
-                // shortest-path solver can travel back along the same rail and
-                // collapse the visible rework lane into a tiny U-turn.
-                const second = findOrthogonalPath(
-                    targetAnchor,
-                    targetPort.exit,
-                    gridX,
-                    gridY,
-                    obstacles,
-                    occupiedSegments,
-                    true
-                );
-                if (!first || !second) continue;
-                const points = simplify([sourcePort.point, ...first, targetAnchor, ...second.slice(1), targetPort.point]);
-                const length = points.slice(1).reduce((sum, point, index) => sum + Math.abs(point.x - points[index].x) + Math.abs(point.y - points[index].y), 0);
-                if (length < bestLength) {
-                    bestLength = length;
-                    bestRoute = { points, sourceHandle: sourcePort.handle, targetHandle: targetPort.handle };
-                }
-            }
+        const sourcePort = getPort(source.bounds, sourceSide, false);
+        const targetPort = getPort(target.bounds, targetSide, true);
+        const gridX = [
+            ...new Set([
+                ...routeNodes.flatMap((node) => [node.bounds.left - 16, node.bounds.right + 16]),
+                sourcePort.exit.x,
+                targetPort.exit.x,
+                minX - OUTER_GUTTER,
+                maxX + OUTER_GUTTER,
+            ]),
+        ].sort((a, b) => a - b);
+        const gridY = [
+            ...new Set([
+                ...routeNodes.flatMap((node) => [node.bounds.top - 16, node.bounds.bottom + 16]),
+                sourcePort.exit.y,
+                targetPort.exit.y,
+                minY - OUTER_GUTTER,
+                maxY + OUTER_GUTTER,
+            ]),
+        ].sort((a, b) => a - b);
+        const path = findOrthogonalPath(sourcePort.exit, targetPort.exit, gridX, gridY, obstacles, occupiedSegments);
+        if (!path) continue;
+        const candidate = toRoute(
+            source.bounds,
+            target.bounds,
+            sourceSide,
+            targetSide,
+            path.slice(1, -1),
+            obstacles,
+            occupiedSegments
+        );
+        if (!candidate) continue;
+        const length = routeLength(candidate.points);
+        if (length < bestLength) {
+            bestRoute = candidate;
+            bestLength = length;
+        }
     }
 
     if (bestRoute) {

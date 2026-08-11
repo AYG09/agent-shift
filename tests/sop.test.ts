@@ -589,7 +589,32 @@ assert(
         const route = edge.data?.reworkRoute as { points?: Array<{ x: number; y: number }> } | undefined;
         return edge.sourceHandle?.endsWith('-rework') && edge.targetHandle?.includes('-rework-target') && (route?.points?.length || 0) >= 4;
     }),
-    'Rework routes must use dedicated ports and an explicit multi-segment outer lane'
+    'Rework routes must use dedicated ports and an explicit multi-segment route'
+);
+const sampleRoutesById = new Map(
+    routedReworkEdges.map((edge) => [
+        edge.id,
+        (edge.data?.reworkRoute as { points: Array<{ x: number; y: number }> }).points,
+    ])
+);
+const sampleStepById = new Map(multiRowLayoutDoc.steps.map((step) => [step.id, step]));
+const routeMaxY = (id: string) => Math.max(...sampleRoutesById.get(id)!.map((point) => point.y));
+const routeMinY = (id: string) => Math.min(...sampleRoutesById.get(id)!.map((point) => point.y));
+const routeMaxX = (id: string) => Math.max(...sampleRoutesById.get(id)!.map((point) => point.x));
+assert(
+    routeMinY('e5-3-rework') < Math.min(sampleStepById.get('step-5')!.position.y, sampleStepById.get('step-3')!.position.y) &&
+        routeMaxX('e5-3-rework') > sampleStepById.get('step-5')!.position.x + 190,
+    'A return from the right side of an upper row must use one clean top/right rail, not cross the primary flow'
+);
+assert(
+    routeMinY('e8-6-rework') < sampleStepById.get('step-8')!.position.y &&
+        routeMinY('e8-6-rework') > sampleStepById.get('step-3')!.position.y + 74,
+    'A same-row return to the right must use the nearby inter-row channel, not the canvas perimeter'
+);
+assert(
+    routeMaxY('e10-9-loop') <= sampleStepById.get('step-10')!.position.y + 74 + 72 &&
+        routeMaxY('e10-6-fallback') < sampleStepById.get('step-10')!.position.y + 74,
+    'Lower-row rework paths must stay in their local lower or inter-row channels instead of stacking on one outer lane'
 );
 const manualReworkId = routedReworkEdges[0].id;
 const manuallyRoutedDoc = {
