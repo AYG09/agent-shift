@@ -5,12 +5,10 @@ import {
     LayoutDashboard,
     ListOrdered,
     Sparkles,
-    Sliders,
     CheckSquare,
     Search,
 } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
-import { SopDisplayMode } from '@/lib/sop-types';
 
 interface SopSidebarProps {
     showMiniMap: boolean;
@@ -31,8 +29,6 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
         document,
         selectedStepId,
         selectStep,
-        displayMode,
-        setDisplayMode,
     } = useSopPrototypeStore();
 
     const [activeTab, setActiveTab] = useState<TabType>('steps');
@@ -87,7 +83,7 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                     { id: 'overview' as const, icon: LayoutDashboard, title: '개요' },
                     { id: 'steps' as const, icon: ListOrdered, title: '단계' },
                     { id: 'skills' as const, icon: Sparkles, title: 'SKILL' },
-                    { id: 'display' as const, icon: Sliders, title: '표시' },
+                    { id: 'display' as const, icon: LayoutDashboard, title: '보기' },
                     { id: 'review' as const, icon: CheckSquare, title: '검토' },
                 ].map((tab) => {
                     const Icon = tab.icon;
@@ -269,30 +265,6 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                 {/* 4. 표시 설정 */}
                 {activeTab === 'display' && (
                     <div className="space-y-4">
-                        <div>
-                            <label className="block font-semibold text-zinc-900 mb-2">표시 밀도 모드</label>
-                            <div className="space-y-1.5">
-                                {[
-                                    { id: 'compact' as SopDisplayMode, label: '단계명 중심 (Compact)' },
-                                    { id: 'standard' as SopDisplayMode, label: '단계명 + 개요 (Standard)' },
-                                    { id: 'detailed' as SopDisplayMode, label: '단계명 + 개요 + SKILL (Detailed)' },
-                                ].map((mode) => (
-                                    <button
-                                        key={mode.id}
-                                        type="button"
-                                        onClick={() => setDisplayMode(mode.id)}
-                                        className={`w-full p-2.5 rounded-xl border text-left font-medium transition-all ${
-                                            displayMode === mode.id
-                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                                                : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
-                                        }`}
-                                    >
-                                        {mode.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
                         <div className="pt-3 border-t border-zinc-200 space-y-2">
                             <label className="flex items-center justify-between text-xs font-semibold text-zinc-800">
                                 <span>미니맵 렌더링</span>

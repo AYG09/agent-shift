@@ -4,14 +4,14 @@ import React, { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { FlowShapeRenderer } from '@/components/flow/FlowShapeRenderer';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
-import { SopStepData, SopDisplayMode } from '@/lib/sop-types';
+import { SopStepData } from '@/lib/sop-types';
 import { getSopNodeSize } from '@/lib/sop-canvas-utils';
 import { CheckCircle2, Clock } from 'lucide-react';
 
 export const SopStepNode = memo(({ data, selected }: NodeProps) => {
     const step = data.step as SopStepData;
     const stepNumber = (data.index as number) || 1;
-    const displayMode = (data.displayMode as SopDisplayMode) || 'standard';
+    const displayMode = 'compact';
 
     const { selectStep } = useSopPrototypeStore();
     const [isHovered, setIsHovered] = useState(false);
@@ -63,12 +63,20 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
             <Handle type="target" position={Position.Left} id="left-target" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
             <Handle type="target" position={Position.Right} id="right-target" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
             <Handle type="target" position={Position.Bottom} id="bottom-target" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
+            <Handle type="target" position={Position.Top} id="top-rework-target" className="!opacity-0" style={{ left: '35%' }} />
+            <Handle type="target" position={Position.Left} id="left-rework-target" className="!opacity-0" style={{ top: '35%' }} />
+            <Handle type="target" position={Position.Right} id="right-rework-target" className="!opacity-0" style={{ top: '65%' }} />
+            <Handle type="target" position={Position.Bottom} id="bottom-rework-target" className="!opacity-0" style={{ left: '65%' }} />
 
             {/* Standardized React Flow Source Handles (Item 5) */}
             <Handle type="source" position={Position.Top} id="top" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
             <Handle type="source" position={Position.Left} id="left" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
             <Handle type="source" position={Position.Right} id="right" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
             <Handle type="source" position={Position.Bottom} id="bottom" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
+            <Handle type="source" position={Position.Top} id="top-rework" className="!opacity-0" style={{ left: '65%' }} />
+            <Handle type="source" position={Position.Left} id="left-rework" className="!opacity-0" style={{ top: '65%' }} />
+            <Handle type="source" position={Position.Right} id="right-rework" className="!opacity-0" style={{ top: '35%' }} />
+            <Handle type="source" position={Position.Bottom} id="bottom-rework" className="!opacity-0" style={{ left: '35%' }} />
 
             {/* SVG Flow Shape Background */}
             <FlowShapeRenderer
@@ -93,50 +101,6 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
                     {isConfirmed && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
                 </div>
 
-                {/* Standard Mode: Title + Definition */}
-                {displayMode === 'standard' && (
-                    <>
-                        <p className="text-[11px] text-zinc-600 mt-1 line-clamp-2 leading-tight px-1 font-normal">
-                            {step.definition}
-                        </p>
-                        {step.requiredSkills.length > 0 && (
-                            <div className="mt-1.5 inline-flex items-center gap-1 text-[9px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-200/60">
-                                SKILL {step.requiredSkills.length}
-                            </div>
-                        )}
-                    </>
-                )}
-
-                {/* Detailed Mode: Title + Definition + Skill Chips */}
-                {displayMode === 'detailed' && (
-                    <>
-                        <p className="text-[10px] text-zinc-600 mt-1 line-clamp-2 leading-tight px-1 font-normal">
-                            {step.definition}
-                        </p>
-                        {step.requiredSkills.length > 0 && (
-                            <div className="mt-1.5 flex flex-wrap gap-1 justify-center max-w-full">
-                                {step.requiredSkills.slice(0, 2).map((sk, idx) => (
-                                    <span
-                                        key={idx}
-                                        className={`text-[9px] font-medium px-1.5 py-0.2 rounded-md border truncate max-w-[90px] ${
-                                            sk.source === 'ai-suggested'
-                                                ? 'bg-amber-50 text-amber-800 border-amber-300'
-                                                : 'bg-indigo-50 text-indigo-800 border-indigo-200'
-                                        }`}
-                                    >
-                                        {sk.source === 'ai-suggested' && !sk.accepted ? '★ ' : ''}
-                                        {sk.name}
-                                    </span>
-                                ))}
-                                {step.requiredSkills.length > 2 && (
-                                    <span className="text-[9px] font-semibold text-zinc-500 bg-zinc-100 px-1 py-0.2 rounded-md">
-                                        +{step.requiredSkills.length - 2}
-                                    </span>
-                                )}
-                            </div>
-                        )}
-                    </>
-                )}
             </div>
 
             {/* Hover Tooltip Preview */}

@@ -7,12 +7,12 @@ import {
     SopMember,
     WorkLibrarySelection,
     SopSetupConfig,
-    SopDisplayMode,
     SopReviewStatus,
     SopRequiredSkill,
 } from './sop-types';
 import { SAMPLE_SOP_DOCUMENT, SAMPLE_SOP_MEMBER, SAMPLE_WORK_LIBRARY } from './sop-sample-data';
 import { validateSopGraph } from './graph-validation';
+import { layoutSopGraph } from './sop-layout';
 
 const customStorage = {
     getItem: (name: string) => {
@@ -32,6 +32,38 @@ const customStorage = {
         }
     },
 };
+
+function withWorkLibraryCatalog(library: unknown): WorkLibrarySelection | undefined {
+    if (!library || typeof library !== 'object') return undefined;
+    const current = library as Partial<WorkLibrarySelection>;
+    if (current.taskCatalog?.length) return current as WorkLibrarySelection;
+
+    const sampleTask = SAMPLE_WORK_LIBRARY.taskCatalog[0];
+    const currentSkills = Array.isArray(current.skills) && current.skills.length ? current.skills : sampleTask.activities[0].skills;
+    const firstActivity = {
+        ...sampleTask.activities[0],
+        id: current.activityId || sampleTask.activities[0].id,
+        name: current.activityName || sampleTask.activities[0].name,
+        skills: currentSkills,
+    };
+
+    return {
+        ...SAMPLE_WORK_LIBRARY,
+        ...current,
+        taskId: current.taskId || sampleTask.id,
+        taskName: current.taskName || sampleTask.name,
+        activityId: firstActivity.id,
+        activityName: firstActivity.name,
+        taskCatalog: [
+            {
+                ...sampleTask,
+                id: current.taskId || sampleTask.id,
+                name: current.taskName || sampleTask.name,
+                activities: [firstActivity, ...sampleTask.activities.slice(1)],
+            },
+        ],
+    };
+}
 
 const MEANINGFUL_STEP_FIELDS: (keyof SopStepData)[] = [
     'title',
@@ -62,11 +94,10 @@ interface SopPrototypeState {
     context: string;
     setupConfig: SopSetupConfig;
 
-    // Workspace Active Document & Display Mode
+    // Workspace Active Document
     document: SopDocument | null;
     selectedStepId: string | null;
     selectedEdgeId: string | null;
-    displayMode: SopDisplayMode;
     customerReviewMode: boolean;
     lastSavedTimestamp: string | null;
 
@@ -87,7 +118,6 @@ interface SopPrototypeState {
     // Actions - Workspace Navigation & Selection
     selectStep: (stepId: string | null) => void;
     selectEdge: (edgeId: string | null) => void;
-    setDisplayMode: (mode: SopDisplayMode) => void;
     setCustomerReviewMode: (enabled: boolean) => void;
     toggleCustomerReviewMode: () => void;
 
@@ -159,7 +189,6 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 document: null,
                 selectedStepId: null,
                 selectedEdgeId: null,
-                displayMode: 'standard',
                 customerReviewMode: false,
                 lastSavedTimestamp: null,
 
@@ -178,6 +207,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                         } else if (
                             partial.taskName !== undefined ||
                             partial.activityName !== undefined ||
+                            partial.taskCatalog !== undefined ||
                             partial.skills !== undefined ||
                             partial.sourceType !== undefined
                         ) {
@@ -200,15 +230,17 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 generateFromSample: () => {
                     const state = get();
                     const now = new Date().toISOString();
+                    const layout = layoutSopGraph(SAMPLE_SOP_DOCUMENT.steps, SAMPLE_SOP_DOCUMENT.edges);
                     const doc: SopDocument = {
                         ...SAMPLE_SOP_DOCUMENT,
                         id: `sop-sample-${Date.now()}`,
                         member: { ...state.memberInfo },
                         workLibrary: { ...state.workLibrary, confirmed: true },
                         context: state.context || SAMPLE_SOP_DOCUMENT.context,
-                        displayMode: state.displayMode,
+                        displayMode: 'compact',
                         reviewStatus: 'ai-draft',
-                        steps: SAMPLE_SOP_DOCUMENT.steps.map((s) => ({ ...s, reviewStatus: 'ai-draft' as const })),
+                        steps: layout.steps.map((s) => ({ ...s, reviewStatus: 'ai-draft' as const })),
+                        edges: layout.edges,
                         createdAt: now,
                         updatedAt: now,
                         isSampleData: true,
@@ -239,15 +271,6 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 // Mode and Selection
                 selectStep: (stepId) => set({ selectedStepId: stepId, selectedEdgeId: null }),
                 selectEdge: (edgeId) => set({ selectedEdgeId: edgeId, selectedStepId: null }),
-
-                setDisplayMode: (mode) => {
-                    set({ displayMode: mode });
-                    const doc = get().document;
-                    if (doc) {
-                        // Display mode change does NOT invalidate review/confirmation status
-                        set({ document: { ...doc, displayMode: mode } });
-                    }
-                },
 
                 setCustomerReviewMode: (enabled) => set({ customerReviewMode: enabled }),
                 toggleCustomerReviewMode: () =>
@@ -709,7 +732,6 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                         document: null,
                         selectedStepId: null,
                         selectedEdgeId: null,
-                        displayMode: 'standard',
                         customerReviewMode: false,
                         lastSavedTimestamp: null,
                         history: [],
@@ -719,13 +741,18 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
         },
         {
             name: 'sop-prototype-storage',
-            version: 1,
+            version: 2,
             migrate: (persistedState: unknown) => {
                 if (!persistedState || typeof persistedState !== 'object') return persistedState;
                 const state = persistedState as Record<string, unknown>;
+                const workLibrary = withWorkLibraryCatalog(state.workLibrary);
+                const document = state.document && typeof state.document === 'object'
+                    ? { ...(state.document as SopDocument), workLibrary: withWorkLibraryCatalog((state.document as SopDocument).workLibrary) || SAMPLE_WORK_LIBRARY }
+                    : state.document;
                 return {
                     ...state,
-                    displayMode: state.displayMode || 'standard',
+                    workLibrary: workLibrary || SAMPLE_WORK_LIBRARY,
+                    document,
                     customerReviewMode: state.customerReviewMode || false,
                 };
             },
@@ -736,7 +763,6 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 context: state.context,
                 setupConfig: state.setupConfig,
                 document: state.document,
-                displayMode: state.displayMode,
                 customerReviewMode: state.customerReviewMode,
                 lastSavedTimestamp: state.lastSavedTimestamp,
             }),

@@ -22,14 +22,13 @@ import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { SopSidebar } from './SopSidebar';
 import { SopCanvas } from './SopCanvas';
 import { SopStepInspector } from './SopStepInspector';
-import { SopDisplayMode, SopStepData } from '@/lib/sop-types';
+import { SopStepData } from '@/lib/sop-types';
 
 export const SopWorkspace: React.FC = () => {
     const router = useRouter();
     const {
         document,
         generateFromSample,
-        setDisplayMode,
         customerReviewMode,
         toggleCustomerReviewMode,
         confirmFullSop,
@@ -54,7 +53,7 @@ export const SopWorkspace: React.FC = () => {
 
     // Auto-load sample SOP if document is missing on direct /sop/workspace URL access
     useEffect(() => {
-        if (!document) {
+        if (!document || (document.isSampleData && document.displayMode !== 'compact')) {
             generateFromSample();
         }
     }, [document, generateFromSample]);
@@ -169,33 +168,8 @@ export const SopWorkspace: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Center Section: Customer Review Mode & 3-density Comparison Switcher */}
+                {/* Center Section: Customer Review Mode */}
                 <div className="hidden lg:flex items-center gap-3">
-                    {/* Display Level Quick Comparison Switcher */}
-                    <div className="inline-flex p-1 bg-zinc-100 border border-zinc-200 rounded-xl">
-                        <span className="text-[11px] font-semibold text-zinc-500 px-2 py-1 flex items-center">
-                            표시 수준:
-                        </span>
-                        {[
-                            { id: 'compact' as SopDisplayMode, label: '단계명 중심' },
-                            { id: 'standard' as SopDisplayMode, label: '단계명 + 개요' },
-                            { id: 'detailed' as SopDisplayMode, label: '단계명 + 개요 + SKILL' },
-                        ].map((mode) => (
-                            <button
-                                key={mode.id}
-                                type="button"
-                                onClick={() => setDisplayMode(mode.id)}
-                                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                                    document.displayMode === mode.id
-                                        ? 'bg-white text-indigo-700 shadow-2xs'
-                                        : 'text-zinc-600 hover:text-zinc-900'
-                                }`}
-                            >
-                                {mode.label}
-                            </button>
-                        ))}
-                    </div>
-
                     {/* Customer Review Mode Toggle */}
                     <button
                         type="button"

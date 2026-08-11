@@ -742,6 +742,12 @@ export function getSopPrompt(params: {
     const maxLoops = params.maxLoops ?? 3;
     const splitComplexSteps = params.splitComplexSteps !== false;
 
+    const detailLevelGuide: Record<string, string> = {
+        simple: '핵심 흐름: Task의 핵심 Activity와 주요 승인 지점만 묶어 큰 단계 중심으로 작성하세요. 세부 실행을 불필요하게 분할하지 마세요.',
+        standard: '업무 단계: 주요 Activity를 독립적인 업무 단계로 나누고, 실제로 필요한 판단·분기·재작업 지점을 포함하세요.',
+        detailed: '실행 단위: 입력·산출물, 승인 기준, 예외·재작업 조건이 달라지는 지점까지 세분화하세요. 각 단계가 Agent화 가능성을 검토할 수 있는 하나의 실행 단위가 되도록 작성하세요.',
+    };
+
     const branchPolicyGuide: Record<string, string> = {
         none: `- 분기 정책: none - decision(판단) 노드를 절대 생성하지 마세요. 모든 단계는 순차적으로 연결되어야 합니다.`,
         max: `- 분기 정책: max - decision(판단) 노드를 최대 ${maxBranches}개까지만 생성하세요. 그 이상은 허용되지 않습니다.`,
@@ -761,7 +767,7 @@ ${skillsList || '없음'}
 ${params.context || '없음'}
 
 ## 설정 조건
-- 상세 수준: ${params.detailLevel || 'standard'}
+- 업무 분해 수준: ${params.detailLevel || 'standard'} — ${detailLevelGuide[params.detailLevel || 'standard'] || detailLevelGuide.standard}
 - 주요 단계 수 범위: ${minSteps} ~ ${maxSteps}단계 (시작·종료 노드는 제외한 개수입니다)
 - 전체 노드 수 상한: ${maxTotalNodes}개 (시작·종료·decision·loopLimit을 모두 포함한 개수입니다)
 ${branchPolicyGuide[branchPolicy] || branchPolicyGuide.auto}
@@ -769,6 +775,10 @@ ${branchPolicyGuide[branchPolicy] || branchPolicyGuide.auto}
 - 복합 단계 자동 분리: ${splitComplexSteps ? '허용 - 하나의 레이블에 여러 의미가 섞인 단계는 의미 단위로 나누어 각각의 단계로 작성하세요.' : '금지 - 하나의 레이블에 여러 의미가 섞여 있어도 강제로 쪼개지 말고 하나의 단계로 유지하세요.'}
 
 ## 작성 필수 원칙
+0. **워크플로우 가독성 원칙**:
+   - AI는 업무의 선후 관계와 분기 의미를 정확히 작성하고, 캔버스 좌표는 최종 결과로 간주하지 마세요. 플랫폼이 주 흐름을 여러 행으로 재배치하고 연결선을 최단 방향으로 연결합니다.
+   - 기본 진행은 하나의 명확한 주 흐름으로 연결하고, 재검토·반려·재협의는 반드시 branchType을 no 또는 condition으로 표시하세요. 그러면 주 흐름 밖으로 우회해 표시됩니다.
+   - 불필요한 교차 연결, 의미 없는 병렬 분기, 동일 노드 사이의 중복 edge를 만들지 마세요.
 1. **단계 정의(definition) 작성 원칙**:
    - 절대로 단계명(title)을 단순 반복하는 문장을 쓰지 마세요.
    - 다음 3가지 요소를 명확히 포함한 1~2문장의 완결된 정의를 작성하세요:

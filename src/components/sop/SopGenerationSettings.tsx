@@ -1,13 +1,12 @@
 'use client';
 
 import React from 'react';
-import { Settings2, ChevronDown, ChevronUp, Sliders, LayoutGrid } from 'lucide-react';
+import { Settings2, ChevronDown, ChevronUp, Sliders } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
-import { SopDisplayMode } from '@/lib/sop-types';
 import { MAX_BRANCHES_MIN, MAX_BRANCHES_MAX, validateSopSetupConfig } from '@/lib/sop-setup-validation';
 
 export const SopGenerationSettings: React.FC = () => {
-    const { setupConfig, setSetupConfig, displayMode, setDisplayMode } = useSopPrototypeStore();
+    const { setupConfig, setSetupConfig } = useSopPrototypeStore();
     const [showAdvanced, setShowAdvanced] = React.useState(false);
 
     // 공용 검증 함수 하나로 모든 필드 오류를 계산한다 - 서버(app/api/ai/route.ts)도 동일한 함수를 쓴다.
@@ -28,63 +27,6 @@ export const SopGenerationSettings: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            {/* 3.4 SOP Display Level Card */}
-            <div className="p-6 rounded-2xl bg-white border border-zinc-200/80 shadow-sm">
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-violet-600 text-white flex items-center justify-center">
-                        <LayoutGrid className="w-5 h-5" />
-                    </div>
-                    <div>
-                        <h2 className="text-lg font-semibold text-zinc-900">SOP 콘텐츠 표시 수준</h2>
-                        <p className="text-xs text-zinc-500">
-                            캔버스 및 뷰어에서 1차적으로 노출할 데이터의 상세 밀도를 선택하세요. (Workspace에서도 자유롭게 전환 가능)
-                        </p>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {[
-                        {
-                            id: 'compact' as SopDisplayMode,
-                            title: '단계명 중심 (Compact)',
-                            description: '도형 내에는 단계 번호와 단계명만 깔끔하게 표시하고 상세 내용은 우측 패널에서 확인',
-                        },
-                        {
-                            id: 'standard' as SopDisplayMode,
-                            title: '단계명 + 개요 (Standard - 권장)',
-                            description: '단계명과 1~2줄 핵심 정의를 함께 표기하여 프로세스 이해도 극대화',
-                        },
-                        {
-                            id: 'detailed' as SopDisplayMode,
-                            title: '단계명 + 개요 + SKILL (Detailed)',
-                            description: '단계명, 정의 및 요구되는 핵심 SKILL 태그를 도형 내부까지 함께 시각화',
-                        },
-                    ].map((mode) => (
-                        <div
-                            key={mode.id}
-                            onClick={() => setDisplayMode(mode.id)}
-                            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                                displayMode === mode.id
-                                    ? 'bg-violet-50/70 border-violet-400 ring-2 ring-violet-500/20 shadow-sm'
-                                    : 'bg-zinc-50/50 border-zinc-200 hover:border-zinc-300'
-                            }`}
-                        >
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-semibold text-zinc-900">{mode.title}</span>
-                                <input
-                                    type="radio"
-                                    name="displayMode"
-                                    checked={displayMode === mode.id}
-                                    onChange={() => setDisplayMode(mode.id)}
-                                    className="w-4 h-4 text-violet-600 focus:ring-violet-500"
-                                />
-                            </div>
-                            <p className="text-xs text-zinc-500 leading-relaxed">{mode.description}</p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
             {/* 3.5 Workflow Structure Settings Card */}
             <div className="p-6 rounded-2xl bg-white border border-zinc-200/80 shadow-sm">
                 <div className="flex items-center gap-3 mb-6">
@@ -100,28 +42,38 @@ export const SopGenerationSettings: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Detail Level */}
-                    <div>
-                        <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-2">
-                            상세 수준 (Detail Level)
-                        </label>
-                        <div className="grid grid-cols-3 gap-2">
+                    {/* Workflow decomposition level — generation granularity, not canvas display density. */}
+                    <div className="md:col-span-2">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+                            <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider">
+                                업무 분해 수준 (SOP 생성 구조)
+                            </label>
+                            <span className="text-[11px] text-blue-700">생성되는 노드·분기·재작업 지점의 세분화 정도</span>
+                        </div>
+                        <p className="mb-3 text-[11px] leading-5 text-zinc-500">
+                            이 설정은 AI가 같은 업무를 몇 개의 실행 단계로 나누어 SOP 구조로 만들지 결정하며, 생성 후에는 주요 단계 수·분기 정책과 함께 적용됩니다. 캔버스는 항상 단계명 중심으로 표시됩니다.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             {[
-                                { id: 'simple' as const, label: '간단' },
-                                { id: 'standard' as const, label: '표준' },
-                                { id: 'detailed' as const, label: '상세' },
+                                { id: 'simple' as const, label: '핵심 흐름', subtitle: '간단', description: 'Task의 핵심 Activity와 주요 승인 지점만 묶어 큰 흐름 중심으로 생성합니다.' },
+                                { id: 'standard' as const, label: '업무 단계', subtitle: '표준 · 권장', description: '주요 Activity를 개별 업무 단계로 나누고 필요한 판단·분기·재작업 지점을 포함합니다.' },
+                                { id: 'detailed' as const, label: '실행 단위', subtitle: '상세', description: '입력·산출물, 승인 기준, 예외·재작업까지 더 촘촘히 분해해 Agent 설계 검토에 활용합니다.' },
                             ].map((level) => (
                                 <button
                                     key={level.id}
                                     type="button"
                                     onClick={() => setSetupConfig({ detailLevel: level.id })}
-                                    className={`py-2 text-xs font-semibold rounded-lg border transition-all ${
+                                    className={`min-h-[118px] p-3.5 text-left rounded-xl border transition-all ${
                                         setupConfig.detailLevel === level.id
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                                            : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
+                                            ? 'bg-blue-50 border-blue-600 ring-2 ring-blue-500/15 shadow-sm'
+                                            : 'bg-zinc-50/50 text-zinc-700 border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300'
                                     }`}
                                 >
-                                    {level.label}
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-semibold text-zinc-900">{level.label}</span>
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${setupConfig.detailLevel === level.id ? 'bg-blue-600 text-white' : 'bg-white text-zinc-500 border border-zinc-200'}`}>{level.subtitle}</span>
+                                    </div>
+                                    <p className="mt-2 text-[11px] leading-5 text-zinc-500">{level.description}</p>
                                 </button>
                             ))}
                         </div>

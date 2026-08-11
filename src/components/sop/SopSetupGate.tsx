@@ -449,7 +449,7 @@ export const SopSetupGate: React.FC = () => {
                             <div>
                                 <strong className="text-zinc-900 block mb-1">4 & 5. 표시 및 워크플로우 설정:</strong>
                                 <p className="bg-zinc-50 p-2.5 rounded-lg">
-                                    상세: {setupConfig.detailLevel} | 주요 단계: {setupConfig.minSteps}~
+                                    업무 분해: {setupConfig.detailLevel} | 주요 단계: {setupConfig.minSteps}~
                                     {setupConfig.maxSteps} | 분기: {setupConfig.branchPolicy} | 재작업:{' '}
                                     {setupConfig.allowRework ? '허용' : '금지'}
                                 </p>

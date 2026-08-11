@@ -1,6 +1,6 @@
 import { SopDocument, SopStepData, SopEdge, SopMember, WorkLibrarySelection, SopSetupConfig } from './sop-types';
 import { SopGenerationResponseSchema } from './sop-schemas';
-import { layoutFlowGraph } from './flow-layout';
+import { layoutSopGraph } from './sop-layout';
 import { FlowShape } from './flow-shapes';
 import { classifySopStepType } from './graph-validation';
 
@@ -83,49 +83,12 @@ export function createSopDocumentFromGeneration(params: {
         targetHandle: e.targetHandle === 'top' || e.targetHandle === 'top-target' ? undefined : e.targetHandle,
     }));
 
-    // 4. Item 8 Refined Auto Layout Conditions:
-    // Only apply layout when all positions are default {0,0} OR when positions overlap!
-    const allAtZero = normalizedSteps.length > 0 && normalizedSteps.every((s) => s.position.x === 0 && s.position.y === 0);
-    const posSet = new Set<string>();
-    let hasOverlap = false;
-    for (const s of normalizedSteps) {
-        const key = `${s.position.x}:${s.position.y}`;
-        if (posSet.has(key)) {
-            hasOverlap = true;
-            break;
-        }
-        posSet.add(key);
-    }
-
-    const needsLayout = allAtZero || hasOverlap;
-    let finalSteps = normalizedSteps;
-    let finalEdges = normalizedEdges;
-
-    if (needsLayout && normalizedSteps.length > 0) {
-        const layoutResult = layoutFlowGraph(
-            normalizedSteps.map((s) => ({ id: s.id, position: s.position })),
-            normalizedEdges.map((e) => ({
-                source: e.source,
-                target: e.target,
-                branchType: e.branchType,
-                sourceHandle: e.sourceHandle,
-                targetHandle: e.targetHandle,
-            })),
-            { anchor: { x: 100, y: 100 }, columnSpacing: 280, rowSpacing: 160 }
-        );
-
-        finalSteps = normalizedSteps.map((s) => {
-            const layoutNode = layoutResult.nodes.find((ln) => ln.id === s.id);
-            return layoutNode?.position ? { ...s, position: layoutNode.position } : s;
-        });
-
-        finalEdges = normalizedEdges.map((e) => {
-            const layoutEdge = layoutResult.edges.find((le) => le.source === e.source && le.target === e.target);
-            return layoutEdge
-                ? { ...e, sourceHandle: layoutEdge.sourceHandle || e.sourceHandle, targetHandle: layoutEdge.targetHandle || e.targetHandle }
-                : e;
-        });
-    }
+    // AI returns the workflow semantics, not trusted canvas geometry. Always
+    // derive coordinates after validation so a non-overlapping but single-line
+    // AI response cannot degrade the workspace's readability.
+    const layoutResult = layoutSopGraph(normalizedSteps, normalizedEdges);
+    const finalSteps = layoutResult.steps;
+    const finalEdges = layoutResult.edges;
 
     const now = new Date().toISOString();
     return {
@@ -137,7 +100,7 @@ export function createSopDocumentFromGeneration(params: {
         setupConfig: params.setupConfig,
         steps: finalSteps,
         edges: finalEdges,
-        displayMode: 'standard',
+        displayMode: 'compact',
         reviewStatus: 'ai-draft' as const,
         createdAt: now,
         updatedAt: now,

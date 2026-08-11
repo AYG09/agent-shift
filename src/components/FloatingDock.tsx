@@ -96,7 +96,7 @@ export default function FloatingDock() {
     }, []);
 
     // 랜딩 페이지에서는 Dock 숨김
-    if (pathname === '/' || pathname.startsWith('/sop/demo')) return null;
+    if (pathname === '/' || pathname.startsWith('/sop')) return null;
 
     return (
         <motion.nav

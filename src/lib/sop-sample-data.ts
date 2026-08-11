@@ -7,35 +7,70 @@ export const SAMPLE_SOP_MEMBER: SopMember = {
     organization: 'People & Culture팀',
 };
 
+const RECRUITMENT_ACTIVITIES = [
+    {
+        id: 'act-requisition-review',
+        name: '채용 요청 및 직무 요건 확정',
+        description: '인력계획과 공정 혁신 엔지니어의 역할·필수 요건을 확인합니다.',
+        skills: [
+            { id: 'skill-workforce-plan', name: '인력 계획 검토', description: 'T/O, 예산, 충원 우선순위를 확인합니다.' },
+            { id: 'skill-job-design', name: '직무 요건 정의', description: '공정 혁신 역할의 핵심 경험과 역량을 구체화합니다.' },
+        ],
+    },
+    {
+        id: 'act-sourcing',
+        name: '채용 공고 및 후보자 소싱',
+        description: '직무 요건을 공고와 후보자 탐색 기준으로 전환합니다.',
+        skills: [
+            { id: 'skill-job-posting', name: '채용 공고 설계', description: '직무의 가치 제안과 지원 요건을 명확하게 작성합니다.' },
+            { id: 'skill-talent-sourcing', name: '후보자 소싱', description: '채널별 후보자 풀을 구축하고 우선순위를 관리합니다.' },
+        ],
+    },
+    {
+        id: 'act-application-screening',
+        name: '지원서 접수 및 서류 검토',
+        description: 'ATS에서 지원서를 관리하고 직무 적합성을 일관되게 검토합니다.',
+        skills: [
+            { id: 'skill-ats-operation', name: 'ATS 운영', description: '지원자 데이터와 커뮤니케이션 이력을 관리합니다.' },
+            { id: 'skill-resume-screening', name: '지원자 자격 검토', description: '필수 조건과 직무 경험을 기준에 따라 평가합니다.' },
+        ],
+    },
+    {
+        id: 'act-interview-evaluation',
+        name: '면접 운영 및 최종 평가',
+        description: '구조화된 면접과 평가 결과를 통해 최종 후보자를 선정합니다.',
+        skills: [
+            { id: 'skill-structured-interview', name: '구조화 면접 운영', description: '면접 질문과 평가 기준을 일관되게 적용합니다.' },
+            { id: 'skill-evaluation-synthesis', name: '평가 결과 종합', description: '면접관 의견과 증거를 종합해 의사결정을 지원합니다.' },
+        ],
+    },
+    {
+        id: 'act-offer-onboarding',
+        name: '처우 협의 및 입사 확정',
+        description: '처우 조건을 협의하고 입사 절차를 확정합니다.',
+        skills: [
+            { id: 'skill-compensation-negotiation', name: '처우 협의', description: '보상 밴드와 후보자 조건을 검토·조율합니다.' },
+            { id: 'skill-onboarding-coordination', name: '입사 절차 관리', description: '오퍼, 계약, 입사 일정과 관계 부서 업무를 조정합니다.' },
+        ],
+    },
+];
+
 export const SAMPLE_WORK_LIBRARY: WorkLibrarySelection = {
     taskId: 'task-recruitment-ops',
     taskName: '채용 운영',
-    activityId: 'act-selection-hire',
-    activityName: '지원자 선발 및 입사 확정',
-    sourceType: 'task',
-    confirmed: true,
-    skills: [
+    activityId: RECRUITMENT_ACTIVITIES[0].id,
+    activityName: RECRUITMENT_ACTIVITIES[0].name,
+    taskCatalog: [
         {
-            id: 'skill-01',
-            name: '채용 기준 수립',
-            description: '직무 자격요건 및 역량 지표 검토 능률',
-        },
-        {
-            id: 'skill-02',
-            name: '서류 검증',
-            description: '지원서, 경력기술서 및 증빙자료 자격 검증',
-        },
-        {
-            id: 'skill-03',
-            name: '면접 진행 및 평가',
-            description: '구조화된 면접 질문 및 역량 평가 스킬',
-        },
-        {
-            id: 'skill-04',
-            name: '처우 협상',
-            description: '연봉 밴드 및 처우 조건 산정 및 협상 스킬',
+            id: 'task-recruitment-ops',
+            name: '채용 운영',
+            description: '채용 요청부터 입사 확정까지의 전체 채용 운영 업무입니다.',
+            activities: RECRUITMENT_ACTIVITIES,
         },
     ],
+    sourceType: 'task',
+    confirmed: true,
+    skills: RECRUITMENT_ACTIVITIES.flatMap((activity) => activity.skills),
 };
 
 export const SAMPLE_SOP_DOCUMENT: SopDocument = {
@@ -45,7 +80,7 @@ export const SAMPLE_SOP_DOCUMENT: SopDocument = {
     workLibrary: SAMPLE_WORK_LIBRARY,
     context:
         '현업 부서의 채용 요청부터 공고 게재, 지원서 수신, 서류 및 면접 심사, 처우 협의 및 계약서 작성까지 전체 채용 프로세스를 검토하고 불확실성을 최소화하여 우수 인재를 적시에 확보하는 표준 절차입니다.',
-    displayMode: 'standard',
+    displayMode: 'compact',
     reviewStatus: 'ai-draft',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

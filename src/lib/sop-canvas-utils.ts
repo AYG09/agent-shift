@@ -4,20 +4,15 @@ import { getDirectionalHandles } from './flow-layout';
 
 /** SopStepNode와 연결선 좌표 계산이 공유하는 실제 노드 크기. */
 export function getSopNodeSize(step: Pick<SopStepData, 'shape'>, displayMode: SopDisplayMode) {
-    let width = 220;
-    let height = 110;
-
-    if (displayMode === 'compact') {
-        width = 180;
-        height = 70;
-    } else if (displayMode === 'detailed') {
-        width = 240;
-        height = 140;
-    }
+    // Detailed data is available through hover and the inspector. Canvas nodes
+    // remain compact so workflow shape and edge routing stay legible.
+    void displayMode;
+    let width = 190;
+    let height = 74;
 
     if (step.shape === 'decision') {
         width = Math.max(width, 160);
-        height = Math.max(height, 130);
+        height = Math.max(height, 120);
     }
 
     return { width, height };

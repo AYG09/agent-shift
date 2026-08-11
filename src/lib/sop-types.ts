@@ -16,11 +16,31 @@ export interface WorkLibrarySkill {
     description?: string;
 }
 
+export interface WorkLibraryActivity {
+    id: string;
+    name: string;
+    description?: string;
+    skills: WorkLibrarySkill[];
+}
+
+export interface WorkLibraryTask {
+    id: string;
+    name: string;
+    description?: string;
+    activities: WorkLibraryActivity[];
+}
+
 export interface WorkLibrarySelection {
     taskId: string;
     taskName: string;
     activityId?: string;
     activityName?: string;
+    /** The editable Task → Activity → SKILL source data. */
+    taskCatalog: WorkLibraryTask[];
+    /**
+     * Skills in the current SOP generation scope. This is derived from the
+     * selected Activity, or deduplicated across the selected Task.
+     */
     skills: WorkLibrarySkill[];
     sourceType: 'task' | 'activity';
     confirmed: boolean;

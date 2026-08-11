@@ -55,6 +55,17 @@ function assert(condition: boolean, message: string) {
 console.log('🧪 Running Comprehensive SOP Prototype Verification & Regression Suite...\n');
 
 // ---------------------------------------------------------
+// 0. Work Library hierarchy: one Task owns multiple Activities
+// ---------------------------------------------------------
+console.log('Test 0: Work Library Task → Activity → SKILL hierarchy...');
+const sampleTask = SAMPLE_WORK_LIBRARY.taskCatalog.find((task) => task.id === SAMPLE_WORK_LIBRARY.taskId);
+assert(!!sampleTask, 'Selected sample Task must exist in the Work Library catalog');
+assert(sampleTask!.activities.length >= 4, 'A Task must contain multiple major Activities, never a single fixed Activity');
+assert(sampleTask!.activities.every((activity) => activity.skills.length > 0), 'Every sample Activity must own its related SKILL data');
+assert(SAMPLE_WORK_LIBRARY.skills.length >= sampleTask!.activities.length, 'Task-scope skills must be derived from the Task Activity set');
+console.log('  ✅Task includes multiple editable Activities and Activity-specific SKILLs.');
+
+// ---------------------------------------------------------
 // 1. 시작·종료 노드 판정 및 방향 검증 테스트 (Item 1)
 // ---------------------------------------------------------
 console.log('Test 1: Start and End node strict validation...');
@@ -450,10 +461,9 @@ store.updateEdge(firstEdgeId, { label: '캔버스 연결선' });
 const edgesAfterEdit = buildSopEdges(useSopPrototypeStore.getState().document!, null);
 assert(edgesAfterEdit[0].label === '캔버스 연결선', 'Canvas edge label must update');
 
-// 7.4 Display mode change reflects in node displayData
-store.setDisplayMode('compact');
+// 7.4 Canvas nodes always use the compact workflow display
 const compactNodes = buildSopNodes(useSopPrototypeStore.getState().document!, null);
-assert((compactNodes[0].data as SopCanvasNodeData).displayMode === 'compact', 'Node displayMode must reflect compact mode');
+assert((compactNodes[0].data as SopCanvasNodeData).displayMode === 'compact', 'SOP canvas must always use the compact workflow display');
 
 // 7.5 Undo reflects in document & node list
 store.undo();
@@ -551,9 +561,20 @@ const preservedDoc = createSopDocumentFromGeneration({
     setupConfig: { sourceType: 'task', detailLevel: 'standard', minSteps: 2, maxSteps: 5, branchPolicy: 'auto', maxBranches: 2, allowRework: true },
 });
 
-assert(preservedDoc.steps[0].position.x === 150 && preservedDoc.steps[0].position.y === 200, 'Explicit non-overlapping coordinates from AI must be PRESERVED');
-assert(preservedDoc.steps[1].position.x === 450 && preservedDoc.steps[1].position.y === 200, 'Explicit non-overlapping coordinates from AI must be PRESERVED');
-console.log('  ✅ Explicit AI node coordinates correctly preserved.');
+assert(preservedDoc.steps[0].position.x !== 150 || preservedDoc.steps[0].position.y !== 200, 'AI coordinates must not be trusted as final canvas geometry');
+assert(new Set(preservedDoc.steps.map((step) => `${step.position.x}:${step.position.y}`)).size === preservedDoc.steps.length, 'Normalized layout must not overlap nodes');
+assert(preservedDoc.edges[0].sourceHandle === 'right' && preservedDoc.edges[0].targetHandle === 'left-target', 'Normalized layout must assign the shortest visible connection handles');
+const multiRowLayoutDoc = createSopDocumentFromGeneration({
+    rawResponse: { ...SAMPLE_SOP_DOCUMENT, steps: SAMPLE_SOP_DOCUMENT.steps, edges: SAMPLE_SOP_DOCUMENT.edges },
+    member: SAMPLE_SOP_MEMBER,
+    workLibrary: SAMPLE_WORK_LIBRARY,
+    context: '',
+    setupConfig: { sourceType: 'task', detailLevel: 'standard', minSteps: 2, maxSteps: 16, branchPolicy: 'auto', maxBranches: 3, allowRework: true },
+});
+assert(new Set(multiRowLayoutDoc.steps.map((step) => step.position.y)).size >= 3, 'Long generated SOPs must use multiple rows instead of one long line');
+const reworkEdge = multiRowLayoutDoc.edges.find((edge) => edge.branchType === 'no' || edge.branchType === 'condition');
+assert(!!reworkEdge && !!reworkEdge.sourceHandle?.endsWith('-rework') && !!reworkEdge.targetHandle?.includes('-rework-target'), 'Backward/rework connections must use offset ports separate from primary connections');
+console.log('  ✅ AI coordinates are replaced with a collision-free multi-row layout and offset rework connection ports.');
 
 // ---------------------------------------------------------
 // 9(구). SAMPLE_SOP_DOCUMENT 회귀: 새 decision 분기 검증 규칙 아래서도 여전히 완전히 유효하다.
@@ -815,6 +836,10 @@ assert(promptWithCustomLimits.includes('20개'), 'maxTotalNodes 값이 프롬프
 assert(promptWithCustomLimits.includes('최대 4개까지만'), "branchPolicy='max'일 때 maxBranches 값이 프롬프트에 반영되어야 합니다");
 const promptWithNonePolicy = getSopPrompt({ taskName: '테스트', branchPolicy: 'none' });
 assert(promptWithNonePolicy.includes('절대 생성하지 마세요'), "branchPolicy='none'이면 decision을 만들지 말라는 지침이 프롬프트에 있어야 합니다");
+const promptWithSimpleStructure = getSopPrompt({ taskName: '테스트', detailLevel: 'simple' });
+const promptWithDetailedStructure = getSopPrompt({ taskName: '테스트', detailLevel: 'detailed' });
+assert(promptWithSimpleStructure.includes('큰 단계 중심'), 'simple 업무 분해 수준은 핵심 흐름 중심 생성 지침을 포함해야 합니다');
+assert(promptWithDetailedStructure.includes('Agent화 가능성을 검토할 수 있는 하나의 실행 단위'), 'detailed 업무 분해 수준은 Agent화 검토가 가능한 실행 단위 지침을 포함해야 합니다');
 console.log('  ✅ maxTotalNodes/branchPolicy/maxBranches/splitComplexSteps settings are all reflected in the generated prompt.');
 
 // ---------------------------------------------------------
