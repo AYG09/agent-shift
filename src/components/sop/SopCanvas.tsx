@@ -19,6 +19,7 @@ import { buildSopNodes, buildSopEdges, syncSopCanvasNodes } from '@/lib/sop-canv
 import { classifySopStepType } from '@/lib/graph-validation';
 import { SopStepNode } from './SopStepNode';
 import { SopReworkEdge } from './SopReworkEdge';
+import { AI_APPLICATION_MODES } from '@/lib/sop-agentization';
 
 interface SopCanvasProps {
     showMiniMap: boolean;
@@ -241,6 +242,14 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
                     ))}
                 </select>
             </label>
+            {document.agentizationReview && (
+                <div className="pointer-events-none absolute bottom-3 left-3 z-30 flex max-w-[560px] flex-wrap items-center gap-1.5 rounded-md border border-zinc-200 bg-white/95 px-2.5 py-1.5 text-[10px] shadow-sm">
+                    <span className="mr-1 font-semibold text-zinc-600">AI 적용 방식</span>
+                    {AI_APPLICATION_MODES.map((mode) => (
+                        <span key={mode.id} className={`rounded-sm border px-1.5 py-0.5 font-semibold ${mode.badgeClass}`}>{mode.shortLabel}</span>
+                    ))}
+                </div>
+            )}
             <ReactFlow
                 nodes={nodes}
                 edges={edges}

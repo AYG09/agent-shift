@@ -12,7 +12,12 @@ export type SopAiApplicationMode = 'automation' | 'human-review' | 'collaboratio
 export interface SopAgentizationReview {
     scope: SopAgentizationScope;
     stepIds: string[];
-    mode: SopAiApplicationMode;
+    /** A batch default may be applied to the current review scope. */
+    defaultMode?: SopAiApplicationMode;
+    /** The authoritative judgement for each reviewed SOP step. */
+    stepModes: Partial<Record<string, SopAiApplicationMode>>;
+    /** Legacy persisted value, migrated to defaultMode at read time. */
+    mode?: SopAiApplicationMode;
     note?: string;
     confirmedAt?: string;
 }

@@ -6,6 +6,7 @@ import { FlowShapeRenderer } from '@/components/flow/FlowShapeRenderer';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { SopStepData } from '@/lib/sop-types';
 import { getSopNodeSize } from '@/lib/sop-canvas-utils';
+import { getAgentizationModeForStep, getAgentizationModeMeta } from '@/lib/sop-agentization';
 import { CheckCircle2, Clock } from 'lucide-react';
 
 export const SopStepNode = memo(({ data, selected }: NodeProps) => {
@@ -14,6 +15,7 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
     const displayMode = 'compact';
 
     const selectStep = useSopPrototypeStore((state) => state.selectStep);
+    const document = useSopPrototypeStore((state) => state.document);
     const [isHovered, setIsHovered] = useState(false);
 
     if (!step) return null;
@@ -22,6 +24,8 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
 
     const isConfirmed = step.reviewStatus === 'confirmed';
     const isReviewed = step.reviewStatus === 'reviewed';
+    const agentizationMode = document ? getAgentizationModeForStep(document, step.id) : undefined;
+    const agentizationMeta = getAgentizationModeMeta(agentizationMode);
 
     const strokeColor = selected
         ? '#4f46e5'
@@ -89,6 +93,15 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
                 strokeWidth={selected ? 3 : 2}
             />
 
+            {agentizationMeta && (
+                <span
+                    className={`pointer-events-none absolute bottom-[-11px] left-3 z-20 inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[9px] font-bold shadow-sm ${agentizationMeta.badgeClass}`}
+                    title={`AI 적용 방식: ${agentizationMeta.label}`}
+                >
+                    {agentizationMeta.shortLabel}
+                </span>
+            )}
+
             {/* Inner Content overlay */}
             <div className="absolute inset-0 p-3 flex flex-col justify-center text-center items-center overflow-hidden z-10">
                 {/* Step Number & Title */}
@@ -119,6 +132,7 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
                         )}
                     </div>
                     <p className="text-xs text-zinc-200 mb-2 leading-relaxed">{step.definition}</p>
+                    {agentizationMeta && <p className="mb-2 text-[10px] font-semibold text-indigo-200">AI 적용 방식: {agentizationMeta.label}</p>}
                     {step.requiredSkills.length > 0 && (
                         <div>
                             <span className="text-[10px] font-semibold text-zinc-400 block mb-1">요구 SKILL:</span>

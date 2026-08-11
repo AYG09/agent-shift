@@ -11,6 +11,7 @@ import {
     SopRequiredSkill,
     SopAgentizationScope,
     SopAiApplicationMode,
+    SopAgentizationReview,
 } from './sop-types';
 import { SAMPLE_SOP_DOCUMENT, SAMPLE_SOP_MEMBER, SAMPLE_WORK_LIBRARY } from './sop-sample-data';
 import { validateSopGraph } from './graph-validation';
@@ -100,6 +101,23 @@ const resetAgentizationConfirmation = (document: SopDocument) =>
         ? { ...document.agentizationReview, confirmedAt: undefined }
         : undefined;
 
+const normalizeAgentizationReview = (
+    document: SopDocument,
+    review: SopAgentizationReview | undefined,
+    fallbackScope: SopAgentizationScope = 'steps'
+): SopAgentizationReview => {
+    const eligibleIds = getAgentizableSopStepIds(document);
+    const scope = review?.scope || fallbackScope;
+    const stepIds = (scope === 'workflow' ? eligibleIds : review?.stepIds || []).filter((id) => eligibleIds.includes(id));
+    const defaultMode = review?.defaultMode || review?.mode;
+    const stepModes = { ...(review?.stepModes || {}) };
+    // Migrate the former single-mode persisted value into explicit node values.
+    if (review?.mode && Object.keys(stepModes).length === 0) {
+        stepIds.forEach((id) => { stepModes[id] = review.mode!; });
+    }
+    return { scope, stepIds, defaultMode, stepModes, note: review?.note || '', confirmedAt: review?.confirmedAt };
+};
+
 interface SopPrototypeState {
     // Setup Gate States
     memberInfo: SopMember;
@@ -134,7 +152,8 @@ interface SopPrototypeState {
     setCustomerReviewMode: (enabled: boolean) => void;
     toggleCustomerReviewMode: () => void;
     setAgentizationScope: (scope: SopAgentizationScope) => void;
-    setAgentizationMode: (mode: SopAiApplicationMode) => void;
+    setAgentizationDefaultMode: (mode: SopAiApplicationMode) => void;
+    setAgentizationStepMode: (stepId: string, mode: SopAiApplicationMode) => void;
     toggleAgentizationStep: (stepId: string) => void;
     setAgentizationNote: (note: string) => void;
     confirmAgentization: () => { success: boolean; message: string };
@@ -298,12 +317,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                     const doc = get().document;
                     if (!doc) return;
                     const eligibleIds = getAgentizableSopStepIds(doc);
-                    const current = doc.agentizationReview || {
-                        scope,
-                        stepIds: [],
-                        mode: 'collaboration' as const,
-                        note: '',
-                    };
+                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, scope);
                     const stepIds = scope === 'workflow'
                         ? eligibleIds
                         : current.scope === 'steps'
@@ -319,20 +333,41 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                     });
                 },
 
-                setAgentizationMode: (mode) => {
+                setAgentizationDefaultMode: (mode) => {
                     const doc = get().document;
                     if (!doc) return;
-                    const current = doc.agentizationReview || {
-                        scope: 'workflow' as const,
-                        stepIds: getAgentizableSopStepIds(doc),
-                        mode,
-                        note: '',
-                    };
+                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, 'workflow');
+                    const targetIds = current.scope === 'workflow'
+                        ? getAgentizableSopStepIds(doc)
+                        : current.stepIds;
                     set({
                         ...pushHistory(doc),
                         document: {
                             ...doc,
-                            agentizationReview: { ...current, mode, confirmedAt: undefined },
+                            agentizationReview: {
+                                ...current,
+                                stepIds: targetIds,
+                                defaultMode: mode,
+                                stepModes: { ...current.stepModes, ...Object.fromEntries(targetIds.map((id) => [id, mode])) },
+                                confirmedAt: undefined,
+                            },
+                            updatedAt: new Date().toISOString(),
+                        },
+                    });
+                },
+
+                setAgentizationStepMode: (stepId, mode) => {
+                    const doc = get().document;
+                    if (!doc || !getAgentizableSopStepIds(doc).includes(stepId)) return;
+                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, 'steps');
+                    const stepIds = current.scope === 'workflow'
+                        ? getAgentizableSopStepIds(doc)
+                        : Array.from(new Set([...current.stepIds, stepId]));
+                    set({
+                        ...pushHistory(doc),
+                        document: {
+                            ...doc,
+                            agentizationReview: { ...current, stepIds, stepModes: { ...current.stepModes, [stepId]: mode }, confirmedAt: undefined },
                             updatedAt: new Date().toISOString(),
                         },
                     });
@@ -341,12 +376,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 toggleAgentizationStep: (stepId) => {
                     const doc = get().document;
                     if (!doc || !getAgentizableSopStepIds(doc).includes(stepId)) return;
-                    const current = doc.agentizationReview || {
-                        scope: 'steps' as const,
-                        stepIds: [],
-                        mode: 'collaboration' as const,
-                        note: '',
-                    };
+                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, 'steps');
                     const stepIds = current.scope === 'workflow'
                         ? [stepId]
                         : current.stepIds.includes(stepId)
@@ -356,7 +386,13 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                         ...pushHistory(doc),
                         document: {
                             ...doc,
-                            agentizationReview: { ...current, scope: 'steps', stepIds, confirmedAt: undefined },
+                            agentizationReview: {
+                                ...current,
+                                scope: 'steps',
+                                stepIds,
+                                stepModes: Object.fromEntries(Object.entries(current.stepModes).filter(([id]) => stepIds.includes(id))),
+                                confirmedAt: undefined,
+                            },
                             updatedAt: new Date().toISOString(),
                         },
                     });
@@ -365,12 +401,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 setAgentizationNote: (note) => {
                     const doc = get().document;
                     if (!doc) return;
-                    const current = doc.agentizationReview || {
-                        scope: 'workflow' as const,
-                        stepIds: getAgentizableSopStepIds(doc),
-                        mode: 'collaboration' as const,
-                        note: '',
-                    };
+                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, 'steps');
                     set({
                         document: {
                             ...doc,
@@ -383,18 +414,16 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 confirmAgentization: () => {
                     const doc = get().document;
                     if (!doc) return { success: false, message: 'SOP 문서가 없습니다.' };
-                    const current = doc.agentizationReview || {
-                        scope: 'workflow' as const,
-                        stepIds: getAgentizableSopStepIds(doc),
-                        mode: 'collaboration' as const,
-                        note: '',
-                    };
+                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, 'steps');
                     const eligibleIds = getAgentizableSopStepIds(doc);
                     const stepIds = current.scope === 'workflow'
                         ? eligibleIds
                         : current.stepIds.filter((id) => eligibleIds.includes(id));
                     if (stepIds.length === 0) {
                         return { success: false, message: 'Agent화 검토 대상 단계를 하나 이상 선택해 주세요.' };
+                    }
+                    if (stepIds.some((id) => !current.stepModes[id])) {
+                        return { success: false, message: '선택한 각 단계에 AI 적용 방식을 지정해 주세요.' };
                     }
                     const confirmedAt = new Date().toISOString();
                     set({
