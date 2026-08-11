@@ -50,6 +50,15 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
 
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+    const edgeOptions = useMemo(
+        () =>
+            document?.edges.map((edge, index) => {
+                const source = document.steps.find((step) => step.id === edge.source)?.title || edge.source;
+                const target = document.steps.find((step) => step.id === edge.target)?.title || edge.target;
+                return { id: edge.id, label: `${index + 1}. ${source} → ${target}` };
+            }) || [],
+        [document]
+    );
 
     // Synchronize store updates into React Flow state
     useEffect(() => {
@@ -168,6 +177,7 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
                 target,
                 sourceHandle: connection.sourceHandle || undefined,
                 targetHandle: connection.targetHandle || undefined,
+                manualRouting: true,
             });
             setConnectionNotice('연결점이 변경되었습니다. 연결선 끝을 다시 드래그해 조정할 수 있습니다.');
         },
@@ -217,6 +227,20 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
             <div className="pointer-events-none absolute top-3 left-3 z-30 rounded-lg border border-zinc-200 bg-white/90 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 shadow-sm">
                 연결선 끝을 드래그하면 다른 연결점으로 옮길 수 있습니다.
             </div>
+            <label className="absolute top-3 right-3 z-30 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white/95 px-2 py-1.5 text-[11px] font-medium text-zinc-600 shadow-sm">
+                겹친 연결선 선택
+                <select
+                    value={selectedEdgeId || ''}
+                    onChange={(event) => selectEdge(event.target.value || null)}
+                    className="max-w-52 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold text-zinc-800 outline-none focus:border-indigo-500"
+                    aria-label="연결선 목록에서 선택"
+                >
+                    <option value="">연결선 선택</option>
+                    {edgeOptions.map((edge) => (
+                        <option key={edge.id} value={edge.id}>{edge.label}</option>
+                    ))}
+                </select>
+            </label>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}

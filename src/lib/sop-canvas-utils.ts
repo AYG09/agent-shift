@@ -134,7 +134,10 @@ export function buildSopEdges(
         const preserveExplicitHandles = !isLegacyDefaultHandlePair(edge.sourceHandle, edge.targetHandle);
         const routeIndex = outgoingOrder.get(edge.source) || 0;
         outgoingOrder.set(edge.source, routeIndex + 1);
-        const reworkRoute = isLoopRework ? cachedReworkRoutes.get(edge.id) || null : null;
+        // A member's endpoint choice is authoritative. Auto-routing remains a
+        // draft aid and must never pull a manually reconnected edge back to its
+        // former ports.
+        const reworkRoute = isLoopRework && !edge.manualRouting ? cachedReworkRoutes.get(edge.id) || null : null;
 
         return {
             id: edge.id,
@@ -145,7 +148,7 @@ export function buildSopEdges(
             type: reworkRoute ? 'sopRework' : 'smoothstep',
             reconnectable: true,
             pathOptions: { borderRadius: 16, offset: 24 + (routeIndex % 3) * 12 },
-            zIndex: 0,
+            zIndex: isSelected ? 1000 : 0,
             data: reworkRoute
                 ? { branchType: edge.branchType, label: showBranchLabels ? edge.label : undefined, reworkRoute }
                 : undefined,

@@ -88,6 +88,8 @@ export interface SopEdge {
     condition?: string;
     sourceHandle?: string;
     targetHandle?: string;
+    /** A member deliberately chose these ports; never replace them with auto-routing. */
+    manualRouting?: boolean;
 }
 
 export interface SopSetupConfig {

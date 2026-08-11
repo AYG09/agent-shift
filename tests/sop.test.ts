@@ -591,6 +591,20 @@ assert(
     }),
     'Rework routes must use dedicated ports and an explicit multi-segment outer lane'
 );
+const manualReworkId = routedReworkEdges[0].id;
+const manuallyRoutedDoc = {
+    ...multiRowLayoutDoc,
+    edges: multiRowLayoutDoc.edges.map((edge) =>
+        edge.id === manualReworkId
+            ? { ...edge, sourceHandle: 'bottom', targetHandle: 'bottom-target', manualRouting: true }
+            : edge
+    ),
+};
+const manuallyRoutedCanvasEdge = buildSopEdges(manuallyRoutedDoc, null).find((edge) => edge.id === manualReworkId)!;
+assert(
+    manuallyRoutedCanvasEdge.type === 'smoothstep' && manuallyRoutedCanvasEdge.sourceHandle === 'bottom' && manuallyRoutedCanvasEdge.targetHandle === 'bottom-target',
+    'A member-selected connection point must never be replaced by automatic rework routing'
+);
 console.log('  ✅ AI coordinates are replaced with a collision-free multi-row layout and rework loops use dedicated outer lanes.');
 
 // ---------------------------------------------------------
