@@ -3,6 +3,8 @@ import { SopDisplayMode, SopDocument, SopStepData } from './sop-types';
 import { getDirectionalHandles } from './flow-layout';
 import { isSopReworkEdge, routeSopReworkEdge } from './sop-rework-routing';
 
+const reworkRouteCache = new WeakMap<SopDocument, Map<string, ReturnType<typeof routeSopReworkEdge>>>();
+
 /** SopStepNode와 연결선 좌표 계산이 공유하는 실제 노드 크기. */
 export function getSopNodeSize(step: Pick<SopStepData, 'shape'>, displayMode: SopDisplayMode) {
     // Detailed data is available through hover and the inspector. Canvas nodes
@@ -69,8 +71,20 @@ export function buildSopEdges(
     if (!doc) return [];
     const stepById = new Map(doc.steps.map((step) => [step.id, step]));
     const outgoingOrder = new Map<string, number>();
-    const occupiedReworkSegments = new Set<string>();
-    let reworkLaneIndex = 0;
+    let cachedReworkRoutes = reworkRouteCache.get(doc);
+    if (!cachedReworkRoutes) {
+        cachedReworkRoutes = new Map();
+        const occupiedReworkSegments = new Set<string>();
+        let reworkLaneIndex = 0;
+        doc.edges.forEach((edge) => {
+            if (!isSopReworkEdge(edge, doc.edges)) return;
+            cachedReworkRoutes!.set(
+                edge.id,
+                routeSopReworkEdge(edge, doc.steps, doc.displayMode, reworkLaneIndex++, occupiedReworkSegments)
+            );
+        });
+        reworkRouteCache.set(doc, cachedReworkRoutes);
+    }
 
     return doc.edges.map((edge) => {
         const isSelected = edge.id === selectedEdgeId;
@@ -117,9 +131,7 @@ export function buildSopEdges(
         const preserveExplicitHandles = !isLegacyDefaultHandlePair(edge.sourceHandle, edge.targetHandle);
         const routeIndex = outgoingOrder.get(edge.source) || 0;
         outgoingOrder.set(edge.source, routeIndex + 1);
-        const reworkRoute = isLoopRework
-            ? routeSopReworkEdge(edge, doc.steps, doc.displayMode, reworkLaneIndex++, occupiedReworkSegments)
-            : null;
+        const reworkRoute = isLoopRework ? cachedReworkRoutes.get(edge.id) || null : null;
 
         return {
             id: edge.id,

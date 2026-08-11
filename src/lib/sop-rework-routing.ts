@@ -134,7 +134,8 @@ function findOrthogonalPath(
     gridX: number[],
     gridY: number[],
     obstacles: Bounds[],
-    occupiedSegments: Set<string>
+    occupiedSegments: Set<string>,
+    preventHorizontalAtStartY: boolean = false
 ) {
     const points = new Map<string, SopRoutePoint>();
     gridX.forEach((x) => {
@@ -148,6 +149,8 @@ function findOrthogonalPath(
     const endKey = key(end);
     points.set(startKey, start);
     points.set(endKey, end);
+    const xIndex = new Map(gridX.map((x, index) => [x, index]));
+    const yIndex = new Map(gridY.map((y, index) => [y, index]));
     const queue: Array<{ point: SopRoutePoint; direction?: 'h' | 'v'; cost: number; path: SopRoutePoint[] }> = [
         { point: start, cost: 0, path: [start] },
     ];
@@ -161,10 +164,20 @@ function findOrthogonalPath(
         best.set(currentKey, current.cost);
         if (key(current.point) === endKey) return current.path;
 
+        const currentXIndex = xIndex.get(current.point.x);
+        const currentYIndex = yIndex.get(current.point.y);
         const neighbours = [
-            ...gridX.map((x) => ({ x, y: current.point.y })),
-            ...gridY.map((y) => ({ x: current.point.x, y })),
-        ].filter((point) => key(point) !== key(current.point) && points.has(key(point)) && isSegmentClear(current.point, point, obstacles));
+            currentXIndex !== undefined && currentXIndex > 0 ? { x: gridX[currentXIndex - 1], y: current.point.y } : null,
+            currentXIndex !== undefined && currentXIndex < gridX.length - 1 ? { x: gridX[currentXIndex + 1], y: current.point.y } : null,
+            currentYIndex !== undefined && currentYIndex > 0 ? { x: current.point.x, y: gridY[currentYIndex - 1] } : null,
+            currentYIndex !== undefined && currentYIndex < gridY.length - 1 ? { x: current.point.x, y: gridY[currentYIndex + 1] } : null,
+        ].filter(
+            (point): point is SopRoutePoint =>
+                !!point &&
+                points.has(key(point)) &&
+                isSegmentClear(current.point, point, obstacles) &&
+                !(preventHorizontalAtStartY && current.point.y === start.y && point.y === current.point.y)
+        );
 
         neighbours.forEach((next) => {
             const direction: 'h' | 'v' = next.y === current.point.y ? 'h' : 'v';
@@ -204,10 +217,20 @@ export function routeSopReworkEdge(
 
     let bestRoute: SopReworkRoute | null = null;
     let bestLength = Infinity;
-    const sides: Side[] = ['top', 'right', 'bottom', 'left'];
+    const sourceCenterX = (source.bounds.left + source.bounds.right) / 2;
+    const targetCenterX = (target.bounds.left + target.bounds.right) / 2;
+    const sidePairs: Array<[Side, Side]> =
+        sourceCenterX >= targetCenterX
+            ? [
+                  ['right', 'left'],
+                  ['bottom', 'bottom'],
+              ]
+            : [
+                  ['left', 'right'],
+                  ['bottom', 'bottom'],
+              ];
 
-    for (const sourceSide of sides) {
-        for (const targetSide of sides) {
+    for (const [sourceSide, targetSide] of sidePairs) {
             const sourcePort = getPort(source.bounds, sourceSide, false);
             const targetPort = getPort(target.bounds, targetSide, true);
             for (const [sourceRailX, targetRailX] of [
@@ -226,9 +249,10 @@ export function routeSopReworkEdge(
                     targetAnchor,
                     targetPort.exit,
                     gridX,
-                    gridY.filter((y) => y !== laneY),
+                    gridY,
                     obstacles,
-                    occupiedSegments
+                    occupiedSegments,
+                    true
                 );
                 if (!first || !second) continue;
                 const points = simplify([sourcePort.point, ...first, targetAnchor, ...second.slice(1), targetPort.point]);
@@ -238,7 +262,6 @@ export function routeSopReworkEdge(
                     bestRoute = { points, sourceHandle: sourcePort.handle, targetHandle: targetPort.handle };
                 }
             }
-        }
     }
 
     if (bestRoute) {

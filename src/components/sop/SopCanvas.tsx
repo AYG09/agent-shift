@@ -33,16 +33,14 @@ const edgeTypes = {
 };
 
 export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLabels }) => {
-    const {
-        document,
-        selectedStepId,
-        selectedEdgeId,
-        selectStep,
-        selectEdge,
-        updateStep,
-        addEdge,
-        deleteEdge,
-    } = useSopPrototypeStore();
+    const document = useSopPrototypeStore((state) => state.document);
+    const selectedStepId = useSopPrototypeStore((state) => state.selectedStepId);
+    const selectedEdgeId = useSopPrototypeStore((state) => state.selectedEdgeId);
+    const selectStep = useSopPrototypeStore((state) => state.selectStep);
+    const selectEdge = useSopPrototypeStore((state) => state.selectEdge);
+    const updateStep = useSopPrototypeStore((state) => state.updateStep);
+    const addEdge = useSopPrototypeStore((state) => state.addEdge);
+    const deleteEdge = useSopPrototypeStore((state) => state.deleteEdge);
     const [connectionNotice, setConnectionNotice] = React.useState<string | null>(null);
 
     const initialNodes = useMemo(() => buildSopNodes(document, selectedStepId), [document, selectedStepId]);

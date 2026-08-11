@@ -13,7 +13,7 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
     const stepNumber = (data.index as number) || 1;
     const displayMode = 'compact';
 
-    const { selectStep } = useSopPrototypeStore();
+    const selectStep = useSopPrototypeStore((state) => state.selectStep);
     const [isHovered, setIsHovered] = useState(false);
 
     if (!step) return null;
