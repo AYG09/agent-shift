@@ -2,6 +2,20 @@ import { type FlowShape } from './flow-shapes';
 
 export type SopDisplayMode = 'compact' | 'standard' | 'detailed';
 export type SopReviewStatus = 'ai-draft' | 'reviewed' | 'confirmed';
+export type SopAgentizationScope = 'workflow' | 'steps';
+export type SopAiApplicationMode = 'automation' | 'human-review' | 'collaboration' | 'assist' | 'human-only';
+
+/**
+ * A member's explicit judgement about where AI may participate in an SOP.
+ * It records a candidate decision only; it does not create or authorize an AI agent.
+ */
+export interface SopAgentizationReview {
+    scope: SopAgentizationScope;
+    stepIds: string[];
+    mode: SopAiApplicationMode;
+    note?: string;
+    confirmedAt?: string;
+}
 
 export interface SopMember {
     id?: string;
@@ -116,6 +130,7 @@ export interface SopDocument {
     edges: SopEdge[];
     displayMode: SopDisplayMode;
     reviewStatus: SopReviewStatus;
+    agentizationReview?: SopAgentizationReview;
     createdAt: string;
     updatedAt: string;
     isSampleData?: boolean;

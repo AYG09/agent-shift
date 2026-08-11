@@ -19,6 +19,7 @@ import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { FLOW_SHAPE_IDS, FLOW_SHAPES, FlowShape } from '@/lib/flow-shapes';
 import { SopRequiredSkill, SopReviewStatus } from '@/lib/sop-types';
 import { validateSopDecisionBranches, classifySopStepType, normalizeStepShapeChange } from '@/lib/graph-validation';
+import { SopAgentizationPanel } from './SopAgentizationPanel';
 
 export const SopStepInspector: React.FC = () => {
     const {
@@ -45,8 +46,11 @@ export const SopStepInspector: React.FC = () => {
     const [newSkillReason, setNewSkillReason] = useState('');
     const [showAddSkill, setShowAddSkill] = useState(false);
     const [structureNotice, setStructureNotice] = useState<string | null>(null);
+    const [activePanel, setActivePanel] = useState<'details' | 'agentization'>('details');
 
     if (!document) return null;
+
+    if (activePanel === 'agentization') return <SopAgentizationPanel onBack={() => setActivePanel('details')} />;
 
     // Edge Inspector View (Item 4 Requirement)
     if (selectedEdgeId) {
@@ -90,14 +94,10 @@ export const SopStepInspector: React.FC = () => {
                             <GitCommit className="w-3.5 h-3.5 text-indigo-600" /> 연결선 #{edgeIndex + 1}
                         </span>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => selectEdge(null)}
-                        className="text-zinc-400 hover:text-zinc-700 p-1 rounded-lg hover:bg-zinc-100"
-                        aria-label="연결선 편집 닫기"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                        <button type="button" onClick={() => setActivePanel('agentization')} className="rounded-md border border-indigo-200 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-50">AI Agent화</button>
+                        <button type="button" onClick={() => selectEdge(null)} className="text-zinc-400 hover:text-zinc-700 p-1 rounded-lg hover:bg-zinc-100" aria-label="연결선 편집 닫기"><X className="w-4 h-4" /></button>
+                    </div>
                 </div>
 
                 {/* Form Fields */}
@@ -218,12 +218,9 @@ export const SopStepInspector: React.FC = () => {
     // Step Inspector View
     if (!selectedStepId) {
         return (
-            <div className="h-full p-6 flex flex-col items-center justify-center text-center text-zinc-400 bg-white border-l border-zinc-200">
-                <Layers className="w-10 h-10 mb-2 opacity-40 text-zinc-400" />
-                <p className="text-sm font-medium text-zinc-600">선택된 단계나 연결선이 없습니다.</p>
-                <p className="text-xs text-zinc-400 mt-1">
-                    캔버스에서 단계 노드 또는 연결선을 클릭하면 상세 편집 패널이 표시됩니다.
-                </p>
+            <div className="flex h-full flex-col border-l border-zinc-200 bg-white">
+                <div className="grid grid-cols-2 border-b border-zinc-200 p-2 text-xs font-semibold"><span className="rounded-md bg-zinc-100 px-2 py-1.5 text-center text-zinc-700">단계 상세</span><button type="button" onClick={() => setActivePanel('agentization')} className="rounded-md px-2 py-1.5 text-indigo-700 hover:bg-indigo-50">AI Agent화</button></div>
+                <div className="flex flex-1 flex-col items-center justify-center p-6 text-center text-zinc-400"><Layers className="mb-2 h-10 w-10 opacity-40" /><p className="text-sm font-medium text-zinc-600">선택된 단계나 연결선이 없습니다.</p><p className="mt-1 text-xs text-zinc-400">캔버스에서 노드를 선택하거나 AI Agent화 탭에서 검토 범위를 정해 주세요.</p></div>
             </div>
         );
     }
@@ -313,6 +310,7 @@ export const SopStepInspector: React.FC = () => {
             {/* Header */}
             <div className="p-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-xs z-20">
                 <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setActivePanel('agentization')} className="rounded-md border border-indigo-200 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-50">AI Agent화</button>
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
                         Step {String(stepIndex + 1).padStart(2, '0')}
                     </span>

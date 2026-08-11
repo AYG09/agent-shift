@@ -295,7 +295,7 @@ export const SopWorkspace: React.FC = () => {
                 </div>
 
                 {/* Right Step Inspector */}
-                <div className="w-80 shrink-0 h-full">
+                <div className="h-full w-[360px] shrink-0">
                     <SopStepInspector />
                 </div>
             </div>

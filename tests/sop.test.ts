@@ -331,6 +331,30 @@ assert(useSopPrototypeStore.getState().workLibrary.confirmed === false, 'Work Li
 console.log('  ✅ All meaningful edits correctly invalidate review and confirmation status.');
 
 // ---------------------------------------------------------
+// 3.6 AI Agent화 검토는 전체/선택 단계와 확정 상태를 문서에 보존한다.
+// ---------------------------------------------------------
+console.log('Test 3.6: agentization review selection and confirmation...');
+store.generateFromSample();
+const agentizableStepIds = useSopPrototypeStore.getState().document!.steps
+    .filter((step) => step.terminalType !== 'start' && step.terminalType !== 'end')
+    .map((step) => step.id);
+store.setAgentizationScope('workflow');
+store.setAgentizationMode('human-review');
+const workflowAgentization = store.confirmAgentization();
+assert(workflowAgentization.success === true, 'Workflow-wide agentization review must be confirmable');
+assert(useSopPrototypeStore.getState().document!.agentizationReview?.stepIds.length === agentizableStepIds.length, 'Workflow review must include every non-terminal step');
+assert(useSopPrototypeStore.getState().document!.agentizationReview?.mode === 'human-review', 'The selected AI application mode must be stored');
+assert(Boolean(useSopPrototypeStore.getState().document!.agentizationReview?.confirmedAt), 'Agentization review must record confirmation time');
+store.setAgentizationScope('steps');
+assert(useSopPrototypeStore.getState().document!.agentizationReview?.stepIds.length === 0, 'Switching to selected steps must require an explicit step choice');
+store.toggleAgentizationStep(agentizableStepIds[0]);
+const stepAgentization = store.confirmAgentization();
+assert(stepAgentization.success === true, 'Selected-step agentization review must be confirmable');
+store.updateStep(agentizableStepIds[0], { title: '수정된 Agent화 후보 단계' });
+assert(!useSopPrototypeStore.getState().document!.agentizationReview?.confirmedAt, 'A meaningful step edit must return agentization confirmation to review');
+console.log('  ✅ Workflow/step agentization review preserves selections and requires re-review after content edits.');
+
+// ---------------------------------------------------------
 // 4. 단계별 UI에서 confirmed 직접 설정 금지 테스트 (Item 4)
 // ---------------------------------------------------------
 console.log('Test 4: Step UI direct confirmed setting bypass prevention...');
