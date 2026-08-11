@@ -16,6 +16,7 @@ import {
 import { SAMPLE_SOP_DOCUMENT, SAMPLE_SOP_MEMBER, SAMPLE_WORK_LIBRARY } from './sop-sample-data';
 import { validateSopGraph } from './graph-validation';
 import { layoutSopGraph } from './sop-layout';
+import { normalizeAgentizationMode } from './sop-agentization';
 
 const customStorage = {
     getItem: (name: string) => {
@@ -107,13 +108,27 @@ const normalizeAgentizationReview = (
     fallbackScope: SopAgentizationScope = 'steps'
 ): SopAgentizationReview => {
     const eligibleIds = getAgentizableSopStepIds(document);
-    const scope = review?.scope || fallbackScope;
-    const stepIds = (scope === 'workflow' ? eligibleIds : review?.stepIds || []).filter((id) => eligibleIds.includes(id));
-    const defaultMode = review?.defaultMode || review?.mode;
-    const stepModes = { ...(review?.stepModes || {}) };
+    const rawReview = review as unknown as { defaultMode?: unknown; mode?: unknown; stepModes?: Record<string, unknown> } | undefined;
+    const rawStepModes = rawReview?.stepModes || {};
+    const stepModes = Object.fromEntries(
+        Object.entries(rawStepModes)
+            .map(([id, value]) => [id, normalizeAgentizationMode(value)] as const)
+            .filter((entry): entry is [string, SopAiApplicationMode] => Boolean(entry[1]))
+    );
+    const legacyHumanOnly = rawReview?.mode === 'human-only'
+        && Object.values(rawStepModes).every((value) => normalizeAgentizationMode(value) === undefined);
+    const scope = legacyHumanOnly ? 'steps' : (review?.scope || fallbackScope);
+    const excludedLegacyHumanOnlyIds = new Set(
+        Object.entries(rawStepModes)
+            .filter(([, value]) => value === 'human-only')
+            .map(([id]) => id)
+    );
+    const stepIds = (scope === 'workflow' ? eligibleIds : review?.stepIds || [])
+        .filter((id) => eligibleIds.includes(id) && !excludedLegacyHumanOnlyIds.has(id));
+    const defaultMode = normalizeAgentizationMode(rawReview?.defaultMode) || normalizeAgentizationMode(rawReview?.mode);
     // Migrate the former single-mode persisted value into explicit node values.
-    if (review?.mode && Object.keys(stepModes).length === 0) {
-        stepIds.forEach((id) => { stepModes[id] = review.mode!; });
+    if (defaultMode && Object.keys(stepModes).length === 0) {
+        stepIds.forEach((id) => { stepModes[id] = defaultMode; });
     }
     return { scope, stepIds, defaultMode, stepModes, note: review?.note || '', confirmedAt: review?.confirmedAt };
 };

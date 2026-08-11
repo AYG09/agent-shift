@@ -339,11 +339,11 @@ const agentizableStepIds = useSopPrototypeStore.getState().document!.steps
     .filter((step) => step.terminalType !== 'start' && step.terminalType !== 'end')
     .map((step) => step.id);
 store.setAgentizationScope('workflow');
-store.setAgentizationDefaultMode('human-review');
+store.setAgentizationDefaultMode('assist');
 const workflowAgentization = store.confirmAgentization();
 assert(workflowAgentization.success === true, 'Workflow-wide agentization review must be confirmable');
 assert(useSopPrototypeStore.getState().document!.agentizationReview?.stepIds.length === agentizableStepIds.length, 'Workflow review must include every non-terminal step');
-assert(agentizableStepIds.every((id) => useSopPrototypeStore.getState().document!.agentizationReview?.stepModes[id] === 'human-review'), 'The batch default must be stored for every selected workflow step');
+assert(agentizableStepIds.every((id) => useSopPrototypeStore.getState().document!.agentizationReview?.stepModes[id] === 'assist'), 'The batch default must be stored for every selected workflow step');
 assert(Boolean(useSopPrototypeStore.getState().document!.agentizationReview?.confirmedAt), 'Agentization review must record confirmation time');
 store.setAgentizationScope('steps');
 assert(useSopPrototypeStore.getState().document!.agentizationReview?.stepIds.length === 0, 'Switching to selected steps must require an explicit step choice');
@@ -351,8 +351,8 @@ store.toggleAgentizationStep(agentizableStepIds[0]);
 store.setAgentizationStepMode(agentizableStepIds[0], 'automation');
 assert(useSopPrototypeStore.getState().document!.agentizationReview?.stepModes[agentizableStepIds[0]] === 'automation', 'A selected step must support its own AI application mode');
 store.toggleAgentizationStep(agentizableStepIds[1]);
-store.setAgentizationStepMode(agentizableStepIds[1], 'collaboration');
-assert(useSopPrototypeStore.getState().document!.agentizationReview?.stepModes[agentizableStepIds[1]] === 'collaboration', 'Different selected steps must retain independent AI application modes');
+store.setAgentizationStepMode(agentizableStepIds[1], 'assist');
+assert(useSopPrototypeStore.getState().document!.agentizationReview?.stepModes[agentizableStepIds[1]] === 'assist', 'Different selected steps must retain independent AI application modes');
 const stepAgentization = store.confirmAgentization();
 assert(stepAgentization.success === true, 'Selected-step agentization review must be confirmable');
 store.updateStep(agentizableStepIds[0], { title: '수정된 Agent화 후보 단계' });

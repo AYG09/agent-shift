@@ -3,7 +3,11 @@ import { type FlowShape } from './flow-shapes';
 export type SopDisplayMode = 'compact' | 'standard' | 'detailed';
 export type SopReviewStatus = 'ai-draft' | 'reviewed' | 'confirmed';
 export type SopAgentizationScope = 'workflow' | 'steps';
-export type SopAiApplicationMode = 'automation' | 'human-review' | 'collaboration' | 'assist' | 'human-only';
+/**
+ * An unset step remains a human-performed step. Only explicit AI participation
+ * is stored and surfaced in the workspace.
+ */
+export type SopAiApplicationMode = 'automation' | 'assist';
 
 /**
  * A member's explicit judgement about where AI may participate in an SOP.
@@ -12,11 +16,11 @@ export type SopAiApplicationMode = 'automation' | 'human-review' | 'collaboratio
 export interface SopAgentizationReview {
     scope: SopAgentizationScope;
     stepIds: string[];
-    /** A batch default may be applied to the current review scope. */
+    /** A batch value may be applied to the current review scope. */
     defaultMode?: SopAiApplicationMode;
     /** The authoritative judgement for each reviewed SOP step. */
     stepModes: Partial<Record<string, SopAiApplicationMode>>;
-    /** Legacy persisted value, migrated to defaultMode at read time. */
+    /** Legacy persisted value, normalized at read time. */
     mode?: SopAiApplicationMode;
     note?: string;
     confirmedAt?: string;
