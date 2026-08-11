@@ -11,6 +11,7 @@ import {
     Connection,
     Edge,
     Node,
+    reconnectEdge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
@@ -41,6 +42,7 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
     const updateStep = useSopPrototypeStore((state) => state.updateStep);
     const addEdge = useSopPrototypeStore((state) => state.addEdge);
     const deleteEdge = useSopPrototypeStore((state) => state.deleteEdge);
+    const updateEdge = useSopPrototypeStore((state) => state.updateEdge);
     const [connectionNotice, setConnectionNotice] = React.useState<string | null>(null);
 
     const initialNodes = useMemo(() => buildSopNodes(document, selectedStepId), [document, selectedStepId]);
@@ -137,6 +139,41 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
         [addEdge, document]
     );
 
+    const handleReconnect = useCallback(
+        (oldEdge: Edge, connection: Connection) => {
+            if (!document || !connection.source || !connection.target) return;
+            const { source, target } = connection;
+            if (source === target) {
+                setConnectionNotice('같은 단계 안에서는 연결점을 변경할 수 없습니다.');
+                return;
+            }
+            if (document.steps.find((step) => step.id === source)?.terminalType === 'end') {
+                setConnectionNotice('종료 단계에서는 연결을 시작할 수 없습니다.');
+                return;
+            }
+            if (document.steps.find((step) => step.id === target)?.terminalType === 'start') {
+                setConnectionNotice('시작 단계로 연결할 수 없습니다.');
+                return;
+            }
+            if (document.edges.some((edge) => edge.id !== oldEdge.id && edge.source === source && edge.target === target)) {
+                setConnectionNotice('같은 두 단계 사이에 이미 연결선이 있습니다.');
+                return;
+            }
+
+            // Keep the React Flow edge endpoints in sync immediately, then
+            // persist the same connection and selected handle IDs in the SOP.
+            setEdges((current) => reconnectEdge(oldEdge, connection, current));
+            updateEdge(oldEdge.id, {
+                source,
+                target,
+                sourceHandle: connection.sourceHandle || undefined,
+                targetHandle: connection.targetHandle || undefined,
+            });
+            setConnectionNotice('연결점이 변경되었습니다. 연결선 끝을 다시 드래그해 조정할 수 있습니다.');
+        },
+        [document, setEdges, updateEdge]
+    );
+
     // Edge Selection
     const handleEdgeClick = useCallback(
         (e: React.MouseEvent, edge: Edge) => {
@@ -177,6 +214,9 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
                     {connectionNotice}
                 </div>
             )}
+            <div className="pointer-events-none absolute top-3 left-3 z-30 rounded-lg border border-zinc-200 bg-white/90 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 shadow-sm">
+                연결선 끝을 드래그하면 다른 연결점으로 옮길 수 있습니다.
+            </div>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -186,6 +226,8 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
                 onEdgesChange={onEdgesChange}
                 onNodeDragStop={handleNodeDragStop}
                 onConnect={handleConnect}
+                onReconnect={handleReconnect}
+                reconnectRadius={16}
                 onEdgeClick={handleEdgeClick}
                 onEdgesDelete={handleEdgesDelete}
                 onPaneClick={handlePaneClick}

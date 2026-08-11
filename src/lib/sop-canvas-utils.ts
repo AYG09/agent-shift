@@ -106,7 +106,10 @@ export function buildSopEdges(
         const isLoopRework = isSopReworkEdge(edge, doc.edges);
         let strokeColor = isSelected ? '#4f46e5' : '#64748b';
         if (!isSelected) {
-            if (isYes) strokeColor = '#10b981';
+            if (edge.branchType === 'no') strokeColor = '#ef4444';
+            else if (edge.branchType === 'condition') strokeColor = '#f59e0b';
+            else if (edge.branchType === 'yes') strokeColor = '#10b981';
+            else if (isYes) strokeColor = '#10b981';
             else if (isNo) strokeColor = '#ef4444';
             else if (isRework) strokeColor = '#f59e0b';
         }
@@ -140,6 +143,7 @@ export function buildSopEdges(
             sourceHandle: reworkRoute?.sourceHandle || (preserveExplicitHandles ? edge.sourceHandle : autoHandles.sourceHandle),
             targetHandle: reworkRoute?.targetHandle || (preserveExplicitHandles ? edge.targetHandle : autoHandles.targetHandle),
             type: reworkRoute ? 'sopRework' : 'smoothstep',
+            reconnectable: true,
             pathOptions: { borderRadius: 16, offset: 24 + (routeIndex % 3) * 12 },
             zIndex: 0,
             data: reworkRoute
@@ -149,7 +153,7 @@ export function buildSopEdges(
             labelStyle: { fill: strokeColor, fontWeight: 700, fontSize: 11 },
             labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9, rx: 4, ry: 4 },
             labelBgPadding: [6, 3],
-            animated: isRework,
+            animated: isLoopRework,
             selected: isSelected,
             style: {
                 stroke: strokeColor,
