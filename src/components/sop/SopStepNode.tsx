@@ -51,7 +51,8 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
 
     return (
         <div
-            className="relative group cursor-pointer select-none"
+            className="sop-step-node relative group cursor-pointer select-none"
+            data-hovered={isHovered ? 'true' : 'false'}
             onClick={handleSingleClick}
             onDoubleClick={handleDoubleClick}
             onMouseEnter={() => setIsHovered(true)}
@@ -105,7 +106,7 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
 
             {/* Hover Tooltip Preview */}
             {isHovered && (
-                <div className="absolute left-1/2 -bottom-2 translate-y-full -translate-x-1/2 w-64 bg-zinc-900/95 text-white p-3 rounded-xl shadow-xl z-50 pointer-events-none text-left border border-zinc-700 backdrop-blur-xs animate-fade-in">
+                <div role="tooltip" className="absolute left-1/2 -bottom-2 translate-y-full -translate-x-1/2 w-64 bg-zinc-900/95 text-white p-3 rounded-xl shadow-xl z-50 pointer-events-none text-left border border-zinc-700 backdrop-blur-xs animate-fade-in">
                     <div className="flex items-center justify-between border-b border-zinc-700 pb-1.5 mb-1.5">
                         <span className="text-xs font-bold text-indigo-300">
                             {String(stepNumber).padStart(2, '0')}. {step.title}

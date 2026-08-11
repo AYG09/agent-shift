@@ -156,10 +156,10 @@ export const SopSetupGate: React.FC = () => {
     };
 
     return (
-        <div className="h-screen overflow-hidden bg-zinc-50/60">
+        <div className="h-screen overflow-hidden bg-slate-50">
             {/* Header */}
             <header className="bg-white border-b border-zinc-200 sticky top-0 z-30 shadow-2xs">
-                <div className="max-w-[1500px] mx-auto px-5 h-14 flex items-center justify-between">
+                <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between px-6">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
                             SOP
@@ -198,7 +198,7 @@ export const SopSetupGate: React.FC = () => {
             </header>
 
             {/* Main Content */}
-            <main className="max-w-[1500px] mx-auto h-[calc(100vh-7.5rem)] px-5 py-3 grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <main className="mx-auto grid h-[calc(100vh-7.5rem)] max-w-[1440px] min-h-0 gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_380px]">
                 {/* Validation Error Banner */}
                 {validationError && (
                     <div className="lg:col-span-2 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-3 text-rose-800 text-sm font-medium animate-shake">
@@ -269,10 +269,10 @@ export const SopSetupGate: React.FC = () => {
                 )}
 
                 {/* 1. 구성원 정보 Card (Item 11 Numbering) */}
-                <div className="min-h-0 flex flex-col gap-3">
-                <section className="p-3 rounded-xl bg-white border border-zinc-200/80 shadow-sm shrink-0">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
+                <div className="min-h-0 flex flex-col gap-4">
+                <section className="shrink-0 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+                    <div className="mb-3 flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-600 text-white">
                             <UserCheck className="w-5 h-5" />
                         </div>
                         <div>
@@ -283,7 +283,7 @@ export const SopSetupGate: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <div>
                             <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">
                                 구성원 이름 <span className="text-rose-500">*</span>
@@ -333,10 +333,10 @@ export const SopSetupGate: React.FC = () => {
                 </div>
 
                 {/* 3. 업무 맥락 Textarea */}
-                <aside className="min-h-0 overflow-y-auto pr-1 space-y-3">
-                <section className="p-4 rounded-xl bg-white border border-zinc-200/80 shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center">
+                <aside className="min-h-0 space-y-4 overflow-y-auto pr-1">
+                <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+                    <div className="mb-3 flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-500 text-white">
                             <FileText className="w-5 h-5" />
                         </div>
                         <div>
@@ -367,11 +367,11 @@ export const SopSetupGate: React.FC = () => {
                     </div>
 
                     <textarea
-                        rows={4}
+                        rows={3}
                         value={context}
                         onChange={(e) => setContext(e.target.value)}
                         placeholder="실제 업무 순서, 승인 조건, 예외 상황, 사용 시스템, 반드시 지켜야 할 기준, 협업 방식과 자주 되돌아가는 단계를 작성해 주세요."
-                        className="w-full p-4 bg-zinc-50 border border-zinc-300 rounded-xl text-sm text-zinc-900 leading-relaxed focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                        className="w-full rounded-md border border-zinc-300 bg-zinc-50 p-3 text-sm leading-relaxed text-zinc-900 focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                     />
                 </section>
 
@@ -383,8 +383,8 @@ export const SopSetupGate: React.FC = () => {
             </main>
 
             {/* Sticky Action Footer */}
-            <div className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-zinc-200 py-3 z-30">
-                <div className="max-w-[1500px] mx-auto px-5 flex items-center justify-between">
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 py-3 backdrop-blur-md">
+                <div className="mx-auto flex max-w-[1440px] items-center justify-between px-6">
                     <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
                         {workLibrary.confirmed ? (
                             <span className="flex items-center gap-1 text-emerald-600 font-semibold">

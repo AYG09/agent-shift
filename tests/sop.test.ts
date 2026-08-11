@@ -587,9 +587,11 @@ assert(routedReworkEdges.length >= 2, 'Loop-closing NO/condition branches must u
 assert(
     routedReworkEdges.every((edge) => {
         const route = edge.data?.reworkRoute as { points?: Array<{ x: number; y: number }> } | undefined;
-        return edge.sourceHandle?.endsWith('-rework') && edge.targetHandle?.includes('-rework-target') && (route?.points?.length || 0) >= 4;
+        return ['top', 'right', 'bottom', 'left'].includes(edge.sourceHandle || '') &&
+            ['top-target', 'right-target', 'bottom-target', 'left-target'].includes(edge.targetHandle || '') &&
+            (route?.points?.length || 0) >= 4;
     }),
-    'Rework routes must use dedicated ports and an explicit multi-segment route'
+    'Rework routes must join visible connection points with an explicit multi-segment route'
 );
 const sampleRoutesById = new Map(
     routedReworkEdges.map((edge) => [

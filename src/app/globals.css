@@ -341,6 +341,13 @@ body {
     animation: flow-dash 0.5s linear infinite;
 }
 
+/* React Flow gives every node its own stacking context. A tooltip's local
+   z-index cannot rise above a neighbouring node unless the hovered node itself
+   is promoted. This keeps the entire preview readable on dense SOP canvases. */
+.react-flow__node:has(.sop-step-node[data-hovered='true']) {
+    z-index: 1000 !important;
+}
+
 /* Handle Styles */
 .react-flow__handle {
     width: 10px;

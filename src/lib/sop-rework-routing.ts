@@ -57,21 +57,17 @@ function stepBounds(step: SopStepData, displayMode: 'compact' | 'standard' | 'de
 function getPort(bounds: Bounds, side: Side, target: boolean) {
     const width = bounds.right - bounds.left;
     const height = bounds.bottom - bounds.top;
-    // SopStepNode deliberately offsets its hidden rework handles (35% / 65%)
-    // from the visible, primary-flow handles. The custom SVG route must use
-    // those exact coordinates; routing from the geometric centre creates a
-    // small diagonal segment at the node boundary and makes a clean route look
-    // as if it attaches to the wrong point.
-    const horizontalRatio = target ? (side === 'top' ? 0.35 : 0.65) : side === 'top' ? 0.65 : 0.35;
-    const verticalRatio = target ? (side === 'left' ? 0.35 : 0.65) : side === 'left' ? 0.65 : 0.35;
+    // Rework paths share the visible connection points with the primary flow.
+    // Their lanes are already separated, so invisible offset handles only make
+    // the arrowhead appear to float beside a node instead of joining it.
     const point =
         side === 'top'
-            ? { x: bounds.left + width * horizontalRatio, y: bounds.top }
+            ? { x: bounds.left + width / 2, y: bounds.top }
             : side === 'right'
-              ? { x: bounds.right, y: bounds.top + height * verticalRatio }
+              ? { x: bounds.right, y: bounds.top + height / 2 }
               : side === 'bottom'
-                ? { x: bounds.left + width * horizontalRatio, y: bounds.bottom }
-                : { x: bounds.left, y: bounds.top + height * verticalRatio };
+                ? { x: bounds.left + width / 2, y: bounds.bottom }
+                : { x: bounds.left, y: bounds.top + height / 2 };
     const exit =
         side === 'top'
             ? { x: point.x, y: point.y - CLEARANCE }
@@ -83,7 +79,7 @@ function getPort(bounds: Bounds, side: Side, target: boolean) {
     return {
         point,
         exit,
-        handle: target ? `${side}-rework-target` : `${side}-rework`,
+        handle: target ? `${side}-target` : side,
     };
 }
 
