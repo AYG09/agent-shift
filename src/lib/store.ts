@@ -94,11 +94,18 @@ export function normalizeFlowNode(node: FlowNode): FlowNode {
     const isExplicit = !!node.shape;
     const shapeMode: 'auto' | 'manual' = rawShapeMode || (isExplicit ? 'manual' : 'auto');
 
+    // 수동 지정 shape는 절대 재계산하지 않는다 (의미 기반 추론이 추가되어도 이 불변식은 명시적으로 지켜야 함)
+    if (shapeMode === 'manual' && node.shape) {
+        return { ...node, shapeMode };
+    }
+
     const shape = normalizeFlowShape(
         node.shape,
         node.type,
         node.terminalType,
-        node.ioType
+        node.ioType,
+        node.label,
+        node.description
     );
 
     return {
@@ -120,12 +127,20 @@ export function aiNodeToFlowNode(
 
     const shapeMode: 'auto' | 'manual' = node.shapeMode === 'manual' ? 'manual' : 'auto';
 
-    const shape = normalizeFlowShape(
-        typeof node.shape === 'string' ? node.shape : undefined,
-        type,
-        node.terminalType === 'start' || node.terminalType === 'end' ? node.terminalType : undefined,
-        node.ioType === 'input' || node.ioType === 'output' ? node.ioType : undefined
-    );
+    const label = String(node.label || '노드');
+    const description = typeof node.description === 'string' ? node.description : undefined;
+
+    // 수동 지정(shapeMode='manual') shape는 재계산하지 않고, 그 외에는 의미 기반 추론까지 활용한다
+    const shape = shapeMode === 'manual' && typeof node.shape === 'string' && node.shape
+        ? normalizeFlowShape(node.shape, type)
+        : normalizeFlowShape(
+            typeof node.shape === 'string' ? node.shape : undefined,
+            type,
+            node.terminalType === 'start' || node.terminalType === 'end' ? node.terminalType : undefined,
+            node.ioType === 'input' || node.ioType === 'output' ? node.ioType : undefined,
+            label,
+            description
+        );
 
     let metrics = node.metrics as FlowNode['metrics'];
     if (!metrics && (node.duration !== undefined || node.timeMinutes !== undefined)) {
@@ -144,8 +159,8 @@ export function aiNodeToFlowNode(
     return {
         id: String(node.id || `node-${Date.now()}`),
         type,
-        label: String(node.label || '노드'),
-        description: typeof node.description === 'string' ? node.description : undefined,
+        label,
+        description,
         shape,
         shapeMode,
         terminalType: node.terminalType === 'start' || node.terminalType === 'end' ? node.terminalType : undefined,
@@ -176,6 +191,9 @@ export function flowNodeToAiContext(node: FlowNode) {
     };
 }
 
+// 분기 표시 문구(label)와 의미(branchType)를 분리한다 - Zod BranchTypeSchema와 동일한 값 집합
+export type EdgeBranchType = 'yes' | 'no' | 'condition' | 'default';
+
 export interface FlowEdge {
     id: string;
     source: string;
@@ -183,6 +201,9 @@ export interface FlowEdge {
     sourceHandle?: string;
     targetHandle?: string;
     animated?: boolean;
+    label?: string;
+    branchType?: EdgeBranchType;
+    condition?: string;
 }
 
 function toSourceHandle(handle: string | null | undefined): string {

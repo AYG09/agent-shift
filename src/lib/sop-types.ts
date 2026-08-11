@@ -1,0 +1,100 @@
+import { type FlowShape } from './flow-shapes';
+
+export type SopDisplayMode = 'compact' | 'standard' | 'detailed';
+export type SopReviewStatus = 'ai-draft' | 'reviewed' | 'confirmed';
+
+export interface SopMember {
+    id?: string;
+    name: string;
+    jobRole: string;
+    organization?: string;
+}
+
+export interface WorkLibrarySkill {
+    id: string;
+    name: string;
+    description?: string;
+}
+
+export interface WorkLibrarySelection {
+    taskId: string;
+    taskName: string;
+    activityId?: string;
+    activityName?: string;
+    skills: WorkLibrarySkill[];
+    sourceType: 'task' | 'activity';
+    confirmed: boolean;
+}
+
+export interface SopRequiredSkill {
+    skillId?: string;
+    name: string;
+    requiredLevel?: 'basic' | 'intermediate' | 'advanced';
+    reason?: string;
+    source: 'work-library' | 'ai-suggested';
+    accepted: boolean;
+}
+
+export interface SopStepData {
+    id: string;
+    title: string;
+    definition: string;
+    detailedInstructions?: string;
+    responsibleRole?: string;
+    inputs?: string[];
+    outputs?: string[];
+    tools?: string[];
+    cautions?: string[];
+    decisionRules?: string[];
+    requiredSkills: SopRequiredSkill[];
+    estimatedDuration?: {
+        value: number;
+        unit: 'minutes' | 'hours' | 'days' | 'weeks';
+    };
+    type?: string;
+    shape: FlowShape;
+    terminalType?: 'start' | 'end';
+    ioType?: 'input' | 'output';
+    position: { x: number; y: number };
+    reviewStatus: SopReviewStatus;
+}
+
+export interface SopEdge {
+    id: string;
+    source: string;
+    target: string;
+    label?: string;
+    branchType?: 'yes' | 'no' | 'condition' | 'default';
+    condition?: string;
+    sourceHandle?: string;
+    targetHandle?: string;
+}
+
+export interface SopSetupConfig {
+    sourceType: 'task' | 'activity';
+    detailLevel: 'simple' | 'standard' | 'detailed';
+    minSteps: number;
+    maxSteps: number;
+    branchPolicy: 'auto' | 'none' | 'max';
+    maxBranches: number;
+    allowRework: boolean;
+    maxTotalNodes?: number;
+    maxLoops?: number;
+    splitComplexSteps?: boolean;
+}
+
+export interface SopDocument {
+    id: string;
+    title: string;
+    member: SopMember;
+    workLibrary: WorkLibrarySelection;
+    context: string;
+    setupConfig?: SopSetupConfig;
+    steps: SopStepData[];
+    edges: SopEdge[];
+    displayMode: SopDisplayMode;
+    reviewStatus: SopReviewStatus;
+    createdAt: string;
+    updatedAt: string;
+    isSampleData?: boolean;
+}

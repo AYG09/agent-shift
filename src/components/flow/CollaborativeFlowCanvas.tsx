@@ -111,6 +111,7 @@ export function CollaborativeFlowCanvas() {
             targetHandle: e.targetHandle,
             animated: e.animated,
             type: 'default',
+            data: { label: e.label, branchType: e.branchType, condition: e.condition },
         }));
     }, [viewMode, storeAsIsEdges, storeToBeEdges]);
 

@@ -14,14 +14,6 @@ import {
     FlowNode,
 } from '../src/lib/store';
 import { getNodeContentState } from '../src/components/flow/CustomNodes';
-import { QUEUE_LOOP_SHAPE_GUIDE, SHAPE_FIELD_DESCRIBE_HINT } from '../src/lib/ai-shape-guide';
-import {
-    getAsIsPrompt,
-    getToBePrompt,
-    getDrilldownPromptAsIs,
-    getDrilldownPromptToBe,
-    getNodeSplitPrompt,
-} from '../src/app/api/ai/route';
 
 console.log('=== Step 1: Verification of 25 Canonical Shape IDs (including queuedData & loopLimit) ===');
 let passCount = 0;
@@ -343,72 +335,8 @@ if (test5.compact === true && test5.canShowPopover === true) {
     failCount++;
 }
 
-console.log('\n=== Step 10: AI 생성 경로의 queuedData/loopLimit 선택 기준 노출 검증 ===');
-
-// 공통 가이드 상수 자체가 선택 기준 키워드를 포함하는지 확인
-const guideKeywords = [
-    '메시지 큐',
-    '작업 대기열',
-    '이벤트 버퍼',
-    'Kafka',
-    'RabbitMQ',
-    'SQS',
-    '최대 반복 횟수',
-    '재시도 한계',
-    '루프 임계점',
-];
-const missingFromGuide = guideKeywords.filter((k) => !QUEUE_LOOP_SHAPE_GUIDE.includes(k));
-if (
-    QUEUE_LOOP_SHAPE_GUIDE.includes("shape='queuedData'") &&
-    QUEUE_LOOP_SHAPE_GUIDE.includes("shape='loopLimit'") &&
-    missingFromGuide.length === 0
-) {
-    console.log('PASS: QUEUE_LOOP_SHAPE_GUIDE에 queuedData/loopLimit 선택 기준 키워드가 모두 포함됨');
-    passCount++;
-} else {
-    console.error('FAIL: QUEUE_LOOP_SHAPE_GUIDE 키워드 누락:', missingFromGuide);
-    failCount++;
-}
-
-// Zod .describe() 힌트에도 두 도형이 언급되는지 확인 (스키마상 shape 설명)
-if (SHAPE_FIELD_DESCRIBE_HINT.includes('queuedData') && SHAPE_FIELD_DESCRIBE_HINT.includes('loopLimit')) {
-    console.log('PASS: SHAPE_FIELD_DESCRIBE_HINT(zod shape describe)에 queuedData/loopLimit 언급됨');
-    passCount++;
-} else {
-    console.error('FAIL: SHAPE_FIELD_DESCRIBE_HINT에 queuedData/loopLimit 누락:', SHAPE_FIELD_DESCRIBE_HINT);
-    failCount++;
-}
-
-// 6개 AI 생성 경로 각각의 실제 프롬프트 출력에 queuedData/loopLimit 선택 기준이 포함되는지 확인
-const sampleContext = { industry: '금융', role: '심사역', task: '대출 심사', timeScale: '월간' };
-const sampleAgentNode = { id: 'n-agent', label: 'AI 처리', description: 'AI 처리 설명', type: 'agent' };
-const sampleHumanNode = { id: 'n-human', label: '검토', description: '검토 설명', type: 'process' };
-
-const aiPathChecks: Array<{ name: string; prompt: string }> = [
-    { name: 'As-Is 워크플로우 생성', prompt: getAsIsPrompt(sampleContext) },
-    { name: 'To-Be 워크플로우 생성', prompt: getToBePrompt(sampleContext, [], 'balanced') },
-    { name: '인간 단계 드릴다운 (As-Is)', prompt: getDrilldownPromptAsIs(sampleHumanNode, sampleContext, null) },
-    { name: '인간 단계 드릴다운 (To-Be)', prompt: getDrilldownPromptToBe(sampleHumanNode, sampleContext, null) },
-    { name: 'AI Agent 단계 드릴다운', prompt: getDrilldownPromptToBe(sampleAgentNode, sampleContext, null) },
-    { name: '노드 분할', prompt: getNodeSplitPrompt(sampleContext, { label: '단계', type: 'process' }, 'asis') },
-];
-
-let aiPathsPassed = true;
-for (const { name, prompt } of aiPathChecks) {
-    const hasQueuedData = prompt.includes('queuedData');
-    const hasLoopLimit = prompt.includes('loopLimit');
-    if (hasQueuedData && hasLoopLimit) {
-        console.log(`PASS: '${name}' 프롬프트에 queuedData/loopLimit 선택 기준 포함됨`);
-    } else {
-        console.error(`FAIL: '${name}' 프롬프트에 queuedData/loopLimit 누락 (queuedData=${hasQueuedData}, loopLimit=${hasLoopLimit})`);
-        aiPathsPassed = false;
-    }
-}
-if (aiPathsPassed) {
-    passCount++;
-} else {
-    failCount++;
-}
+// Step 10 (AI 생성 경로의 queuedData/loopLimit 선택 기준 노출 검증)은
+// tests/flow-branches.test.ts로 이동 및 25개 전체 도형 검증으로 확장됨 (npm run test:flow-branches)
 
 if (failCount === 0) {
     console.log('\nALL VERIFICATION TESTS PASSED SUCCESSFULLY! 🎉');

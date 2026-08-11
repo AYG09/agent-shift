@@ -377,24 +377,117 @@ const LEGACY_ALIAS_MAP: Record<string, FlowShape> = {
 };
 
 /**
+ * label/description의 키워드로 도형을 추론하는 의미 기반 fallback.
+ *
+ * type만 보고 무조건 'process'로 되돌리는 대신, 레이블에 담긴 구체적 의미
+ * (예: "우선순위 조율" -> sort, "계약서 작성" -> document)를 최대한 반영한다.
+ * 25개를 골고루 쓰기 위한 것이 아니라 - 의미가 명확할 때만 특화 도형을 고르고,
+ * 모호하면 그대로 'process'/'decision'/'data' 등 구조적 fallback으로 떨어진다.
+ */
+export interface ShapeInferenceInput {
+    label?: string;
+    description?: string;
+    type?: string;
+    terminalType?: string;
+    ioType?: string;
+    shape?: string;
+}
+
+// 검사 순서가 중요하다: 더 구체적인(희소한) 도형을 먼저 검사해야
+// "저장"처럼 폭넓은 키워드를 가진 일반 도형에 앞서 매칭된다.
+const KEYWORD_SHAPE_RULES: Array<{ shape: FlowShape; keywords: string[] }> = [
+    { shape: 'loopLimit', keywords: ['최대 반복', '재시도 한계', '반복 횟수', '루프 한계', '루프 임계', '최대 시도', '재협의 한계', '재시도 횟수', '반복 종료 조건'] },
+    { shape: 'queuedData', keywords: ['kafka', 'rabbitmq', 'sqs', '메시지 큐', '작업 대기열', '이벤트 버퍼', '큐'] },
+    { shape: 'sort', keywords: ['우선순위 조율', '순위 조율', '정렬', '순위화', '점수순'] },
+    { shape: 'collate', keywords: ['취합', '대조', '맞춤 검증'] },
+    { shape: 'extract', keywords: ['추출', '선별', '분리'] },
+    { shape: 'document', keywords: ['계약서', '보고서', '신청서', '공문', '기안서', '기안'] },
+    { shape: 'database', keywords: ['db 조회', 'db 저장', '데이터베이스', 'db 갱신'] },
+    { shape: 'manualInput', keywords: ['폼 입력', '키보드 입력', '스캔 입력', '입력 화면'] },
+    { shape: 'manualOperation', keywords: ['수기', '오프라인 검수', '물리적 처리', '물리적 이동'] },
+    { shape: 'display', keywords: ['화면 표시', '대시보드', '알림 표시'] },
+    { shape: 'delay', keywords: ['응답 대기', '보류', '대기'] },
+    { shape: 'preparation', keywords: ['환경 설정', '초기화', '사전 준비', '사전 점검'] },
+    { shape: 'or', keywords: ['하나 이상 충족', 'or 조건'] },
+    { shape: 'merge', keywords: ['합류', '병합'] },
+    { shape: 'predefinedProcess', keywords: ['하위 절차', '모듈 호출', '서브루틴', '외부 서비스 호출'] },
+    { shape: 'storedData', keywords: ['백업', '아카이브', '로그 저장'] },
+    { shape: 'internalStorage', keywords: ['세션', '캐시', '내부 상태'] },
+    { shape: 'stream', keywords: ['실시간', '스트림'] },
+    { shape: 'card', keywords: ['카드형', '천공 카드'] },
+    { shape: 'offPageConnector', keywords: ['다른 페이지', '다른 프로세스 도면', '외부 프로세스'] },
+    { shape: 'connector', keywords: ['연결점', '흐름 참조'] },
+];
+
+// "최대 3회", "최대 5번"처럼 반복/재시도 한계를 숫자로 명시한 표현은 loopLimit의 강한 신호.
+const LOOP_LIMIT_COUNT_PATTERN = /최대\s*\d+\s*(회|번|차)/;
+
+// "여부"/"인가"/"확인" 등은 조건 판단(decision)의 강한 신호. sort/집계 같은
+// 키워드가 섞여 있어도 "동점자 발생 여부"는 decision이어야 하므로 최우선으로 검사한다.
+const DECISION_TEXT_PATTERN = /여부|인가\?|확인\?|맞는지|승인.*여부|합격.*여부|수락.*여부/;
+
+export function inferFlowShapeFromContent(input: ShapeInferenceInput): FlowShape {
+    // 1. 이미 유효한 canonical shape면 그대로 신뢰
+    if (input.shape && CANONICAL_SHAPE_SET.has(input.shape)) {
+        return input.shape as FlowShape;
+    }
+
+    // 2. 구조적으로 명확한 신호(terminal/decision)가 텍스트 키워드보다 우선
+    if (input.type === 'terminal' || input.terminalType) {
+        return 'terminal';
+    }
+
+    const text = `${input.label || ''} ${input.description || ''}`.toLowerCase();
+
+    if (input.type === 'decision' || DECISION_TEXT_PATTERN.test(text)) {
+        return 'decision';
+    }
+
+    if (LOOP_LIMIT_COUNT_PATTERN.test(text)) {
+        return 'loopLimit';
+    }
+
+    for (const rule of KEYWORD_SHAPE_RULES) {
+        if (rule.keywords.some((k) => text.includes(k.toLowerCase()))) {
+            return rule.shape;
+        }
+    }
+
+    if (input.type === 'io' || input.ioType) {
+        return 'data';
+    }
+    if (input.type === 'subprocess') {
+        return 'predefinedProcess';
+    }
+
+    // 3. 의미가 모호하면 구조적 fallback
+    return 'process';
+}
+
+/**
  * 입력을 올바른 FlowShape로 정규화 (camelCase 보존 & 호환성 처리)
+ *
+ * label/description을 함께 전달하면 shape가 없거나 무효할 때 키워드 기반으로
+ * 추론한다(inferFlowShapeFromContent). 생략하면 기존처럼 type 기반 추천만 적용된다.
  */
 export function normalizeFlowShape(
     shape?: string,
     type?: string,
     terminalType?: string,
-    ioType?: string
+    ioType?: string,
+    label?: string,
+    description?: string
 ): FlowShape {
     if (!shape || typeof shape !== 'string') {
-        return getRecommendedShapeForType(type, terminalType, ioType);
+        return inferFlowShapeFromContent({ label, description, type, terminalType, ioType });
     }
 
     const trimmed = shape.trim();
     if (!trimmed) {
-        return getRecommendedShapeForType(type, terminalType, ioType);
+        return inferFlowShapeFromContent({ label, description, type, terminalType, ioType });
     }
 
-    // 1. 원본 대소문자 그대로 canonical ID와 매칭 검사
+    // 1. 원본 대소문자 그대로 canonical ID와 매칭 검사 (수동 지정 shape는 여기서 항상 그대로 반환됨)
     if (CANONICAL_SHAPE_SET.has(trimmed)) {
         return trimmed as FlowShape;
     }
@@ -420,8 +513,8 @@ export function normalizeFlowShape(
         }
     }
 
-    // 4. 매칭되는 도형이 없을 때 유형 기반 추천 도형 fallback
-    return getRecommendedShapeForType(type, terminalType, ioType);
+    // 4. 매칭되는 도형이 없을 때 의미 기반 추론으로 fallback
+    return inferFlowShapeFromContent({ label, description, type, terminalType, ioType });
 }
 
 export interface FlowShapePolicy {

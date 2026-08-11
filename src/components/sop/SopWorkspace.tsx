@@ -1,0 +1,468 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+    CheckCircle2,
+    Save,
+    RotateCcw,
+    Sliders,
+    Eye,
+    EyeOff,
+    Check,
+    AlertCircle,
+    ArrowLeft,
+    Sparkles,
+    Undo2,
+    Redo2,
+    Plus,
+    BookOpen,
+} from 'lucide-react';
+import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
+import { SopSidebar } from './SopSidebar';
+import { SopCanvas } from './SopCanvas';
+import { SopStepInspector } from './SopStepInspector';
+import { SopDisplayMode, SopStepData } from '@/lib/sop-types';
+
+export const SopWorkspace: React.FC = () => {
+    const router = useRouter();
+    const {
+        document,
+        generateFromSample,
+        setDisplayMode,
+        customerReviewMode,
+        toggleCustomerReviewMode,
+        confirmFullSop,
+        saveSnapshot,
+        lastSavedTimestamp,
+        undo,
+        redo,
+        history,
+        future,
+        insertStepBeforeEnd,
+        updateDocumentTitle,
+    } = useSopPrototypeStore();
+
+    const [showMiniMap, setShowMiniMap] = useState(true);
+    const [showBranchLabels, setShowBranchLabels] = useState(true);
+
+    const [showCriteriaModal, setShowCriteriaModal] = useState(false);
+    const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+    const [confirmErrors, setConfirmErrors] = useState<string[] | null>(null);
+    const [saveToast, setSaveToast] = useState(false);
+    const [addStepNotice, setAddStepNotice] = useState<string | null>(null);
+
+    // Auto-load sample SOP if document is missing on direct /sop/workspace URL access
+    useEffect(() => {
+        if (!document) {
+            generateFromSample();
+        }
+    }, [document, generateFromSample]);
+
+    if (!document) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+                <div className="flex items-center gap-2 text-zinc-500 font-medium">
+                    <Sparkles className="w-5 h-5 animate-spin text-indigo-600" /> SOP 데이터를 로딩 중입니다...
+                </div>
+            </div>
+        );
+    }
+
+    const handleSaveDraft = () => {
+        saveSnapshot();
+        setSaveToast(true);
+        setTimeout(() => setSaveToast(false), 2000);
+    };
+
+    const handleConfirmSop = () => {
+        const result = confirmFullSop();
+        if (!result.success) {
+            setConfirmErrors(result.errors);
+        } else {
+            setConfirmErrors(null);
+            handleSaveDraft();
+        }
+    };
+
+    const handleAddStepClick = () => {
+        const newId = `step-${Date.now()}`;
+        const endStep = document.steps.find((s) => s.terminalType === 'end');
+
+        const newStep: SopStepData = {
+            id: newId,
+            title: '신규 수행 단계',
+            definition: '수행할 주요 작업 항목과 기준 및 결과를 작성해 주세요.',
+            shape: 'process',
+            position: endStep ? { x: endStep.position.x - 40, y: endStep.position.y + 180 } : { x: 200, y: 150 },
+            requiredSkills: [],
+            reviewStatus: 'ai-draft',
+        };
+
+        // 새 단계는 항상 종료 노드 바로 앞에 삽입한다(종료 뒤에 붙는 잘못된 edge를 만들지 않는다).
+        // 안전하게 삽입할 위치를 정할 수 없는 구조(종료 노드 0/2개 이상, 종료로 들어오는 edge 없음)라면
+        // 아무 edge도 만들지 않고 사용자에게 캔버스에서 직접 위치를 지정하도록 안내한다.
+        const result = insertStepBeforeEnd(newStep);
+        if (!result.success) {
+            setAddStepNotice(result.reason || '단계를 자동으로 삽입할 위치를 찾지 못했습니다. 캔버스에서 직접 연결선을 그어 추가해 주세요.');
+            window.setTimeout(() => setAddStepNotice(null), 5000);
+        }
+    };
+
+    const formatTimestamp = (tsString: string | null) => {
+        if (!tsString) return '자동 저장됨';
+        const d = new Date(tsString);
+        return `자동 저장됨 (${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')})`;
+    };
+
+    return (
+        <div className="h-screen flex flex-col bg-zinc-100 overflow-hidden font-sans">
+            {/* Top Banner if Sample Data Mode (Item 9 Requirement) */}
+            {document.isSampleData && (
+                <div className="bg-amber-500 text-white text-xs font-bold py-1 px-4 text-center flex items-center justify-center gap-2 shrink-0">
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>[샘플 데이터로 실행 중] 실제 AI 생성이 아닌 테스트용 샘플 SOP 데이터셋입니다.</span>
+                </div>
+            )}
+
+            {/* Top Header */}
+            <header className="h-14 bg-white border-b border-zinc-200 px-4 flex items-center justify-between shrink-0 z-30 shadow-2xs">
+                {/* Left Header Group */}
+                <div className="flex items-center gap-3 min-w-0">
+                    <button
+                        type="button"
+                        onClick={() => router.push('/sop/setup')}
+                        className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
+                        title="게이트 설정으로 돌아가기"
+                        aria-label="게이트 설정으로 돌아가기"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                    </button>
+
+                    <div className="h-4 w-px bg-zinc-300" />
+
+                    <div className="flex items-center gap-2 min-w-0">
+                        <input
+                            type="text"
+                            value={document.title}
+                            onChange={(e) => updateDocumentTitle(e.target.value)}
+                            className="text-sm font-bold text-zinc-900 bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-indigo-500 focus:bg-white px-1.5 py-0.5 rounded focus:outline-hidden max-w-[260px] truncate"
+                        />
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200 shrink-0">
+                            {document.member.name} ({document.member.jobRole})
+                        </span>
+                        <span
+                            className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                                document.reviewStatus === 'confirmed'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : document.reviewStatus === 'reviewed'
+                                    ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                    : 'bg-amber-100 text-amber-800 border border-amber-300'
+                            }`}
+                        >
+                            {document.reviewStatus === 'confirmed'
+                                ? '확정 완료'
+                                : document.reviewStatus === 'reviewed'
+                                ? '검토 완료'
+                                : 'AI 초안 검토 중'}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Center Section: Customer Review Mode & 3-density Comparison Switcher */}
+                <div className="hidden lg:flex items-center gap-3">
+                    {/* Display Level Quick Comparison Switcher */}
+                    <div className="inline-flex p-1 bg-zinc-100 border border-zinc-200 rounded-xl">
+                        <span className="text-[11px] font-semibold text-zinc-500 px-2 py-1 flex items-center">
+                            표시 수준:
+                        </span>
+                        {[
+                            { id: 'compact' as SopDisplayMode, label: '단계명 중심' },
+                            { id: 'standard' as SopDisplayMode, label: '단계명 + 개요' },
+                            { id: 'detailed' as SopDisplayMode, label: '단계명 + 개요 + SKILL' },
+                        ].map((mode) => (
+                            <button
+                                key={mode.id}
+                                type="button"
+                                onClick={() => setDisplayMode(mode.id)}
+                                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                                    document.displayMode === mode.id
+                                        ? 'bg-white text-indigo-700 shadow-2xs'
+                                        : 'text-zinc-600 hover:text-zinc-900'
+                                }`}
+                            >
+                                {mode.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Customer Review Mode Toggle */}
+                    <button
+                        type="button"
+                        onClick={toggleCustomerReviewMode}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+                            customerReviewMode
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                                : 'bg-white text-zinc-700 border-zinc-300 hover:bg-zinc-50'
+                        }`}
+                    >
+                        {customerReviewMode ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                        고객 검토 모드 {customerReviewMode ? 'ON' : 'OFF'}
+                    </button>
+                </div>
+
+                {/* Right Action Buttons */}
+                <div className="flex items-center gap-2">
+                    {/* Undo / Redo */}
+                    {!customerReviewMode && (
+                        <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200 mr-1">
+                            <button
+                                type="button"
+                                onClick={undo}
+                                disabled={history.length === 0}
+                                className="p-1 text-zinc-600 hover:text-zinc-900 disabled:opacity-30"
+                                title="실행 취소 (Undo)"
+                                aria-label="실행 취소"
+                            >
+                                <Undo2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={redo}
+                                disabled={future.length === 0}
+                                className="p-1 text-zinc-600 hover:text-zinc-900 disabled:opacity-30"
+                                title="다시 실행 (Redo)"
+                                aria-label="다시 실행"
+                            >
+                                <Redo2 className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    )}
+
+                    {!customerReviewMode && (
+                        <button
+                            type="button"
+                            onClick={handleAddStepClick}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-semibold rounded-xl border border-zinc-300 transition-colors"
+                        >
+                            <Plus className="w-3.5 h-3.5" /> 단계 추가
+                        </button>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={() => setShowCriteriaModal(true)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-semibold rounded-xl border border-zinc-300 transition-colors"
+                    >
+                        <Sliders className="w-3.5 h-3.5" /> 조건 보기
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setShowRegenerateModal(true)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold rounded-xl border border-amber-200 transition-colors"
+                    >
+                        <RotateCcw className="w-3.5 h-3.5" /> 다시 생성
+                    </button>
+
+                    {/* Auto-save Status & Snapshot Button (Item 11 Requirement) */}
+                    <button
+                        type="button"
+                        onClick={handleSaveDraft}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl transition-colors shadow-2xs"
+                        title={formatTimestamp(lastSavedTimestamp)}
+                    >
+                        <Save className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="hidden sm:inline">{formatTimestamp(lastSavedTimestamp)}</span>
+                        <span className="sm:hidden">저장</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleConfirmSop}
+                        className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-600/20"
+                    >
+                        <CheckCircle2 className="w-3.5 h-3.5" /> SOP 확정
+                    </button>
+                </div>
+            </header>
+
+            {/* Add-step Notice (safe auto-insert not possible) */}
+            {addStepNotice && (
+                <div
+                    role="status"
+                    className="fixed top-16 right-6 z-50 max-w-sm bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs font-semibold shadow-lg flex items-start gap-2"
+                >
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{addStepNotice}</span>
+                </div>
+            )}
+
+            {/* Save Toast Notification */}
+            {saveToast && (
+                <div className="fixed top-16 right-6 z-50 bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg flex items-center gap-2 animate-bounce">
+                    <Check className="w-4 h-4" /> SOP 스냅샷이 수동 저장되었습니다.
+                </div>
+            )}
+
+            {/* Main Workspace Body */}
+            <div className="flex-1 flex overflow-hidden relative">
+                {/* Left Sidebar */}
+                <SopSidebar
+                    showMiniMap={showMiniMap}
+                    setShowMiniMap={setShowMiniMap}
+                    showBranchLabels={showBranchLabels}
+                    setShowBranchLabels={setShowBranchLabels}
+                />
+
+                {/* Center Canvas */}
+                <div className="flex-1 h-full relative">
+                    <SopCanvas showMiniMap={showMiniMap} showBranchLabels={showBranchLabels} />
+                </div>
+
+                {/* Right Step Inspector */}
+                <div className="w-80 shrink-0 h-full">
+                    <SopStepInspector />
+                </div>
+            </div>
+
+            {/* Criteria Modal (Accessible Dialog Item 11) */}
+            {showCriteriaModal && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="criteria-modal-title"
+                    className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
+                >
+                    <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-zinc-200">
+                        <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
+                            <h3 id="criteria-modal-title" className="text-sm font-bold text-zinc-900 flex items-center gap-2">
+                                <Sliders className="w-4 h-4 text-indigo-600" /> SOP 생성 조건 정보
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowCriteriaModal(false)}
+                                className="text-zinc-400 hover:text-zinc-700 text-lg font-bold"
+                                aria-label="닫기"
+                            >
+                                &times;
+                            </button>
+                        </div>
+
+                        <div className="space-y-2 text-xs text-zinc-700 bg-zinc-50 p-3.5 rounded-xl border border-zinc-200">
+                            <div>
+                                <span className="font-semibold text-zinc-900 block">담당자:</span>
+                                {document.member.name} ({document.member.jobRole} / {document.member.organization || '팀'})
+                            </div>
+                            <div>
+                                <span className="font-semibold text-zinc-900 block">Work Library:</span>
+                                Task: {document.workLibrary.taskName} | Activity:{' '}
+                                {document.workLibrary.activityName || '전체'}
+                            </div>
+                            <div>
+                                <span className="font-semibold text-zinc-900 block">생성 설정:</span>
+                                상세: {document.setupConfig?.detailLevel || 'standard'} | 단계:{' '}
+                                {document.setupConfig?.minSteps}~{document.setupConfig?.maxSteps} | 분기:{' '}
+                                {document.setupConfig?.branchPolicy}
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowCriteriaModal(false)}
+                                className="px-4 py-1.5 bg-zinc-900 text-white text-xs font-semibold rounded-xl"
+                            >
+                                닫기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Regenerate Confirm Modal */}
+            {showRegenerateModal && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="regenerate-modal-title"
+                    className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
+                >
+                    <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-zinc-200">
+                        <div className="flex items-center gap-3 text-amber-800">
+                            <AlertCircle className="w-6 h-6 text-amber-600 shrink-0" />
+                            <h3 id="regenerate-modal-title" className="text-base font-bold text-zinc-900">SOP 다시 생성 안내</h3>
+                        </div>
+
+                        <p className="text-xs text-zinc-600 leading-relaxed">
+                            현재 수정한 내용이 초기화될 수 있습니다. 게이트 설정 화면으로 돌아가서 AI SOP를 다시
+                            생성하시겠습니까?
+                        </p>
+
+                        <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-200">
+                            <button
+                                type="button"
+                                onClick={() => setShowRegenerateModal(false)}
+                                className="px-4 py-2 bg-zinc-100 text-zinc-700 text-xs font-semibold rounded-xl hover:bg-zinc-200"
+                            >
+                                취소
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowRegenerateModal(false);
+                                    router.push('/sop/setup');
+                                }}
+                                className="px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-700"
+                            >
+                                게이트로 이동하여 재생성
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* SOP Confirm Errors Modal */}
+            {confirmErrors && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="confirm-errors-modal-title"
+                    className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
+                >
+                    <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-zinc-200">
+                        <div className="flex items-center gap-3 text-rose-800 border-b border-rose-100 pb-3">
+                            <AlertCircle className="w-6 h-6 text-rose-600 shrink-0" />
+                            <div>
+                                <h3 id="confirm-errors-modal-title" className="text-base font-bold text-zinc-900">SOP 확정 조건 미충족 안내</h3>
+                                <p className="text-xs text-zinc-500">다음 미해결 항목을 보완해야 SOP를 확정할 수 있습니다.</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {confirmErrors.map((err, idx) => (
+                                <div
+                                    key={idx}
+                                    className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 font-medium flex items-start gap-2"
+                                >
+                                    <span className="font-bold">•</span>
+                                    <span>{err}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex justify-end pt-3 border-t border-zinc-200">
+                            <button
+                                type="button"
+                                onClick={() => setConfirmErrors(null)}
+                                className="px-5 py-2 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800"
+                            >
+                                확인 및 검토 계속하기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};

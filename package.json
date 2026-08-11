@@ -8,6 +8,9 @@
         "start": "next start",
         "lint": "eslint",
         "test:shapes": "tsx tests/flow-shapes.test.ts && tsx tests/terminal-node.test.tsx",
+        "test:flow-branches": "tsx tests/flow-branches.test.ts",
+        "test:sop": "tsx tests/sop.test.ts",
+        "test:sop-demo": "tsx tests/sop-demo.test.ts",
         "format": "prettier --write ."
     },
     "dependencies": {
@@ -40,6 +43,7 @@
         "@types/node": "^20",
         "@types/react": "^19",
         "@types/react-dom": "^19",
+        "@types/react-test-renderer": "^19.1.0",
         "baseline-browser-mapping": "^2.10.8",
         "eslint": "^9",
         "eslint-config-next": "16.0.7",

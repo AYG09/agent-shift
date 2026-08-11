@@ -24,8 +24,9 @@ import {
     CommandList,
 } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
-import { useAppStore, SCENARIO_INFO, type ScenarioType, aiNodeToFlowNode, flowNodeToAiContext } from '@/lib/store';
-import { FLOW_SHAPES } from '@/lib/flow-shapes';
+import { useAppStore, SCENARIO_INFO, type ScenarioType, aiNodeToFlowNode, flowNodeToAiContext, type FlowEdge } from '@/lib/store';
+import { layoutFlowGraph } from '@/lib/flow-layout';
+import { applyDrilldownSubSteps } from '@/lib/drilldown-apply';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
 import { ShareDialog } from '@/components/collaboration/ShareDialog';
@@ -353,14 +354,20 @@ function FlowPageContent() {
         if (result) {
             // AI 응답을 공통 aiNodeToFlowNode를 통해 완벽히 보존 및 변환
             const storeNodes = result.nodes.map((node: Record<string, unknown>) => aiNodeToFlowNode(node));
-            const storeEdges = result.edges.map((edge: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }) => ({
+            const storeEdges: FlowEdge[] = result.edges.map((edge: {
+                id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string;
+                label?: string; branchType?: FlowEdge['branchType']; condition?: string;
+            }) => ({
                 id: edge.id,
                 source: edge.source,
                 target: edge.target,
-                sourceHandle: edge.sourceHandle,
-                targetHandle: edge.targetHandle,
+                label: edge.label,
+                branchType: edge.branchType,
+                condition: edge.condition,
             }));
-            setAsIsFlow(storeNodes, storeEdges);
+            // 새로 생성된 플로우이므로 전체를 분기 구조에 맞춰 자동 배치한다 (AI가 준 position은 신뢰하지 않음)
+            const { nodes: laidOutNodes, edges: laidOutEdges } = layoutFlowGraph(storeNodes, storeEdges);
+            setAsIsFlow(laidOutNodes, laidOutEdges);
         }
     };
 
@@ -386,14 +393,20 @@ function FlowPageContent() {
         if (result) {
             // AI 응답을 공통 aiNodeToFlowNode를 통해 완벽히 보존 및 변환
             const storeNodes = result.nodes.map((node: Record<string, unknown>) => aiNodeToFlowNode(node));
-            const storeEdges = result.edges.map((edge: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }) => ({
+            const storeEdges: FlowEdge[] = result.edges.map((edge: {
+                id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string;
+                label?: string; branchType?: FlowEdge['branchType']; condition?: string;
+            }) => ({
                 id: edge.id,
                 source: edge.source,
                 target: edge.target,
-                sourceHandle: edge.sourceHandle,
-                targetHandle: edge.targetHandle,
+                label: edge.label,
+                branchType: edge.branchType,
+                condition: edge.condition,
             }));
-            setToBeFlow(storeNodes, storeEdges);
+            // 새로 생성된 플로우이므로 전체를 분기 구조에 맞춰 자동 배치한다 (AI가 준 position은 신뢰하지 않음)
+            const { nodes: laidOutNodes, edges: laidOutEdges } = layoutFlowGraph(storeNodes, storeEdges);
+            setToBeFlow(laidOutNodes, laidOutEdges);
             // 자동으로 To-Be 뷰로 전환
             setViewMode('tobe');
         }
@@ -475,64 +488,30 @@ function FlowPageContent() {
 
         const targetNodes = viewMode === 'tobe' ? toBeNodes : asIsNodes;
         const targetEdges = viewMode === 'tobe' ? toBeEdges : asIsEdges;
-        
+
         const originalNode = targetNodes.find((n) => n.id === drilldownNode.id);
         if (!originalNode) return;
 
-        // 새 노드들 생성 (도형 높이를 고려하여 하위 노드가 겹치지 않게 가변 간격 배치)
-        let currentY = originalNode.position.y;
-
-        const newNodes: typeof targetNodes = drilldownResult.subSteps.map((step, idx) => {
-            const rawNode = {
-                id: `${drilldownNode.id}-step-${idx}`,
+        const { nodes: newNodes, edges: newEdges } = applyDrilldownSubSteps({
+            parentNodeId: drilldownNode.id,
+            parentPosition: originalNode.position,
+            subSteps: drilldownResult.subSteps.map((step) => ({
+                id: step.id,
                 label: step.label,
                 description: step.description,
-                type: step.type || 'process',
+                type: step.type,
                 shape: step.shape,
                 terminalType: step.terminalType,
                 ioType: step.ioType,
-                stressLevel: step.stressLevel || 'low',
+                stressLevel: step.stressLevel,
                 collaborationType: step.collaborationType,
                 agentDescription: step.agentDescription,
                 metrics: toNodeMetrics(step.duration),
-                position: { x: originalNode.position.x, y: currentY },
-            };
-
-            const flowNode = aiNodeToFlowNode(rawNode as Record<string, unknown>, { x: originalNode.position.x, y: currentY });
-
-            // 도형 높이에 기반한 수직 간격 계산 (도형 높이 + 40px 여백)
-            const nodeHeight = (flowNode.shape ? FLOW_SHAPES[flowNode.shape]?.defaultHeight : undefined) || 80;
-            currentY += nodeHeight + 40;
-
-            return flowNode;
+            })),
+            subEdges: drilldownResult.subEdges,
+            incomingEdges: targetEdges.filter((e) => e.target === drilldownNode.id),
+            outgoingEdges: targetEdges.filter((e) => e.source === drilldownNode.id),
         });
-
-        // 기존 엣지에서 원본 노드 연결 찾기
-        const incomingEdges = targetEdges.filter((e) => e.target === drilldownNode.id);
-        const outgoingEdges = targetEdges.filter((e) => e.source === drilldownNode.id);
-
-        // 새 엣지: 하위 노드들 순차 연결
-        const subEdges = newNodes.slice(0, -1).map((node, idx) => ({
-            id: `edge-${node.id}-to-${newNodes[idx + 1].id}`,
-            source: node.id,
-            target: newNodes[idx + 1].id,
-            sourceHandle: 'bottom',
-            targetHandle: 'top-target',
-        }));
-
-        // 기존 incoming을 첫 번째 하위 노드로 연결
-        const reconnectedIncoming = incomingEdges.map((e) => ({
-            ...e,
-            target: newNodes[0].id,
-            targetHandle: 'top-target',
-        }));
-
-        // 기존 outgoing을 마지막 하위 노드에서 연결
-        const reconnectedOutgoing = outgoingEdges.map((e) => ({
-            ...e,
-            source: newNodes[newNodes.length - 1].id,
-            sourceHandle: 'bottom',
-        }));
 
         // 업데이트된 노드/엣지 배열
         const updatedNodes = [
@@ -543,9 +522,7 @@ function FlowPageContent() {
             ...targetEdges.filter(
                 (e) => e.source !== drilldownNode.id && e.target !== drilldownNode.id
             ),
-            ...subEdges,
-            ...reconnectedIncoming,
-            ...reconnectedOutgoing,
+            ...newEdges,
         ];
 
         // Store 업데이트

@@ -168,6 +168,20 @@ interface ReportEdge {
     id: string;
     source: string;
     target: string;
+    label?: string;
+    branchType?: 'yes' | 'no' | 'condition' | 'default';
+    condition?: string;
+}
+
+/**
+ * 노드로 들어오는 edge 중 분기 라벨(YES/NO/조건)이 있는 것을 찾아 보고서 텍스트에 붙일
+ * 짧은 부가 설명을 만든다. 여러 개면 첫 번째만 사용한다(보고서 셀에 다 담기엔 과함).
+ */
+function getBranchAnnotation(nodeId: string, edges: ReportEdge[]): string {
+    const incoming = edges.find((e) => e.target === nodeId && (e.label || e.branchType));
+    if (!incoming) return '';
+    const tag = incoming.label || (incoming.branchType === 'yes' ? 'YES' : incoming.branchType === 'no' ? 'NO' : '조건');
+    return incoming.condition ? ` [${tag}: ${incoming.condition}]` : ` [${tag}]`;
 }
 
 // ============================================================================
@@ -330,7 +344,7 @@ export async function generateWordReport(data: {
                 children: [
                     createStyledCell(String(idx + 1), { alignment: AlignmentType.CENTER, bgColor: idx % 2 === 1 ? COLORS.ROW_ALT : undefined }),
                     createStyledCell(node.label, { bold: true, bgColor: idx % 2 === 1 ? COLORS.ROW_ALT : undefined }),
-                    createStyledCell(node.description || '-', { bgColor: idx % 2 === 1 ? COLORS.ROW_ALT : undefined }),
+                    createStyledCell((node.description || '-') + getBranchAnnotation(node.id, data.asIsEdges || []), { bgColor: idx % 2 === 1 ? COLORS.ROW_ALT : undefined }),
                     createStyledCell(formatDuration(node.metrics), { alignment: AlignmentType.CENTER, bgColor: idx % 2 === 1 ? COLORS.ROW_ALT : undefined }),
                 ],
             })
@@ -363,7 +377,7 @@ export async function generateWordReport(data: {
                         bold: isAgent,
                         bgColor: rowBg,
                     }),
-                    createStyledCell(node.description || '-', { bgColor: rowBg }),
+                    createStyledCell((node.description || '-') + getBranchAnnotation(node.id, data.toBeEdges || []), { bgColor: rowBg }),
                     createStyledCell(formatDuration(node.metrics), { alignment: AlignmentType.CENTER, bgColor: rowBg }),
                 ],
             });
@@ -864,7 +878,7 @@ export async function generateExcelWBS(data: {
             const row = ws1.addRow({
                 no: idx + 1,
                 label: node.label,
-                description: node.description || '-',
+                description: (node.description || '-') + getBranchAnnotation(node.id, data.asIsEdges || []),
                 duration: formatDuration(node.metrics),
             });
             row.eachCell(cell => { 
@@ -910,7 +924,7 @@ export async function generateExcelWBS(data: {
                 no: idx + 1,
                 label: node.label,
                 type: isAgent ? '🤖 AI Agent' : '📋 일반업무',
-                description: node.description || '-',
+                description: (node.description || '-') + getBranchAnnotation(node.id, data.toBeEdges || []),
                 duration: formatDuration(node.metrics),
             });
             row.eachCell(cell => {

@@ -128,24 +128,16 @@ export default function FlowCanvas(props: FlowCanvasProps) {
     }, [viewMode, storeAsIsNodes, storeToBeNodes, isHeatmapMode, selectedToBeNodeId]);
 
     const currentEdges = useMemo(() => {
-        if (viewMode === 'tobe') {
-            return storeToBeEdges.map((e) => ({ 
-                id: e.id, 
-                source: e.source, 
-                target: e.target,
-                sourceHandle: e.sourceHandle,
-                targetHandle: e.targetHandle,
-                animated: e.animated,
-            }));
-        }
-        return storeAsIsEdges.map((e) => ({ 
-            id: e.id, 
-            source: e.source, 
+        const mapEdge = (e: FlowEdge) => ({
+            id: e.id,
+            source: e.source,
             target: e.target,
             sourceHandle: e.sourceHandle,
             targetHandle: e.targetHandle,
             animated: e.animated,
-        }));
+            data: { label: e.label, branchType: e.branchType, condition: e.condition },
+        });
+        return viewMode === 'tobe' ? storeToBeEdges.map(mapEdge) : storeAsIsEdges.map(mapEdge);
     }, [viewMode, storeAsIsEdges, storeToBeEdges]);
 
     const storeNodes = viewMode === 'tobe' ? storeToBeNodes : storeAsIsNodes;
@@ -699,7 +691,12 @@ export default function FlowCanvas(props: FlowCanvasProps) {
                                 <span className="text-gray-500">연결</span>
                             </span>
                             <span className="w-px h-4 bg-gray-300" />
-                            <span className="text-gray-400 text-xs">우클릭: 메뉴</span>
+                            <span
+                                className="text-gray-400 text-xs hidden md:inline truncate max-w-[13rem]"
+                                title="캔버스를 마우스 왼쪽 버튼으로 더블클릭하면 노드 추가 화면이 열립니다"
+                            >
+                                캔버스를 마우스 왼쪽 버튼으로 더블클릭: 노드 추가
+                            </span>
                         </span>
                     </Panel>
                 )}

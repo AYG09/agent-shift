@@ -17,7 +17,7 @@ const FlowNodeSchema = z.object({
     label: z.string().max(30).describe('노드 이름 (30자 이내, 핵심만)'),
     description: z.string().max(60).optional().describe('간단 설명 (60자 이내)'),
     type: z.enum(['terminal', 'process', 'decision', 'io', 'agent', 'task', 'subprocess']),
-    shape: FlowShapeSchema.optional().describe(SHAPE_FIELD_DESCRIBE_HINT),
+    shape: FlowShapeSchema.describe(SHAPE_FIELD_DESCRIBE_HINT),
     terminalType: z.enum(['start', 'end']).optional(),
     ioType: z.enum(['input', 'output']).optional(),
     stressLevel: z.enum(['low', 'medium', 'high']).optional(),
@@ -30,6 +30,9 @@ const FlowNodeSchema = z.object({
     metrics: NodeMetricsSchema.optional().describe('시간 메트릭 (반드시 포함: duration, durationUnit)'),
 });
 
+// 분기 의미 타입 - 표시 문구(label)와 의미(branchType)를 분리한다
+export const BranchTypeSchema = z.enum(['yes', 'no', 'condition', 'default']);
+
 // 엣지 스키마
 const FlowEdgeSchema = z.object({
     id: z.string(),
@@ -37,6 +40,9 @@ const FlowEdgeSchema = z.object({
     target: z.string(),
     sourceHandle: z.enum(['top', 'right', 'bottom', 'left']).optional().default('bottom'),
     targetHandle: z.enum(['top', 'right', 'bottom', 'left']).optional().default('top'),
+    label: z.string().max(20).optional().describe('연결선에 표시할 문구 (예: YES, NO, 승인, 반려). decision 노드에서 나가는 edge는 반드시 지정'),
+    branchType: BranchTypeSchema.optional().describe("분기 의미 타입. decision 노드에서 나가는 edge는 반드시 지정 - 이진 판단이면 'yes'/'no' 각 1개씩, 다중 조건 분기면 'condition', 그 외 일반 흐름은 생략 가능"),
+    condition: z.string().max(60).optional().describe('분기 조건/근거 설명 (예: 적합 후보자 없음, 최대 재시도 초과). NO나 조건부 분기에 권장'),
 });
 
 // As-Is 플로우 응답 스키마
@@ -99,7 +105,7 @@ export const DurationSchema = z.object({
 
 const CommonDrilldownFlowFieldsSchema = z.object({
     type: z.enum(['terminal', 'process', 'decision', 'io', 'agent', 'task', 'subprocess']).optional().describe('노드 종류'),
-    shape: FlowShapeSchema.optional().describe(SHAPE_FIELD_DESCRIBE_HINT),
+    shape: FlowShapeSchema.describe(SHAPE_FIELD_DESCRIBE_HINT),
     terminalType: z.enum(['start', 'end']).optional().describe('시작/종료 세부 구분'),
     ioType: z.enum(['input', 'output']).optional().describe('입력/출력 세부 구분'),
     stressLevel: z.enum(['low', 'medium', 'high']).optional().describe('부하/부담 수준'),
@@ -165,11 +171,26 @@ const AutomationOverviewSchema = z.object({
     implementationTips: z.array(z.string().max(80)).max(5).default([]).describe('구현 팁 1~3개'),
 });
 
+/**
+ * 하위 단계 간 연결(subEdges) - subSteps의 id를 그대로 참조한다.
+ * decision이 포함된 하위 단계 분해에서 YES/NO 분기와 재시도 순환 경로를 표현하기 위해 사용.
+ * 생략하면 subSteps 배열 순서대로 순차 연결하는 기존 방식으로 fallback한다.
+ */
+const DrilldownSubEdgeSchema = z.object({
+    source: z.string().describe('출발 하위 단계 ID (subSteps 중 하나의 id)'),
+    target: z.string().describe('도착 하위 단계 ID (subSteps 중 하나의 id, 앞선 단계로 되돌아가는 재시도 경로도 가능)'),
+    label: z.string().max(20).optional().describe('연결선 문구 (예: YES, NO)'),
+    branchType: BranchTypeSchema.optional().describe("분기 의미 타입. decision 하위 단계에서 나가는 edge는 반드시 지정"),
+    condition: z.string().max(60).optional().describe('분기 조건/근거 설명'),
+});
+
 /** 인간 단계 분석 응답 */
 export const HumanDrilldownResponseSchema = z.object({
     parentNodeId: z.string().max(80).describe('분석 대상 노드 ID'),
     flowType: z.enum(['asis', 'tobe']).describe('플로우 유형'),
     subSteps: z.array(HumanDrilldownStepSchema).max(8).describe('하위 단계 3~5개'),
+    subEdges: z.array(DrilldownSubEdgeSchema).max(16).optional()
+        .describe('하위 단계 간 연결 구조. subSteps에 decision이 있으면 반드시 지정 (YES/NO 분기 + 되돌아가는 재시도 경로 표현). 단순 순차 진행이면 생략 가능'),
     summary: z.string().max(200).describe('전체 요약 (200자 이내)'),
 });
 
@@ -178,9 +199,13 @@ export const AgentDrilldownResponseSchema = z.object({
     parentNodeId: z.string().max(80).describe('분석 대상 노드 ID'),
     flowType: z.literal('tobe').describe('플로우 유형'),
     subSteps: z.array(AgentDrilldownStepSchema).max(8).describe('하위 단계 3~5개'),
+    subEdges: z.array(DrilldownSubEdgeSchema).max(16).optional()
+        .describe('하위 단계 간 연결 구조. subSteps에 decision이 있으면 반드시 지정 (YES/NO 분기 + 되돌아가는 재시도 경로 표현). 단순 순차 진행이면 생략 가능'),
     summary: z.string().max(200).describe('전체 요약 (200자 이내)'),
     automationOverview: AutomationOverviewSchema.describe('자동화 개요'),
 });
+
+export type DrilldownSubEdge = z.infer<typeof DrilldownSubEdgeSchema>;
 
 export type AsIsFlowResponse = z.infer<typeof AsIsFlowResponseSchema>;
 export type ToBeFlowResponse = z.infer<typeof ToBeFlowResponseSchema>;
@@ -198,6 +223,7 @@ export interface DrilldownResponse {
     parentNodeId: string;
     flowType: 'asis' | 'tobe';
     subSteps: DrilldownSubStep[];
+    subEdges?: DrilldownSubEdge[];
     summary: string;
     automationOverview?: AutomationOverview;
 }
@@ -209,7 +235,7 @@ export const NodeSplitResponseSchema = z.object({
             label: z.string().max(40).describe('단계명 (40자)'),
             description: z.string().max(100).optional().describe('설명 (100자)'),
             type: z.enum(['terminal', 'process', 'decision', 'io', 'agent', 'task', 'subprocess']),
-            shape: FlowShapeSchema.optional().describe(SHAPE_FIELD_DESCRIBE_HINT),
+            shape: FlowShapeSchema.describe(SHAPE_FIELD_DESCRIBE_HINT),
             terminalType: z.enum(['start', 'end']).optional(),
             ioType: z.enum(['input', 'output']).optional(),
             stressLevel: z.enum(['low', 'medium', 'high']).optional(),

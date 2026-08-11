@@ -2,6 +2,66 @@
 
 import { BaseEdge, EdgeProps, getBezierPath, EdgeLabelRenderer } from '@xyflow/react';
 
+// 분기 의미(branchType)에 따른 라벨 색상 - YES는 초록, NO는 빨강, 조건부는 주황, 그 외는 중립
+function getBranchLabelClasses(branchType?: unknown): string {
+    switch (branchType) {
+        case 'yes':
+            return 'bg-emerald-600 border-emerald-300';
+        case 'no':
+            return 'bg-red-600 border-red-300';
+        case 'condition':
+            return 'bg-amber-500 border-amber-200';
+        default:
+            return 'bg-slate-600 border-slate-300';
+    }
+}
+
+// 연결선 중간에 표시하는 분기 라벨(YES/NO/조건) + 선택 시 컨텍스트 메뉴 안내를 함께 렌더링한다.
+// 확대/축소·다른 노드 위에서도 가려지지 않도록 zIndex를 높게 준다.
+function EdgeBranchLabel({
+    label,
+    branchType,
+    labelX,
+    labelY,
+    selected,
+}: {
+    label?: unknown;
+    branchType?: unknown;
+    labelX: number;
+    labelY: number;
+    selected?: boolean;
+}) {
+    const labelText = typeof label === 'string' ? label : undefined;
+    if (!labelText && !selected) return null;
+
+    return (
+        <EdgeLabelRenderer>
+            <div
+                style={{
+                    position: 'absolute',
+                    transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+                    pointerEvents: 'all',
+                    zIndex: 1000,
+                }}
+                className="flex flex-col items-center gap-1"
+            >
+                {labelText && (
+                    <span
+                        className={`${getBranchLabelClasses(branchType)} text-white text-[10px] font-semibold px-2 py-0.5 rounded-full shadow-md whitespace-nowrap border`}
+                    >
+                        {labelText}
+                    </span>
+                )}
+                {selected && (
+                    <span className="bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full shadow-lg font-medium whitespace-nowrap">
+                        우클릭: 메뉴
+                    </span>
+                )}
+            </div>
+        </EdgeLabelRenderer>
+    );
+}
+
 // 선택 가능한 기본 엣지 (호버/선택 시 강조)
 function SelectableEdge({
     id,
@@ -13,6 +73,7 @@ function SelectableEdge({
     targetPosition,
     style = {},
     selected,
+    data,
 }: EdgeProps) {
     const [edgePath, labelX, labelY] = getBezierPath({
         sourceX,
@@ -83,20 +144,13 @@ function SelectableEdge({
             </polygon>
 
             {/* 선택 시 라벨 표시 */}
-            {selected && (
-                <EdgeLabelRenderer>
-                    <div
-                        style={{
-                            position: 'absolute',
-                            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-                            pointerEvents: 'all',
-                        }}
-                        className="bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full shadow-lg font-medium"
-                    >
-                        우클릭: 메뉴
-                    </div>
-                </EdgeLabelRenderer>
-            )}
+            <EdgeBranchLabel
+                label={data?.label}
+                branchType={data?.branchType}
+                labelX={labelX}
+                labelY={labelY}
+                selected={selected}
+            />
         </>
     );
 }
@@ -205,20 +259,13 @@ function TokenFlowEdge({
             )}
 
             {/* 선택 시 라벨 */}
-            {selected && (
-                <EdgeLabelRenderer>
-                    <div
-                        style={{
-                            position: 'absolute',
-                            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-                            pointerEvents: 'all',
-                        }}
-                        className="bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full shadow-lg font-medium"
-                    >
-                        우클릭: 메뉴
-                    </div>
-                </EdgeLabelRenderer>
-            )}
+            <EdgeBranchLabel
+                label={data?.label}
+                branchType={data?.branchType}
+                labelX={labelX}
+                labelY={labelY}
+                selected={selected}
+            />
         </>
     );
 }
@@ -234,6 +281,7 @@ function SmoothEdge({
     targetPosition,
     style = {},
     selected,
+    data,
 }: EdgeProps) {
     const [edgePath, labelX, labelY] = getBezierPath({
         sourceX,
@@ -301,20 +349,13 @@ function SmoothEdge({
                 />
             </polygon>
 
-            {selected && (
-                <EdgeLabelRenderer>
-                    <div
-                        style={{
-                            position: 'absolute',
-                            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-                            pointerEvents: 'all',
-                        }}
-                        className="bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full shadow-lg font-medium"
-                    >
-                        우클릭: 메뉴
-                    </div>
-                </EdgeLabelRenderer>
-            )}
+            <EdgeBranchLabel
+                label={data?.label}
+                branchType={data?.branchType}
+                labelX={labelX}
+                labelY={labelY}
+                selected={selected}
+            />
         </>
     );
 }

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Cpu, GitMerge, Layers, Plus, FolderOpen, Trash2, Edit3, Calendar } from 'lucide-react';
+import { Cpu, GitMerge, Layers, Plus, FolderOpen, Trash2, Edit3, Calendar, Sparkles } from 'lucide-react';
 import { useAppStore, Project } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -99,6 +99,16 @@ export default function Home() {
                     <p className="text-base sm:text-lg text-[#71717A] mb-4 sm:mb-6 max-w-xl mx-auto leading-relaxed px-2">
                         업무 프로세스를 AI Agent로 전환하고, 변화 관리 전략을 수립하세요.
                     </p>
+
+                    <div className="flex justify-center gap-3">
+                        <button
+                            onClick={() => router.push('/sop/setup')}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold rounded-xl text-xs sm:text-sm transition-all shadow-md shadow-indigo-500/20"
+                        >
+                            <Sparkles className="w-4 h-4 text-amber-300" />
+                            SOP Prototype (독립 SOP 생성 & 검토) →
+                        </button>
+                    </div>
                 </div>
 
                 {/* 내 프로젝트 섹션 */}

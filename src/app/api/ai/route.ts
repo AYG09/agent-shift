@@ -11,9 +11,22 @@ import {
     AgentDrilldownResponseSchema,
     NodeSplitResponseSchema,
 } from '@/lib/ai-schemas';
+import { SopGenerationResponseSchema } from '@/lib/sop-schemas';
+import { validateSopSetupConfig } from '@/lib/sop-setup-validation';
 import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
 import { normalizeFlowShape } from '@/lib/flow-shapes';
-import { QUEUE_LOOP_SHAPE_GUIDE } from '@/lib/ai-shape-guide';
+import { FULL_SHAPE_SELECTION_GUIDE, MULTI_MEANING_SPLIT_GUIDE, BRANCH_EDGE_GUIDE } from '@/lib/ai-shape-guide';
+import {
+    validateFlowGraph,
+    validateDrilldownBranching,
+    hasBlockingIssues,
+    buildRepairInstruction,
+    applyDeterministicGraphFixes,
+    type ValidatableNode,
+    type ValidatableEdge,
+} from '@/lib/graph-validation';
+import { runSopValidationPipeline } from '@/lib/sop-generation-pipeline';
+import type { SopStructuralConstraints } from '@/lib/graph-validation';
 
 // AI 응답의 숫자 필드를 정규화 (부동소수점 오버플로우 방지)
 function normalizeMetrics(obj: unknown): unknown {
@@ -246,26 +259,9 @@ ${context.teamSize ? `- 팀 규모: ${context.teamSize}` : ''}
 ${context.tooling ? `- 현재 사용 도구: ${context.tooling}` : ''}
 ${context.painPoints ? `- 주요 고충/문제점: ${context.painPoints}` : ''}
 
-## 노드 타입 및 표준 도형 (shape) 선택 규칙
-각 단계의 의미와 실제 수행 기능에 맞는 shape를 반드시 지정하세요:
-- 시작/종료: type='terminal', terminalType='start' 또는 'end', shape='terminal'
-- 일반 업무 수행: type='process', shape='process'
-- 질문, 승인 여부, 조건 판단, 분기: type='decision', shape='decision'
-- 데이터 입출력/수신/전송: type='io', ioType='input' 또는 'output', shape='data'
-- 보고서, 계약서, 신청서 등 문서 생성/검토: shape='document'
-- 하위 절차/모듈 호출: type='subprocess', shape='predefinedProcess'
-- DB 조회/저장/갱신: shape='database'
-- 시스템 내부 저장: shape='internalStorage'
-- 외부/파일 보관 데이터: shape='storedData'
-- 사용자가 직접 키보드/마우스 입력: shape='manualInput'
-- 사람이 시스템 밖에서 수동으로 처리: shape='manualOperation'
-- 환경 설정, 초기화, 준비: shape='preparation'
-- 대기, 보류, 지연: shape='delay'
-- 화면/대시보드 표시: shape='display'
-- 흐름 참조: shape='connector' 또는 'offPageConnector'
-- 흐름 병합/추출/정렬/취합: shape='merge' | 'extract' | 'sort' | 'collate' | 'or' | 'card' | 'stream'
-${QUEUE_LOOP_SHAPE_GUIDE}
-- 모호한 단계는 기본값 shape='process'를 적용하세요.
+${FULL_SHAPE_SELECTION_GUIDE}
+
+${BRANCH_EDGE_GUIDE}
 
 ## 요구사항
 1. 반드시 시작(terminal, terminalType='start')과 종료(terminal, terminalType='end') 노드를 포함하세요.
@@ -273,6 +269,7 @@ ${QUEUE_LOOP_SHAPE_GUIDE}
 3. 사용자가 언급한 도구(${context.tooling || '일반 오피스 도구'})를 활용하는 단계를 반영하세요.
 4. 사용자가 언급한 고충(${context.painPoints || '없음'})이 발생하는 단계에는 stressLevel을 'high'로 설정하세요.
 5. painPoints 배열에 각 노드의 문제점을 분석해주세요.
+6. 승인/합격/수락 여부를 판단하는 단계가 있다면 decision 노드로 만들고, YES/NO 분기가 실제 업무 흐름(반려 시 이전 단계로 재검토 등)을 반영하도록 하세요.
 
 ## 핵심 규칙 (스키마가 강제하지만 참고)
 - label: 30자 이내 (예: "데이터 수집")
@@ -280,9 +277,9 @@ ${QUEUE_LOOP_SHAPE_GUIDE}
 - 모든 숫자는 정수만
 - metrics: **모든 노드에 필수** { duration: 정수, durationUnit: 'minutes'|'hours'|'days'|'weeks'|'months' }
 
-## 노드 배치 (수직 플로우)
-- x=250, y=0부터 120 간격
-- 엣지: sourceHandle='bottom', targetHandle='top'`;
+## 노드 배치
+- position은 대략적인 값이면 충분합니다(최종 좌표는 서버가 분기 구조에 맞춰 자동 재배치합니다). x=250, y=0부터 120 간격의 수직 흐름으로 작성하세요.
+- 엣지: 기본 진행은 sourceHandle='bottom', targetHandle='top'. decision의 분기 edge는 label/branchType(위 규칙 참고)을 반드시 포함하세요.`;
 }
 
 export function getToBePrompt(
@@ -350,13 +347,10 @@ ${JSON.stringify(asIsNodes, null, 2)}
 - To-Be 설계 시 위 의미 정보(shape, terminalType, ioType, stressLevel, collaborationType, agentDescription, metrics)를 적극 활용하여 알맞게 발전시키세요.
 - AI Agent 노드: type='agent', collaborationType='copilot'|'monitor'|'autonomous'
   - AI Agent 노드라고 무조건 동일 도형을 쓰지 말고, 해당 단계의 실질적 역할에 어울리는 shape를 명시적으로 할당하세요 (예: AI 문서 요약 -> shape='document', AI DB 조회/저장 -> shape='database', AI 판단 -> shape='decision', AI 처리 -> shape='process').
-- 시작/종료 -> shape='terminal'
-- 질문, 승인, 조건 판단 -> shape='decision'
-- 입출력 -> shape='data'
-- 문서 처리 -> shape='document'
-- 수동 처리/입력 -> shape='manualInput' 또는 'manualOperation'
-- DB 작업 -> shape='database'
-${QUEUE_LOOP_SHAPE_GUIDE}
+
+${FULL_SHAPE_SELECTION_GUIDE}
+
+${BRANCH_EDGE_GUIDE}
 
 ## 요구사항
 1. 위 시나리오(${scenario})에 맞게 AI Agent를 배치하세요.
@@ -365,6 +359,7 @@ ${QUEUE_LOOP_SHAPE_GUIDE}
    - monitor: 인간이 AI를 감독
    - autonomous: AI가 독립 수행
 3. improvements 배열에 원래 노드와 새 노드의 매핑을 포함하세요.
+4. As-Is에 있던 승인/합격 여부 판단 단계는 To-Be에서도 decision 노드로 유지하고, YES/NO 분기(반려 시 재검토 경로 포함)를 실제 edge로 표현하세요.
 
 ## 핵심 규칙 (스키마가 강제하지만 참고)
 - label: 30자 이내 (예: "AI 데이터 수집")
@@ -375,9 +370,9 @@ ${QUEUE_LOOP_SHAPE_GUIDE}
   - AI 노드: As-Is 대비 대폭 단축된 시간
   - 인간 노드(task/process): 실제 수행에 필요한 시간
 
-## 노드 배치 (수직 플로우)
-- x=250, y=0부터 100 간격
-- 엣지: sourceHandle='bottom', targetHandle='top'`;
+## 노드 배치
+- position은 대략적인 값이면 충분합니다(최종 좌표는 서버가 분기 구조에 맞춰 자동 재배치합니다). x=250, y=0부터 100 간격의 수직 흐름으로 작성하세요.
+- 엣지: 기본 진행은 sourceHandle='bottom', targetHandle='top'. decision의 분기 edge는 label/branchType을 반드시 포함하세요.`;
 }
 
 function getStrategyPrompt(
@@ -436,16 +431,26 @@ ${graphContextText}
 이것은 **As-Is (현재 상태)** 분석입니다.
 - AI 자동화, AI 도입, AI 대체 가능성은 **절대 언급하지 마세요**
 - 오직 **인간이 현재 이 작업을 어떻게 수행하는지**만 분석하세요
-- 각 하위 단계에 기능에 부합하는 type과 shape를 명시적으로 부여하세요 (예: 입력 -> type='io', ioType='input', shape='data'; 검증/판단 -> type='decision', shape='decision'; 문서작성 -> type='process', shape='document'; 모호하면 type='process', shape='process')
-${QUEUE_LOOP_SHAPE_GUIDE}
+- 각 하위 단계에 기능에 부합하는 type과 shape를 명시적으로 부여하세요
 ${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞는** 세부 단계를 도출하세요` : ''}
+
+${FULL_SHAPE_SELECTION_GUIDE}
+
+${MULTI_MEANING_SPLIT_GUIDE}
 
 ## 요구사항
 1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
 2. 각 하위 단계: label, description, type, shape, duration, tools, painPoints
 3. summary: 전체 과정 요약과 주요 병목점
+4. 하위 단계 중 승인/여부를 판단하는 decision이 있다면 subEdges로 YES/NO 분기(및 반려 시 되돌아가는 경로)를 반드시 표현하세요 (아래 subEdges 규칙 참고). decision이 없는 단순 순차 분해라면 subEdges를 생략해도 됩니다(자동으로 순서대로 연결됩니다).
 
-## JSON 구조 예시
+## subEdges 작성 규칙 (decision이 있을 때만 필요)
+- source/target은 subSteps에 선언한 id를 그대로 사용하세요.
+- NO/반려 등 되돌아가는 경로는 target에 **이전 subStep의 id**를 넣어 재시도 흐름을 표현하세요.
+- 이 하위 분해를 벗어나 상위 노드의 원래 다음 단계로 넘어가는 분기(보통 YES)는 target에 subSteps에 없는 임의의 설명적 id(예: 다음 실제 단계 이름)를 넣으세요 - 실제로는 상위 노드의 원래 다음 단계로 자동 연결됩니다.
+- decision에서 나가는 edge는 반드시 label/branchType을 지정하세요.
+
+## JSON 구조 예시 (decision 없이 단순 순차 - subEdges 생략 가능)
 {
   "parentNodeId": "${node.id}",
   "flowType": "asis",
@@ -456,6 +461,22 @@ ${graphContext ? `- 위의 이전/다음 단계를 참고하여 **흐름에 맞�
     "tools": ["Excel"],
     "painPoints": "이 단계에서 겪는 어려움"
   }],
+  "summary": "전체 요약"
+}
+
+## JSON 구조 예시 (decision이 있어 subEdges로 분기를 표현)
+{
+  "parentNodeId": "${node.id}",
+  "flowType": "asis",
+  "subSteps": [
+    { "id": "screening", "label": "지원자 자격 검토", "description": "...", "type": "process", "shape": "process", "duration": { "value": 20, "unit": "minutes" } },
+    { "id": "passed", "label": "서류 합격자 선정 여부", "description": "...", "type": "decision", "shape": "decision" }
+  ],
+  "subEdges": [
+    { "source": "screening", "target": "passed" },
+    { "source": "passed", "target": "screening", "label": "NO", "branchType": "no", "condition": "적합 후보자 없음" },
+    { "source": "passed", "target": "interview", "label": "YES", "branchType": "yes" }
+  ],
   "summary": "전체 요약"
 }
 
@@ -523,25 +544,37 @@ ${graphContextText}
 - AI 자동화, AI 도입 가능성은 **언급하지 마세요** (이 단계는 인간 업무로 계획됨)
 - 오직 **인간이 이 작업을 어떻게 수행하는지**만 분석하세요
 - 각 하위 단계에 기능에 부합하는 type과 shape를 명시적으로 부여하세요
-${QUEUE_LOOP_SHAPE_GUIDE}
 ${graphContext ? `- 위의 이전/다음 단계(일부는 AI 에이전트)와의 **연계**를 고려하세요` : ''}
+
+${FULL_SHAPE_SELECTION_GUIDE}
+
+${MULTI_MEANING_SPLIT_GUIDE}
 
 ## 요구사항
 1. 이 단계를 3~5개의 세부 하위 단계로 분해하세요.
 2. 각 하위 단계: label, description, type, shape, duration, tools, painPoints
 3. summary: 전체 과정 요약과 AI 에이전트와의 협업 포인트
+4. 하위 단계 중 승인/여부를 판단하는 decision이 있다면 subEdges로 YES/NO 분기(및 반려 시 되돌아가는 경로)를 반드시 표현하세요. decision이 없는 단순 순차 분해라면 subEdges를 생략해도 됩니다.
 
-## JSON 구조 예시
+## subEdges 작성 규칙 (decision이 있을 때만 필요)
+- source/target은 subSteps에 선언한 id를 그대로 사용하세요.
+- NO/반려 등 되돌아가는 경로는 target에 **이전 subStep의 id**를 넣어 재시도 흐름을 표현하세요.
+- 이 하위 분해를 벗어나 상위 노드의 원래 다음 단계로 넘어가는 분기(보통 YES)는 target에 subSteps에 없는 임의의 설명적 id를 넣으세요 - 실제로는 상위 노드의 원래 다음 단계로 자동 연결됩니다.
+- decision에서 나가는 edge는 반드시 label/branchType을 지정하세요.
+
+## JSON 구조 예시 (decision이 있어 subEdges로 분기를 표현)
 {
   "parentNodeId": "${node.id}",
   "flowType": "tobe",
-  "subSteps": [{
-    "id": "step_1", "label": "단계명", "description": "설명",
-    "type": "process", "shape": "document",
-    "duration": { "value": 30, "unit": "minutes" },
-    "tools": ["Excel"],
-    "painPoints": "이 단계에서 겪는 어려움"
-  }],
+  "subSteps": [
+    { "id": "review", "label": "조건 검토", "description": "...", "type": "process", "shape": "process", "duration": { "value": 20, "unit": "minutes" } },
+    { "id": "accepted", "label": "조건 수락 여부", "description": "...", "type": "decision", "shape": "decision" }
+  ],
+  "subEdges": [
+    { "source": "review", "target": "accepted" },
+    { "source": "accepted", "target": "review", "label": "NO", "branchType": "no", "condition": "조건 재협의 필요" },
+    { "source": "accepted", "target": "다음 단계", "label": "YES", "branchType": "yes" }
+  ],
   "summary": "전체 요약"
 }
 
@@ -574,14 +607,15 @@ ${asIsInfo}
 ${graphContext ? `- 이전/다음 단계와의 데이터 흐름 고려` : ''}
 ${asIsNodes && asIsNodes.length > 0 ? `- AS-IS 단계 중 이 AI가 대체하는 단계 식별 + 역량별 시간 절감 계산` : ''}
 
-## 도형(shape) 선택 규칙
-각 하위 단계(subSteps)의 실제 기능에 맞는 shape를 지정하세요 (예: 처리 -> shape='process', 판단 -> shape='decision', 데이터 입출력 -> shape='data', 문서 처리 -> shape='document', DB 작업 -> shape='database').
-${QUEUE_LOOP_SHAPE_GUIDE}
+${FULL_SHAPE_SELECTION_GUIDE}
+
+${MULTI_MEANING_SPLIT_GUIDE}
 
 ## 요구사항 (길이·개수는 스키마가 강제함)
 1. 3~5개 세부 하위 단계 (subSteps)
 2. 각 subStep에 aiImplementation 객체 포함
 3. automationOverview.skillBasedReduction: 역량별 시간 절감
+4. 하위 단계 중 AI의 조건 판단(decision)이 있다면 subEdges로 분기를 표현하세요 (source/target은 subSteps id 사용, decision에서 나가는 edge는 label/branchType 필수). decision이 없는 단순 순차 분해라면 subEdges를 생략해도 됩니다.
 
 ## JSON 구조 예시
 {
@@ -670,11 +704,92 @@ export function getNodeSplitPrompt(
 1. 이 단계를 4~5개의 순차적인 하위 단계로 분할하세요.
 2. 각 노드에 고유한 id (sub-1, sub-2 등), label, description을 부여하세요.
 3. type은 process(일반 작업), decision(분기점), io(입출력), terminal(시작/종료), agent(AI가 수행하는 작업) 중 적절히 선택하세요.
-4. 각 노드의 역할에 알맞은 표준 도형(shape)을 선택하세요 (예: document, database, manualInput, process, decision, data, predefinedProcess 등).
-${QUEUE_LOOP_SHAPE_GUIDE}
+4. 각 노드의 역할에 알맞은 표준 도형(shape)을 선택하세요.
 5. 병목이나 어려운 단계는 stressLevel을 'medium' 또는 'high'로 설정하세요.
 6. **각 노드에 duration(숫자)과 durationUnit(단위)을 반드시 설정하세요.**
-7. summary에 분할 이유와 전체 요약을 작성하세요.`;
+7. summary에 분할 이유와 전체 요약을 작성하세요.
+
+${FULL_SHAPE_SELECTION_GUIDE}
+
+${MULTI_MEANING_SPLIT_GUIDE}`;
+}
+
+export function getSopPrompt(params: {
+    memberRole?: string;
+    taskName?: string;
+    activityName?: string;
+    skills?: { name: string; description?: string }[];
+    context?: string;
+    detailLevel?: string;
+    minSteps?: number;
+    maxSteps?: number;
+    maxTotalNodes?: number;
+    branchPolicy?: string;
+    maxBranches?: number;
+    allowRework?: boolean;
+    maxLoops?: number;
+    splitComplexSteps?: boolean;
+}) {
+    const skillsList = (params.skills || []).map((s) => `- ${s.name}: ${s.description || ''}`).join('\n');
+    // 0처럼 유효한 값이 falsy라서 기본값으로 덮어써지지 않도록 `||`가 아니라 `??`를 쓴다
+    // (예: maxLoops=0은 "재작업 루프를 허용하지 않음"이라는 유효한 사용자 설정이다).
+    const minSteps = params.minSteps ?? 6;
+    const maxSteps = params.maxSteps ?? 8;
+    const maxTotalNodes = params.maxTotalNodes ?? 15;
+    const branchPolicy = params.branchPolicy ?? 'auto';
+    const maxBranches = params.maxBranches ?? 2;
+    const allowRework = params.allowRework !== false;
+    const maxLoops = params.maxLoops ?? 3;
+    const splitComplexSteps = params.splitComplexSteps !== false;
+
+    const branchPolicyGuide: Record<string, string> = {
+        none: `- 분기 정책: none - decision(판단) 노드를 절대 생성하지 마세요. 모든 단계는 순차적으로 연결되어야 합니다.`,
+        max: `- 분기 정책: max - decision(판단) 노드를 최대 ${maxBranches}개까지만 생성하세요. 그 이상은 허용되지 않습니다.`,
+        auto: `- 분기 정책: auto - 업무 맥락에 실제로 판단/승인/조건 분기가 필요한 지점에서만 decision 노드를 만드세요. decision 노드 개수에 고정 상한은 없지만, 의미 없이 남발하지 마세요.`,
+    };
+
+    return `당신은 프로세스 설계 및 SOP (Standard Operating Procedure) 작성 전문가입니다.
+고객사와 구성원이 즉시 업무에 활용할 수 있도록 정밀하고 완성도 높은 SOP를 설계하세요.
+
+## 입력 정보
+- 담당 직무: ${params.memberRole || '담당자'}
+- 대상 Task: ${params.taskName || '업무'}
+- 대상 Activity: ${params.activityName || '상세 업무'}
+- Work Library SKILL 목록:
+${skillsList || '없음'}
+- 업무 맥락:
+${params.context || '없음'}
+
+## 설정 조건
+- 상세 수준: ${params.detailLevel || 'standard'}
+- 주요 단계 수 범위: ${minSteps} ~ ${maxSteps}단계 (시작·종료 노드는 제외한 개수입니다)
+- 전체 노드 수 상한: ${maxTotalNodes}개 (시작·종료·decision·loopLimit을 모두 포함한 개수입니다)
+${branchPolicyGuide[branchPolicy] || branchPolicyGuide.auto}
+- 재작업/되돌아가는 경로: ${allowRework ? `허용 (정적 그래프 내 재작업 루프는 최대 ${maxLoops}개까지)` : '금지 (되돌아가는 edge를 만들지 마세요)'}
+- 복합 단계 자동 분리: ${splitComplexSteps ? '허용 - 하나의 레이블에 여러 의미가 섞인 단계는 의미 단위로 나누어 각각의 단계로 작성하세요.' : '금지 - 하나의 레이블에 여러 의미가 섞여 있어도 강제로 쪼개지 말고 하나의 단계로 유지하세요.'}
+
+## 작성 필수 원칙
+1. **단계 정의(definition) 작성 원칙**:
+   - 절대로 단계명(title)을 단순 반복하는 문장을 쓰지 마세요.
+   - 다음 3가지 요소를 명확히 포함한 1~2문장의 완결된 정의를 작성하세요:
+     (1) 무엇을 수행하는가 (2) 어떤 기준/도구로 수행하는가 (3) 어떤 결과/산출물을 만들어내는가
+2. **SKILL 할당 원칙**:
+   - 제공된 Work Library SKILL을 우선 적용하세요 (source: 'work-library', accepted: true).
+   - 반드시 필요한 추가 SKILL이 있다면 제안하되, source: 'ai-suggested', accepted: false로 표시하고 이유(reason)를 명시하세요.
+3. **도형 및 흐름 구조**:
+   - 시작 단계는 반드시 shape: 'terminal', terminalType: 'start'로 정확히 1개만 작성하세요.
+   - 종료 단계는 반드시 shape: 'terminal', terminalType: 'end'로 정확히 1개만 작성하세요.
+     (terminalType을 생략하면 오류로 처리되며, 배열에서의 위치로 시작/종료를 추정하지 않습니다.
+     시작/종료가 아닌 단계에는 shape: 'terminal'을 사용하지 마세요.)
+   - 판단 분기점은 shape: 'decision' (위 분기 정책을 반드시 지키세요)
+   - 데이터 입출력은 shape: 'manualInput' 또는 'data'
+   - 문서 작성 단계는 shape: 'document'
+   - 재작업/루프 한계점은 shape: 'loopLimit'
+   - decision 노드의 outgoing edge 작성 규칙은 아래 "분기(decision) edge 작성 규칙"을 정확히 따르세요.
+
+${FULL_SHAPE_SELECTION_GUIDE}
+${splitComplexSteps ? MULTI_MEANING_SPLIT_GUIDE : ''}
+${BRANCH_EDGE_GUIDE}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -721,6 +836,9 @@ export async function POST(request: NextRequest) {
         }
 
         let prompt: string | undefined;
+        // 생성 결과에 그래프 수준 의미 검증(+ 최대 1회 repair)을 적용할지 여부.
+        // 'flow'는 nodes/edges 전체 그래프, 'drilldown'은 subSteps/subEdges를 검사한다.
+        let graphKind: 'flow' | 'drilldown' | 'sop' | 'none' = 'none';
 
         switch (action) {
             case 'generateAsIsFlow':
@@ -729,6 +847,7 @@ export async function POST(request: NextRequest) {
                 }
                 schema = AsIsFlowResponseSchema;
                 prompt = getAsIsPrompt(context);
+                graphKind = 'flow';
                 break;
 
             case 'generateToBeFlow':
@@ -740,6 +859,7 @@ export async function POST(request: NextRequest) {
                 }
                 schema = ToBeFlowResponseSchema;
                 prompt = getToBePrompt(context, asIsNodes, scenario || 'balanced');
+                graphKind = 'flow';
                 break;
 
             case 'generateChangeStrategy':
@@ -768,6 +888,7 @@ export async function POST(request: NextRequest) {
                 // allNodes, allEdges는 선택적 - 전체 플로우 컨텍스트 전달용
                 // asIsNodes는 TO-BE 분석 시 시간 비교용
                 prompt = getDrilldownPrompt(node, context, flowType, body.allNodes, body.allEdges, body.asIsNodes);
+                graphKind = 'drilldown';
                 break;
 
             case 'generateNodeSplit':
@@ -781,6 +902,49 @@ export async function POST(request: NextRequest) {
                 prompt = getNodeSplitPrompt(context, node, flowType);
                 break;
 
+            case 'generateSop': {
+                // UI 검증만 신뢰하지 않는다 - 잘못된 워크플로우 구조 설정은 모델을 호출하기 전에
+                // 여기서 400으로 막는다. 클라이언트(SopSetupGate)와 완전히 동일한 검증 함수를 쓴다.
+                const setupIssues = validateSopSetupConfig({
+                    minSteps: body.minSteps,
+                    maxSteps: body.maxSteps,
+                    maxTotalNodes: body.maxTotalNodes,
+                    branchPolicy: body.branchPolicy,
+                    maxBranches: body.maxBranches,
+                    allowRework: body.allowRework,
+                    maxLoops: body.maxLoops,
+                });
+                if (setupIssues.length > 0) {
+                    return NextResponse.json(
+                        {
+                            error: `워크플로우 구조 설정이 유효하지 않습니다: ${setupIssues.map((i) => i.message).join(' / ')}`,
+                            issues: setupIssues,
+                        },
+                        { status: 400 }
+                    );
+                }
+
+                schema = SopGenerationResponseSchema;
+                prompt = getSopPrompt({
+                    memberRole: body.memberRole,
+                    taskName: body.taskName,
+                    activityName: body.activityName,
+                    skills: body.skills,
+                    context: body.context,
+                    detailLevel: body.detailLevel,
+                    minSteps: body.minSteps,
+                    maxSteps: body.maxSteps,
+                    maxTotalNodes: body.maxTotalNodes,
+                    branchPolicy: body.branchPolicy,
+                    maxBranches: body.maxBranches,
+                    allowRework: body.allowRework,
+                    maxLoops: body.maxLoops,
+                    splitComplexSteps: body.splitComplexSteps,
+                });
+                graphKind = 'sop';
+                break;
+            }
+
             default:
                 return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
         }
@@ -788,17 +952,138 @@ export async function POST(request: NextRequest) {
         if (!schema || !prompt) {
             return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
         }
+        // 위 체크로 이 시점부터 schema/prompt는 확실히 정의되어 있지만, 아래 콜백(클로저)
+        // 안에서는 TS가 그 사실을 다시 증명하지 못한다 - 별도 상수로 좁혀서 넘긴다.
+        const resolvedSchema = schema;
+        const resolvedPrompt = prompt;
 
-        const { object } = await generateObject({
+        const { object: firstObject } = await generateObject({
             model,
-            schema,
-            prompt,
+            schema: resolvedSchema,
+            prompt: resolvedPrompt,
             maxOutputTokens: 16384, // 실제 필요량 6,000 + 여유분
             ...(providerOptions ? { providerOptions } : {}),
         });
 
+        let object: unknown = firstObject;
+        let graphWarnings: string[] = [];
+        const graphKindType: 'flow' | 'drilldown' | 'sop' | 'none' = graphKind;
+
+        if (graphKindType === 'sop') {
+            // 클라이언트(SopSetupGate/SopGenerationSettings)의 워크플로우 구조 설정을 실제
+            // 검증 제약으로 변환한다. 여기서 쓰는 기본값은 DEFAULT_SETUP_CONFIG(스토어)와 동일하게
+            // 맞춰 둔다 - 값이 누락되면 프롬프트에 쓴 기본값과 검증 기준이 어긋나지 않도록 한다.
+            const sopConstraints: SopStructuralConstraints = {
+                minSteps: body.minSteps ?? 6,
+                maxSteps: body.maxSteps ?? 8,
+                maxTotalNodes: body.maxTotalNodes ?? 15,
+                branchPolicy: (body.branchPolicy as SopStructuralConstraints['branchPolicy']) ?? 'auto',
+                maxBranches: body.maxBranches ?? 2,
+                allowRework: body.allowRework !== false,
+                maxLoops: body.maxLoops ?? 3,
+            };
+
+            const pipelineResult = await runSopValidationPipeline(
+                object,
+                resolvedPrompt,
+                async (repairPrompt) => {
+                    const { object: repaired } = await generateObject({
+                        model,
+                        schema: resolvedSchema,
+                        prompt: repairPrompt,
+                        maxOutputTokens: 16384,
+                        ...(providerOptions ? { providerOptions } : {}),
+                    });
+                    return repaired;
+                },
+                sopConstraints
+            );
+
+            if (!pipelineResult.ok) {
+                return NextResponse.json(
+                    { error: pipelineResult.error, issues: pipelineResult.issues },
+                    { status: 400 }
+                );
+            }
+            object = pipelineResult.object;
+            graphWarnings = pipelineResult.warnings;
+        }
+
+        if (graphKindType === 'flow') {
+            const rec = object as { nodes?: ValidatableNode[]; edges?: ValidatableEdge[] };
+            let issues = validateFlowGraph(rec.nodes || [], rec.edges || []);
+
+            if (hasBlockingIssues(issues)) {
+                console.log('[API Route] 그래프 검증 실패, 1회 repair 시도:', issues.map((i) => i.type));
+                try {
+                    const repairPrompt = `${prompt}\n\n${buildRepairInstruction(issues)}\n\n## 직전 응답 (참고용 - 문제 있는 부분만 고치세요)\n${JSON.stringify(object)}`;
+                    const { object: repaired } = await generateObject({
+                        model,
+                        schema,
+                        prompt: repairPrompt,
+                        maxOutputTokens: 16384,
+                        ...(providerOptions ? { providerOptions } : {}),
+                    });
+                    object = repaired;
+                    const repairedRec = object as { nodes?: ValidatableNode[]; edges?: ValidatableEdge[] };
+                    issues = validateFlowGraph(repairedRec.nodes || [], repairedRec.edges || []);
+                } catch (repairError) {
+                    console.error('[API Route] 그래프 repair 요청 실패:', repairError);
+                }
+            }
+
+            if (hasBlockingIssues(issues)) {
+                // LLM repair로도 못 고쳤다면 결정론적 fallback으로 "단일 분기 decision"이
+                // 조용히 정상 결과처럼 보이지 않게 한다 (안전한 fallback 경로).
+                const finalRec = object as {
+                    nodes: (ValidatableNode & { id: string })[];
+                    edges: (ValidatableEdge & { id: string })[];
+                };
+                const fixed = applyDeterministicGraphFixes(finalRec.nodes, finalRec.edges);
+                object = { ...(object as object), nodes: fixed.nodes, edges: fixed.edges };
+                graphWarnings = fixed.fixesApplied;
+                if (graphWarnings.length > 0) {
+                    console.log('[API Route] 결정론적 fallback 적용:', graphWarnings);
+                }
+            }
+        }
+
+        if (graphKind === 'drilldown') {
+            const rec = object as { subSteps?: { id: string; type?: string }[]; subEdges?: ValidatableEdge[] };
+            let issues = validateDrilldownBranching(rec.subSteps || [], rec.subEdges);
+
+            if (issues.length > 0) {
+                console.log('[API Route] 드릴다운 분기 검증 실패, 1회 repair 시도:', issues.map((i) => i.type));
+                try {
+                    const repairPrompt = `${prompt}\n\n${buildRepairInstruction(issues)}\n\n## 직전 응답 (참고용 - 문제 있는 부분만 고치세요)\n${JSON.stringify(object)}`;
+                    const { object: repaired } = await generateObject({
+                        model,
+                        schema,
+                        prompt: repairPrompt,
+                        maxOutputTokens: 16384,
+                        ...(providerOptions ? { providerOptions } : {}),
+                    });
+                    object = repaired;
+                    const repairedRec = object as { subSteps?: { id: string; type?: string }[]; subEdges?: ValidatableEdge[] };
+                    issues = validateDrilldownBranching(repairedRec.subSteps || [], repairedRec.subEdges);
+                } catch (repairError) {
+                    console.error('[API Route] 드릴다운 repair 요청 실패:', repairError);
+                }
+            }
+
+            // subEdges가 끝내 불완전해도, 적용 단계(page.tsx)가 순차 체인으로 안전하게
+            // fallback하므로 여기서는 진단용 경고만 남기고 응답 자체는 막지 않는다.
+            if (issues.length > 0) {
+                graphWarnings = issues.map((i) => i.message);
+            }
+        }
+
         // 숫자 및 도형 필드 정규화 후 반환
-        return NextResponse.json(normalizeMetrics(sanitizeResponseShapes(object)));
+        const responseBody = normalizeMetrics(sanitizeResponseShapes(object)) as Record<string, unknown>;
+        if (graphWarnings.length > 0) {
+            responseBody._graphWarnings = graphWarnings;
+        }
+        return NextResponse.json(responseBody);
     } catch (error) {
         console.error('AI API Error:', error);
 

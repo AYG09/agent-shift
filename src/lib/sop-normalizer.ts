@@ -1,0 +1,146 @@
+import { SopDocument, SopStepData, SopEdge, SopMember, WorkLibrarySelection, SopSetupConfig } from './sop-types';
+import { SopGenerationResponseSchema } from './sop-schemas';
+import { layoutFlowGraph } from './flow-layout';
+import { FlowShape } from './flow-shapes';
+import { classifySopStepType } from './graph-validation';
+
+export function createSopDocumentFromGeneration(params: {
+    id?: string;
+    rawResponse: unknown;
+    member: SopMember;
+    workLibrary: WorkLibrarySelection;
+    context: string;
+    setupConfig: SopSetupConfig;
+    isSampleData?: boolean;
+}): SopDocument {
+    // 1. Strict Zod Safe Parse (Item 5: NO raw object bypass!)
+    const parseResult = SopGenerationResponseSchema.safeParse(params.rawResponse);
+    if (!parseResult.success) {
+        const issues = parseResult.error.issues
+            .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+            .join('; ');
+        throw new Error(`AI SOP 응답 형식이 유효하지 않습니다 (${issues}).`);
+    }
+
+    const parsedData = parseResult.data;
+    const title = parsedData.title || `${params.workLibrary.taskName} Standard Operating Procedure`;
+    const rawSteps = parsedData.steps;
+    const rawEdges = parsedData.edges;
+
+    // 2. Normalize Steps
+    // classifySopStepType은 graph-validation.ts의 검증 로직과 완전히 동일한 기준을 쓴다 -
+    // 배열 위치(idx)로 첫/마지막 terminal을 start/end로 추정하는 일은 절대 하지 않는다.
+    // shape/type이 'terminal'인데 terminalType이 없는 응답은 SopGenerationResponseSchema의
+    // superRefine에서 이미 파싱 단계에서 걸러지므로, 여기 도달한 시점엔 항상 값이 있다.
+    const normalizedSteps: SopStepData[] = rawSteps.map((s, idx) => {
+        const classifiedType = classifySopStepType(s);
+        const terminalType = classifiedType === 'terminal' ? s.terminalType : undefined;
+
+        const requiredSkills = (s.requiredSkills || []).map((sk) => ({
+            skillId: sk.skillId,
+            name: sk.name || '미정 SKILL',
+            requiredLevel: sk.requiredLevel || 'basic',
+            reason: sk.reason || (sk.source === 'ai-suggested' ? 'AI 제안 역량' : 'Work Library 표준 역량'),
+            source: sk.source === 'ai-suggested' ? ('ai-suggested' as const) : ('work-library' as const),
+            accepted: sk.source === 'work-library',
+        }));
+
+        return {
+            id: s.id || `step-${idx + 1}`,
+            title: s.title || `단계 ${idx + 1}`,
+            definition: s.definition || `${s.title} 단계입니다.`,
+            detailedInstructions: s.detailedInstructions,
+            responsibleRole: s.responsibleRole || params.member.jobRole,
+            inputs: s.inputs || [],
+            outputs: s.outputs || [],
+            tools: s.tools || [],
+            cautions: s.cautions || [],
+            decisionRules: s.decisionRules || [],
+            requiredSkills,
+            estimatedDuration: s.estimatedDuration || { value: 1, unit: 'days' },
+            // type/shape는 항상 classifySopStepType 결과와 일치시킨다 (AI가 보낸 임의의 type
+            // 문자열이나 'start'/'end' 같은 구식 값을 그대로 흘려보내지 않는다).
+            type: classifiedType,
+            shape: classifiedType === 'terminal' ? ('terminal' as FlowShape) : (s.shape as FlowShape) || 'process',
+            terminalType,
+            ioType: s.ioType,
+            position: s.position && (s.position.x !== 0 || s.position.y !== 0) ? s.position : { x: 0, y: 0 },
+            reviewStatus: 'ai-draft' as const,
+        };
+    });
+
+    // 3. Normalize Edges
+    const normalizedEdges: SopEdge[] = rawEdges.map((e, idx) => ({
+        id: e.id || `edge-${idx + 1}`,
+        source: e.source,
+        target: e.target,
+        label: e.label,
+        branchType: e.branchType || (e.label?.includes('YES') ? 'yes' : e.label?.includes('NO') ? 'no' : 'default'),
+        condition: e.condition,
+        // AI가 채운 기본 bottom/top 값은 렌더 시 좌표 기반 라우터가 결정한다.
+        // 비기본 핸들만 보존해 실제 배치와 반대 방향의 연결선을 방지한다.
+        sourceHandle: e.sourceHandle === 'bottom' ? undefined : e.sourceHandle,
+        targetHandle: e.targetHandle === 'top' || e.targetHandle === 'top-target' ? undefined : e.targetHandle,
+    }));
+
+    // 4. Item 8 Refined Auto Layout Conditions:
+    // Only apply layout when all positions are default {0,0} OR when positions overlap!
+    const allAtZero = normalizedSteps.length > 0 && normalizedSteps.every((s) => s.position.x === 0 && s.position.y === 0);
+    const posSet = new Set<string>();
+    let hasOverlap = false;
+    for (const s of normalizedSteps) {
+        const key = `${s.position.x}:${s.position.y}`;
+        if (posSet.has(key)) {
+            hasOverlap = true;
+            break;
+        }
+        posSet.add(key);
+    }
+
+    const needsLayout = allAtZero || hasOverlap;
+    let finalSteps = normalizedSteps;
+    let finalEdges = normalizedEdges;
+
+    if (needsLayout && normalizedSteps.length > 0) {
+        const layoutResult = layoutFlowGraph(
+            normalizedSteps.map((s) => ({ id: s.id, position: s.position })),
+            normalizedEdges.map((e) => ({
+                source: e.source,
+                target: e.target,
+                branchType: e.branchType,
+                sourceHandle: e.sourceHandle,
+                targetHandle: e.targetHandle,
+            })),
+            { anchor: { x: 100, y: 100 }, columnSpacing: 280, rowSpacing: 160 }
+        );
+
+        finalSteps = normalizedSteps.map((s) => {
+            const layoutNode = layoutResult.nodes.find((ln) => ln.id === s.id);
+            return layoutNode?.position ? { ...s, position: layoutNode.position } : s;
+        });
+
+        finalEdges = normalizedEdges.map((e) => {
+            const layoutEdge = layoutResult.edges.find((le) => le.source === e.source && le.target === e.target);
+            return layoutEdge
+                ? { ...e, sourceHandle: layoutEdge.sourceHandle || e.sourceHandle, targetHandle: layoutEdge.targetHandle || e.targetHandle }
+                : e;
+        });
+    }
+
+    const now = new Date().toISOString();
+    return {
+        id: params.id || `sop-${Date.now()}`,
+        title,
+        member: params.member,
+        workLibrary: params.workLibrary,
+        context: params.context,
+        setupConfig: params.setupConfig,
+        steps: finalSteps,
+        edges: finalEdges,
+        displayMode: 'standard',
+        reviewStatus: 'ai-draft' as const,
+        createdAt: now,
+        updatedAt: now,
+        isSampleData: params.isSampleData || false,
+    };
+}
