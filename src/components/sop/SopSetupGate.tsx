@@ -136,7 +136,7 @@ export const SopSetupGate: React.FC = () => {
             reasoning,
         });
 
-        // Strict Zod parsing & normalization은 generateSopViaApi 내부(sop-normalizer)에서 수행된다 (Item 5)
+        // Strict Zod parsing & normalization은 generateSopViaApi 내부(sop-normalizer)에서 수행된다.
         const result = await generateSopViaApi({
             requestBody,
             member: memberInfo,
@@ -207,7 +207,7 @@ export const SopSetupGate: React.FC = () => {
                     </div>
                 )}
 
-                {/* AI Error Explicit Choice Card (Item 9) */}
+                {/* AI generation failure requires an explicit retry/cancel choice, never a silent fallback. */}
                 {aiError && (
                     <div className="lg:col-span-2 p-4 bg-amber-50/90 border border-amber-300 rounded-xl space-y-3 shadow-sm">
                         <div className="flex items-start justify-between">
@@ -268,7 +268,7 @@ export const SopSetupGate: React.FC = () => {
                     </div>
                 )}
 
-                {/* 1. 구성원 정보 Card (Item 11 Numbering) */}
+                {/* 1. 구성원 정보 Card */}
                 <div className="min-h-0 flex flex-col gap-4">
                 <section className="shrink-0 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
                     <div className="mb-3 flex items-center gap-3">
@@ -435,7 +435,7 @@ export const SopSetupGate: React.FC = () => {
                 </div>
             </div>
 
-            {/* Preview Modal (Accessible Dialog Item 11) */}
+            {/* Preview Modal (keyboard/screen-reader accessible dialog) */}
             {isPreviewOpen && (
                 <div
                     role="dialog"

@@ -1,5 +1,6 @@
 import { fixtureFor, recruitingFixture } from '../src/lib/sop-demo-fixtures';
-import { getAgentizableDemoStepIds, useSopDemoStore } from '../src/lib/sop-demo-store';
+import { getAgentizableDemoStepIds, getDemoAgentizationModeForStep, useSopDemoStore } from '../src/lib/sop-demo-store';
+import { AI_APPLICATION_MODES } from '../src/lib/sop-agentization';
 
 let failed = 0;
 function check(name: string, condition: boolean) {
@@ -35,16 +36,39 @@ const demoStore = useSopDemoStore.getState();
 demoStore.resetDemo();
 const agentizableIds = getAgentizableDemoStepIds(useSopDemoStore.getState().document);
 check('Agent화 후보에서 시작·종료 terminal을 제외함', agentizableIds.length > 0 && !agentizableIds.includes('start') && !agentizableIds.includes('end'));
+check('AI 참여 방식 미지정 상태에서는 전체 워크플로도 확정할 수 없음', !useSopDemoStore.getState().confirmAgentization().success);
+useSopDemoStore.getState().setAgentizationDefaultMode('assist');
 const workflowAgentization = useSopDemoStore.getState().confirmAgentization();
 check('전체 워크플로 Agent화 가능 여부를 확정할 수 있음', workflowAgentization.success && useSopDemoStore.getState().agentizationStepIds.length === agentizableIds.length && !!useSopDemoStore.getState().agentizationConfirmedAt);
 useSopDemoStore.getState().setAgentizationScope('steps');
 check('특정 단계 모드에서 미선택 상태는 확정할 수 없음', !useSopDemoStore.getState().confirmAgentization().success);
 useSopDemoStore.getState().toggleAgentizationStep(agentizableIds[0]);
-useSopDemoStore.getState().setAgentizationMode('automation');
+// The earlier workflow-scope batch assign already left every step's mode set; clear this
+// one explicitly so the check below exercises "selected but unassigned", not leftover state.
+useSopDemoStore.getState().setAgentizationStepMode(agentizableIds[0], undefined);
+check('선택했지만 AI 참여 방식을 지정하지 않은 단계는 확정할 수 없음', !useSopDemoStore.getState().confirmAgentization().success);
+useSopDemoStore.getState().setAgentizationStepMode(agentizableIds[0], 'automation');
 const stepAgentization = useSopDemoStore.getState().confirmAgentization();
-check('특정 업무 단계를 AI 대체 후보로 확정할 수 있음', stepAgentization.success && useSopDemoStore.getState().agentizationStepIds.length === 1 && useSopDemoStore.getState().agentizationMode === 'automation');
+check('특정 업무 단계를 AI Agent 후보로 확정할 수 있음', stepAgentization.success && useSopDemoStore.getState().agentizationStepIds.length === 1 && useSopDemoStore.getState().agentizationStepModes[agentizableIds[0]] === 'automation');
+useSopDemoStore.getState().toggleAgentizationStep(agentizableIds[1]);
+useSopDemoStore.getState().setAgentizationStepMode(agentizableIds[1], 'assist');
+check('서로 다른 단계가 독립적인 AI 참여 방식을 유지함', useSopDemoStore.getState().agentizationStepModes[agentizableIds[0]] === 'automation' && useSopDemoStore.getState().agentizationStepModes[agentizableIds[1]] === 'assist');
+useSopDemoStore.getState().setAgentizationStepMode(agentizableIds[1], undefined);
+check('AI 참여 방식을 미지정으로 되돌리면 키 자체가 사라짐', !(agentizableIds[1] in useSopDemoStore.getState().agentizationStepModes));
 useSopDemoStore.getState().updateStep(agentizableIds[0], { title: '수정된 Agent 후보 단계' });
 check('SOP 내용을 수정하면 Agent화 확정이 재검토 상태로 돌아감', useSopDemoStore.getState().agentizationConfirmedAt === null);
+
+// Demo와 실제 SOP는 같은 두 Agent화 mode(AI_APPLICATION_MODES)와 노드별 stepModes 조회 규칙을 공유해야 한다.
+check('Demo는 실제와 동일한 두 Agent화 mode를 사용함', AI_APPLICATION_MODES.map((item) => item.id).join(',') === 'automation,assist');
+demoStore.resetDemo();
+const sharedModeIds = getAgentizableDemoStepIds(useSopDemoStore.getState().document);
+demoStore.setAgentizationScope('workflow');
+demoStore.setAgentizationDefaultMode('assist');
+check(
+    'Demo의 노드별 조회는 실제와 동일하게 명시적 stepModes만 읽고 시작·종료는 제외함',
+    sharedModeIds.every((id) => getDemoAgentizationModeForStep(useSopDemoStore.getState(), id) === 'assist')
+        && getDemoAgentizationModeForStep(useSopDemoStore.getState(), 'start') === undefined
+);
 
 if (failed) process.exit(1);
 console.log('ALL SOP DEMO FIXTURE TESTS PASSED');

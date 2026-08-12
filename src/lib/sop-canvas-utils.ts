@@ -1,25 +1,12 @@
 import { Node, Edge, MarkerType } from '@xyflow/react';
-import { SopDisplayMode, SopDocument, SopStepData } from './sop-types';
+import { SopDocument } from './sop-types';
 import { getDirectionalHandles } from './flow-layout';
 import { isSopReworkEdge, routeSopReworkEdge } from './sop-rework-routing';
+import { getSopNodeSize } from './sop-node-geometry';
+
+export { getSopNodeSize };
 
 const reworkRouteCache = new WeakMap<SopDocument, Map<string, ReturnType<typeof routeSopReworkEdge>>>();
-
-/** SopStepNode와 연결선 좌표 계산이 공유하는 실제 노드 크기. */
-export function getSopNodeSize(step: Pick<SopStepData, 'shape'>, displayMode: SopDisplayMode) {
-    // Detailed data is available through hover and the inspector. Canvas nodes
-    // remain compact so workflow shape and edge routing stay legible.
-    void displayMode;
-    let width = 190;
-    let height = 74;
-
-    if (step.shape === 'decision') {
-        width = Math.max(width, 160);
-        height = Math.max(height, 120);
-    }
-
-    return { width, height };
-}
 
 function isLegacyDefaultHandlePair(sourceHandle?: string, targetHandle?: string) {
     return (!sourceHandle && !targetHandle) || (sourceHandle === 'bottom' && targetHandle === 'top-target');
@@ -51,7 +38,6 @@ export function syncSopCanvasNodes(doc: SopDocument, selectedStepId: string | nu
             data: {
                 step,
                 index: idx + 1,
-                displayMode: doc.displayMode,
             },
             selected: step.id === selectedStepId,
             // 노드는 React Flow의 키보드/UI 삭제(Backspace 등)로 직접 지울 수 없다 - Store와
@@ -80,7 +66,7 @@ export function buildSopEdges(
             if (!isSopReworkEdge(edge, doc.edges)) return;
             cachedReworkRoutes!.set(
                 edge.id,
-                routeSopReworkEdge(edge, doc.steps, doc.displayMode, reworkLaneIndex++, occupiedReworkSegments)
+                routeSopReworkEdge(edge, doc.steps, reworkLaneIndex++, occupiedReworkSegments)
             );
         });
         reworkRouteCache.set(doc, cachedReworkRoutes);
@@ -116,8 +102,8 @@ export function buildSopEdges(
 
         const sourceStep = stepById.get(edge.source);
         const targetStep = stepById.get(edge.target);
-        const sourceSize = sourceStep ? getSopNodeSize(sourceStep, doc.displayMode) : undefined;
-        const targetSize = targetStep ? getSopNodeSize(targetStep, doc.displayMode) : undefined;
+        const sourceSize = sourceStep ? getSopNodeSize(sourceStep) : undefined;
+        const targetSize = targetStep ? getSopNodeSize(targetStep) : undefined;
         const autoHandles =
             sourceStep && targetStep && sourceSize && targetSize
                 ? getDirectionalHandles(

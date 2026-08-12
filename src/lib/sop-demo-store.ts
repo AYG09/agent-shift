@@ -3,18 +3,35 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { fixtureFor, RECRUITING_CONTEXT, scenarioInfo, isDemoScenarioReady, type DemoDocument, type DemoMode, type DemoPreset, type DemoScenario, type DemoStep } from './sop-demo-fixtures';
+import type { SopAiApplicationMode } from './sop-types';
+import { AI_APPLICATION_MODES, normalizeAgentizationMode } from './sop-agentization';
 
 type Member = { name: string; role: string; organization: string };
 type WorkLibrarySkill = { id: string; name: string; description: string };
 type WorkLibraryActivity = { id: string; name: string; description: string; skills: WorkLibrarySkill[] };
 type WorkLibraryTask = { id: string; name: string; description: string; activities: WorkLibraryActivity[] };
 export type DemoAgentizationScope = 'workflow' | 'steps';
-export type DemoAgentizationMode = 'automation' | 'collaboration';
 
 export function getAgentizableDemoStepIds(document: DemoDocument | null): string[] {
     return (document?.steps || [])
         .filter((step) => step.terminalType !== 'start' && step.terminalType !== 'end')
         .map((step) => step.id);
+}
+
+/**
+ * Same lookup rule as the real product's getAgentizationModeForStep: an explicit
+ * per-step mode only, gated by scope. There is no batch-default fallback, so a
+ * step a member has not (or no longer) assigned reads as unset/human-performed.
+ */
+export function getDemoAgentizationModeForStep(
+    state: Pick<State, 'document' | 'agentizationScope' | 'agentizationStepIds' | 'agentizationStepModes'>,
+    stepId: string
+): SopAiApplicationMode | undefined {
+    const eligibleIds = getAgentizableDemoStepIds(state.document);
+    if (!eligibleIds.includes(stepId)) return undefined;
+    const isInScope = state.agentizationScope === 'workflow' || state.agentizationStepIds.includes(stepId);
+    if (!isInScope) return undefined;
+    return normalizeAgentizationMode(state.agentizationStepModes[stepId]);
 }
 
 const DEMO_WORK_LIBRARY: WorkLibraryTask[] = [
@@ -59,7 +76,8 @@ type State = {
     selectedEdgeId: string | null;
     customerMode: boolean;
     agentizationScope: DemoAgentizationScope;
-    agentizationMode: DemoAgentizationMode;
+    /** Unset stays human-performed; there is no batch-default fallback for a step's read. */
+    agentizationStepModes: Partial<Record<string, SopAiApplicationMode>>;
     agentizationStepIds: string[];
     agentizationNote: string;
     agentizationConfirmedAt: string | null;
@@ -100,7 +118,10 @@ type State = {
     rejectAiSkill: (stepId: string, skillId: string) => void;
     toggleCustomerMode: () => void;
     setAgentizationScope: (scope: DemoAgentizationScope) => void;
-    setAgentizationMode: (mode: DemoAgentizationMode) => void;
+    /** Applies `mode` to every step currently in scope (batch assign). */
+    setAgentizationDefaultMode: (mode: SopAiApplicationMode) => void;
+    /** `mode` undefined clears the step's judgement; an unset step stays human-performed. */
+    setAgentizationStepMode: (stepId: string, mode?: SopAiApplicationMode) => void;
     toggleAgentizationStep: (stepId: string) => void;
     setAgentizationNote: (note: string) => void;
     confirmAgentization: () => { success: boolean; message: string };
@@ -122,7 +143,7 @@ export const useSopDemoStore = create<State>()(persist((set, get) => ({
     selectedEdgeId: null,
     customerMode: false,
     agentizationScope: 'workflow',
-    agentizationMode: 'collaboration',
+    agentizationStepModes: {},
     agentizationStepIds: [],
     agentizationNote: '',
     agentizationConfirmedAt: null,
@@ -190,7 +211,7 @@ export const useSopDemoStore = create<State>()(persist((set, get) => ({
         const skills = state.sopSourceType === 'task' ? task?.activities.flatMap((item) => item.skills) || [] : activity?.skills || [];
         if (source) document.title = `${source.name} SOP`;
         document.steps = document.steps.map((step) => step.id === 'screening' ? { ...step, requiredSkills: skills.slice(0, 5).map((skill) => ({ ...skill, source: 'work-library' as const, accepted: true })) } : step);
-        set({ document, selectedStepId: null, selectedEdgeId: null, agentizationScope: 'workflow', agentizationMode: 'collaboration', agentizationStepIds: [], agentizationNote: '', agentizationConfirmedAt: null, history: [], future: [], lastSavedAt: new Date().toISOString() });
+        set({ document, selectedStepId: null, selectedEdgeId: null, agentizationScope: 'workflow', agentizationStepModes: {}, agentizationStepIds: [], agentizationNote: '', agentizationConfirmedAt: null, history: [], future: [], lastSavedAt: new Date().toISOString() });
         return document;
     },
     loadFromQuery: (scenario, mode, preset) => {
@@ -198,7 +219,7 @@ export const useSopDemoStore = create<State>()(persist((set, get) => ({
         // 제목과 실제 SOP 내용이 다른 상태를 어떤 경로로도 노출하지 않는다.
         const safeScenario = isDemoScenarioReady(scenario) ? scenario : 'recruiting';
         const document = fixtureFor(safeScenario, preset);
-        set({ scenario: safeScenario, mode, preset, document, selectedStepId: null, selectedEdgeId: null, workLibraryConfirmed: true, agentizationScope: 'workflow', agentizationMode: 'collaboration', agentizationStepIds: [], agentizationNote: '', agentizationConfirmedAt: null, lastSavedAt: new Date().toISOString() });
+        set({ scenario: safeScenario, mode, preset, document, selectedStepId: null, selectedEdgeId: null, workLibraryConfirmed: true, agentizationScope: 'workflow', agentizationStepModes: {}, agentizationStepIds: [], agentizationNote: '', agentizationConfirmedAt: null, lastSavedAt: new Date().toISOString() });
     },
     selectStep: (selectedStepId) => set({ selectedStepId, selectedEdgeId: null }),
     selectEdge: (selectedEdgeId) => set({ selectedEdgeId, selectedStepId: null }),
@@ -278,7 +299,24 @@ export const useSopDemoStore = create<State>()(persist((set, get) => ({
         agentizationStepIds: agentizationScope === 'steps' && state.agentizationScope !== 'steps' ? [] : state.agentizationStepIds,
         agentizationConfirmedAt: null,
     })),
-    setAgentizationMode: (agentizationMode) => set({ agentizationMode, agentizationConfirmedAt: null }),
+    setAgentizationDefaultMode: (mode) => set((state) => {
+        const candidates = getAgentizableDemoStepIds(state.document);
+        const targetIds = state.agentizationScope === 'workflow' ? candidates : state.agentizationStepIds;
+        return {
+            agentizationStepModes: { ...state.agentizationStepModes, ...Object.fromEntries(targetIds.map((id) => [id, mode])) },
+            agentizationConfirmedAt: null,
+        };
+    }),
+    setAgentizationStepMode: (stepId, mode) => set((state) => {
+        if (!getAgentizableDemoStepIds(state.document).includes(stepId)) return state;
+        const agentizationStepModes = { ...state.agentizationStepModes };
+        if (mode) {
+            agentizationStepModes[stepId] = mode;
+        } else {
+            delete agentizationStepModes[stepId];
+        }
+        return { agentizationStepModes, agentizationConfirmedAt: null };
+    }),
     toggleAgentizationStep: (stepId) => set((state) => {
         const allowed = getAgentizableDemoStepIds(state.document);
         if (!allowed.includes(stepId)) return state;
@@ -295,10 +333,17 @@ export const useSopDemoStore = create<State>()(persist((set, get) => ({
         if (selected.length === 0) {
             return { success: false, message: 'Agent화 가능 여부를 검토할 업무 단계를 최소 1개 선택해 주세요.' };
         }
+        if (selected.some((id) => !state.agentizationStepModes[id])) {
+            return { success: false, message: '선택한 각 단계에 AI 참여 방식을 지정해 주세요.' };
+        }
         set({ agentizationStepIds: selected, agentizationConfirmedAt: new Date().toISOString() });
+        const distinctModes = new Set(selected.map((id) => state.agentizationStepModes[id]));
+        const modeLabel = distinctModes.size === 1
+            ? AI_APPLICATION_MODES.find((item) => item.id === [...distinctModes][0])?.label
+            : '단계별로 지정한';
         return {
             success: true,
-            message: `${state.agentizationScope === 'workflow' ? '전체 워크플로' : `${selected.length}개 업무 단계`}의 ${state.agentizationMode === 'automation' ? 'AI 대체(Agent 실행)' : 'AI 협업(Agent 보조)'} 가능 여부를 확정했습니다.`,
+            message: `${state.agentizationScope === 'workflow' ? '전체 워크플로' : `${selected.length}개 업무 단계`}의 ${modeLabel} 적용 방식을 확정했습니다.`,
         };
     },
     confirmAll: () => {
@@ -319,12 +364,30 @@ export const useSopDemoStore = create<State>()(persist((set, get) => ({
         const next = state.future[0]; if (!next || !state.document) return state;
         return { document: clone(next), agentizationConfirmedAt: null, history: [...state.history, clone(state.document)], future: state.future.slice(1) };
     }),
-    resetDemo: () => set({ ...defaults(), document: fixtureFor('recruiting', 'branching'), selectedStepId: null, selectedEdgeId: null, customerMode: false, agentizationScope: 'workflow', agentizationMode: 'collaboration', agentizationStepIds: [], agentizationNote: '', agentizationConfirmedAt: null, history: [], future: [], lastSavedAt: new Date().toISOString() }),
+    resetDemo: () => set({ ...defaults(), document: fixtureFor('recruiting', 'branching'), selectedStepId: null, selectedEdgeId: null, customerMode: false, agentizationScope: 'workflow', agentizationStepModes: {}, agentizationStepIds: [], agentizationNote: '', agentizationConfirmedAt: null, history: [], future: [], lastSavedAt: new Date().toISOString() }),
 }), {
     name: 'sop-demo-storage-v1',
     version: 3,
     storage: createJSONStorage(() => localStorage),
-    migrate: (persisted) => ({ ...defaults(), ...(persisted as Partial<State>), version: 3, agentizationScope: (persisted as Partial<State>).agentizationScope || 'workflow', agentizationMode: (persisted as Partial<State>).agentizationMode || 'collaboration', agentizationStepIds: (persisted as Partial<State>).agentizationStepIds || [], agentizationNote: (persisted as Partial<State>).agentizationNote || '', agentizationConfirmedAt: (persisted as Partial<State>).agentizationConfirmedAt || null }),
+    migrate: (persisted) => {
+        const previous = persisted as Partial<State> & { agentizationMode?: unknown };
+        const agentizationStepIds = previous.agentizationStepIds || [];
+        // Pre-v3 storage kept one global mode for the whole selection; fold it into
+        // the new per-step map once, for every step it applied to at the time.
+        const legacyMode = normalizeAgentizationMode(previous.agentizationMode);
+        const agentizationStepModes = previous.agentizationStepModes
+            || (legacyMode ? Object.fromEntries(agentizationStepIds.map((id) => [id, legacyMode])) : {});
+        return {
+            ...defaults(),
+            ...previous,
+            version: 3,
+            agentizationScope: previous.agentizationScope || 'workflow',
+            agentizationStepModes,
+            agentizationStepIds,
+            agentizationNote: previous.agentizationNote || '',
+            agentizationConfirmedAt: previous.agentizationConfirmedAt || null,
+        };
+    },
     partialize: (state) => ({ ...state, history: [], future: [] }),
 }));
 

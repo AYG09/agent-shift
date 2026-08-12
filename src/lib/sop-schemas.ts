@@ -1,47 +1,34 @@
 import { z } from 'zod';
 import { FLOW_SHAPE_IDS } from './flow-shapes';
+import { SopRequiredSkillSchema, SopStepCommonFieldsSchema, SopEdgeCommonFieldsSchema, forbidDuplicateIds } from './sop-step-common-schema';
 
-export const SopRequiredSkillSchema = z.object({
-    skillId: z.string().optional(),
-    name: z.string().min(1),
-    requiredLevel: z.enum(['basic', 'intermediate', 'advanced']).default('basic'),
-    reason: z.string().optional(),
-    source: z.enum(['work-library', 'ai-suggested']),
-    accepted: z.boolean().default(false),
-});
+export { SopRequiredSkillSchema };
 
-export const SopStepAiSchema = z
-    .object({
-        id: z.string(),
-        title: z.string().min(1),
-        definition: z.string().min(5),
-        detailedInstructions: z.string().optional(),
-        responsibleRole: z.string().optional(),
-        inputs: z.array(z.string()).optional(),
-        outputs: z.array(z.string()).optional(),
-        tools: z.array(z.string()).optional(),
-        cautions: z.array(z.string()).optional(),
-        decisionRules: z.array(z.string()).optional(),
-        requiredSkills: z.array(SopRequiredSkillSchema).default([]),
-        estimatedDuration: z
-            .object({
-                value: z.number(),
-                unit: z.enum(['minutes', 'hours', 'days', 'weeks']),
-            })
-            .optional(),
-        type: z.string().optional(),
-        shape: z.enum(FLOW_SHAPE_IDS as unknown as [string, ...string[]]).default('process'),
-        terminalType: z.enum(['start', 'end']).optional(),
-        ioType: z.enum(['input', 'output']).optional(),
-        position: z
-            .object({
-                x: z.number(),
-                y: z.number(),
-            })
-            .default({ x: 0, y: 0 }),
-    })
+/**
+ * Validates a raw AI generation response. This schema's job is to reject a
+ * genuinely low-quality or malformed model output before it ever reaches the
+ * Store — the minimum lengths and generation-friendly defaults here (a
+ * missing shape/position silently becomes 'process'/{0,0} rather than
+ * failing) exist for that purpose only. A persisted member document is a
+ * different concern with its own, deliberately less strict schema — see
+ * sop-document-schema.ts's docstring for why it does not reuse these
+ * generation-only constraints.
+ */
+export const SopStepAiSchema = SopStepCommonFieldsSchema.extend({
+    title: z.string().min(1),
+    definition: z.string().min(5),
+    shape: z.enum(FLOW_SHAPE_IDS).default('process'),
+    position: z
+        .object({
+            x: z.number(),
+            y: z.number(),
+        })
+        .default({ x: 0, y: 0 }),
+})
     // shape 또는 type이 'terminal'이면 terminalType이 반드시 있어야 한다.
     // 배열 위치(idx===0 등)로 start/end를 추정하는 대신, 없는 값은 여기서 즉시 파싱 오류로 처리한다.
+    // 이 완결성 검사는 AI 생성 시점 전용이다 - 편집 중인 저장 문서는 이 상태를 일시적으로
+    // 가질 수 있어야 하므로 sop-document-schema.ts의 저장 schema에는 포함하지 않는다.
     .superRefine((val, ctx) => {
         const isTerminal = val.shape === 'terminal' || val.type === 'terminal';
         if (isTerminal && !val.terminalType) {
@@ -53,16 +40,7 @@ export const SopStepAiSchema = z
         }
     });
 
-export const SopEdgeAiSchema = z.object({
-    id: z.string(),
-    source: z.string(),
-    target: z.string(),
-    label: z.string().optional(),
-    branchType: z.enum(['yes', 'no', 'condition', 'default']).optional(),
-    condition: z.string().optional(),
-    sourceHandle: z.string().optional(),
-    targetHandle: z.string().optional(),
-});
+export const SopEdgeAiSchema = SopEdgeCommonFieldsSchema;
 
 export const SopGenerationResponseSchema = z.object({
     title: z.string().min(1),
@@ -76,29 +54,6 @@ export const SopGenerationResponseSchema = z.object({
     // 파싱 단계에서 즉시 거부한다. graph-validation.ts의 duplicate-node-id/duplicate-edge-id는
     // 사용자가 Store에서 편집한 문서를 대상으로 같은 규칙을 다시 검사하는 런타임 안전망이다.
     .superRefine((val, ctx) => {
-        const stepIdCounts = new Map<string, number>();
-        val.steps.forEach((s) => stepIdCounts.set(s.id, (stepIdCounts.get(s.id) || 0) + 1));
-        stepIdCounts.forEach((count, id) => {
-            if (count > 1) {
-                ctx.addIssue({
-                    code: 'custom',
-                    path: ['steps'],
-                    message: `단계 ID "${id}"가 ${count}번 중복되었습니다. 모든 단계 ID는 고유해야 합니다.`,
-                });
-            }
-        });
-
-        const edgeIdCounts = new Map<string, number>();
-        val.edges.forEach((e) => edgeIdCounts.set(e.id, (edgeIdCounts.get(e.id) || 0) + 1));
-        edgeIdCounts.forEach((count, id) => {
-            if (count > 1) {
-                ctx.addIssue({
-                    code: 'custom',
-                    path: ['edges'],
-                    message: `연결선 ID "${id}"가 ${count}번 중복되었습니다. 모든 연결선 ID는 고유해야 합니다.`,
-                });
-            }
-        });
+        forbidDuplicateIds(val.steps, ctx, 'steps', '단계');
+        forbidDuplicateIds(val.edges, ctx, 'edges', '연결선');
     });
-
-export type SopGenerationResponse = z.infer<typeof SopGenerationResponseSchema>;

@@ -13,7 +13,7 @@ export function createSopDocumentFromGeneration(params: {
     setupConfig: SopSetupConfig;
     isSampleData?: boolean;
 }): SopDocument {
-    // 1. Strict Zod Safe Parse (Item 5: NO raw object bypass!)
+    // A raw AI response is never used as-is; it must pass Zod validation first.
     const parseResult = SopGenerationResponseSchema.safeParse(params.rawResponse);
     if (!parseResult.success) {
         const issues = parseResult.error.issues
@@ -100,7 +100,6 @@ export function createSopDocumentFromGeneration(params: {
         setupConfig: params.setupConfig,
         steps: finalSteps,
         edges: finalEdges,
-        displayMode: 'compact',
         reviewStatus: 'ai-draft' as const,
         createdAt: now,
         updatedAt: now,

@@ -1,9 +1,8 @@
 import { getDirectionalHandles } from './flow-layout';
 import { SopEdge, SopStepData } from './sop-types';
+import { isSecondaryBranch } from './sop-rework-routing';
 
 type Point = { x: number; y: number };
-
-const isSecondaryBranch = (edge: SopEdge) => edge.branchType === 'no' || edge.branchType === 'condition';
 
 /**
  * Places newly generated SOPs in a compact, multi-row reading path.

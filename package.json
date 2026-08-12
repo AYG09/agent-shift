@@ -9,7 +9,7 @@
         "lint": "eslint",
         "test:shapes": "tsx tests/flow-shapes.test.ts && tsx tests/terminal-node.test.tsx",
         "test:flow-branches": "tsx tests/flow-branches.test.ts",
-        "test:sop": "tsx tests/sop.test.ts",
+        "test:sop": "tsx tests/sop.test.ts && tsx tests/sop-readonly-inspectors.test.tsx",
         "test:sop-demo": "tsx tests/sop-demo.test.ts",
         "format": "prettier --write ."
     },

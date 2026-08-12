@@ -38,6 +38,7 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
     const document = useSopPrototypeStore((state) => state.document);
     const selectedStepId = useSopPrototypeStore((state) => state.selectedStepId);
     const selectedEdgeId = useSopPrototypeStore((state) => state.selectedEdgeId);
+    const readOnly = useSopPrototypeStore((state) => state.customerReviewMode);
     const selectStep = useSopPrototypeStore((state) => state.selectStep);
     const selectEdge = useSopPrototypeStore((state) => state.selectEdge);
     const updateStep = useSopPrototypeStore((state) => state.updateStep);
@@ -75,11 +76,12 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
     // Node Drag Stop -> save position to store
     const handleNodeDragStop = useCallback(
         (_: React.MouseEvent, node: Node) => {
+            if (readOnly) return;
             updateStep(node.id, {
                 position: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
             });
         },
-        [updateStep]
+        [updateStep, readOnly]
     );
 
     // Edge Connection & Handle Preservation - 생성 시점에 명백히 잘못된 연결(자기 자신, 시작으로
@@ -90,7 +92,7 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
     // condition이 모두 필요합니다" 경고를 보여주게 한다 - validateSopDecisionBranches 재사용).
     const handleConnect = useCallback(
         (connection: Connection) => {
-            if (!document) return;
+            if (!document || readOnly) return;
             const { source, target } = connection;
             if (!source || !target) return;
 
@@ -146,12 +148,12 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
                 branchType,
             });
         },
-        [addEdge, document]
+        [addEdge, document, readOnly]
     );
 
     const handleReconnect = useCallback(
         (oldEdge: Edge, connection: Connection) => {
-            if (!document || !connection.source || !connection.target) return;
+            if (!document || readOnly || !connection.source || !connection.target) return;
             const { source, target } = connection;
             if (source === target) {
                 setConnectionNotice('같은 단계 안에서는 연결점을 변경할 수 없습니다.');
@@ -182,7 +184,7 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
             });
             setConnectionNotice('연결점이 변경되었습니다. 연결선 끝을 다시 드래그해 조정할 수 있습니다.');
         },
-        [document, setEdges, updateEdge]
+        [document, setEdges, updateEdge, readOnly]
     );
 
     // Edge Selection
@@ -197,9 +199,10 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
     // Edge Deletion
     const handleEdgesDelete = useCallback(
         (deletedEdges: Edge[]) => {
+            if (readOnly) return;
             deletedEdges.forEach((e) => deleteEdge(e.id));
         },
-        [deleteEdge]
+        [deleteEdge, readOnly]
     );
 
     const handlePaneClick = useCallback(() => {
@@ -226,7 +229,9 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
                 </div>
             )}
             <div className="pointer-events-none absolute top-3 left-3 z-30 rounded-lg border border-zinc-200 bg-white/90 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 shadow-sm">
-                연결선 끝을 드래그하면 다른 연결점으로 옮길 수 있습니다.
+                {readOnly
+                    ? '고객 검토 모드: 열람과 선택만 가능하며 편집은 비활성화되어 있습니다.'
+                    : '연결선 끝을 드래그하면 다른 연결점으로 옮길 수 있습니다.'}
             </div>
             <label className="absolute top-3 right-3 z-30 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white/95 px-2 py-1.5 text-[11px] font-medium text-zinc-600 shadow-sm">
                 겹친 연결선 선택
@@ -264,6 +269,11 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
                 onEdgeClick={handleEdgeClick}
                 onEdgesDelete={handleEdgesDelete}
                 onPaneClick={handlePaneClick}
+                nodesDraggable={!readOnly}
+                nodesConnectable={!readOnly}
+                edgesReconnectable={!readOnly}
+                elementsSelectable
+                deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
                 minZoom={0.2}

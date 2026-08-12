@@ -1,4 +1,5 @@
 import { SopEdge, SopStepData } from './sop-types';
+import { getSopNodeBounds, type SopNodeBounds } from './sop-node-geometry';
 
 export type SopRoutePoint = { x: number; y: number };
 export type SopReworkRoute = {
@@ -8,14 +9,15 @@ export type SopReworkRoute = {
 };
 
 type Side = 'top' | 'right' | 'bottom' | 'left';
-type Bounds = { left: number; top: number; right: number; bottom: number };
+type Bounds = SopNodeBounds;
 type RouteNode = { id: string; bounds: Bounds };
 
 const CLEARANCE = 28;
 const OUTER_GUTTER = 92;
 const REWORK_LANE_GAP = 52;
 
-const isSecondaryBranch = (edge: SopEdge) => edge.branchType === 'no' || edge.branchType === 'condition';
+/** Shared with sop-layout.ts: a NO/condition branch is a candidate rework edge. */
+export const isSecondaryBranch = (edge: SopEdge) => edge.branchType === 'no' || edge.branchType === 'condition';
 
 /** A NO/condition branch is drawn as a rework route only when it closes a loop. */
 export function isSopReworkEdge(edge: SopEdge, edges: SopEdge[]): boolean {
@@ -40,18 +42,6 @@ export function isSopReworkEdge(edge: SopEdge, edges: SopEdge[]): boolean {
     }
 
     return /재작업|재검토|재협의|rework/i.test(`${edge.label || ''} ${edge.condition || ''}`);
-}
-
-function stepBounds(step: SopStepData, displayMode: 'compact' | 'standard' | 'detailed'): Bounds {
-    void displayMode;
-    const width = step.shape === 'decision' ? 190 : 190;
-    const height = step.shape === 'decision' ? 120 : 74;
-    return {
-        left: step.position.x,
-        top: step.position.y,
-        right: step.position.x + width,
-        bottom: step.position.y + height,
-    };
 }
 
 function getPort(bounds: Bounds, side: Side, target: boolean) {
@@ -235,11 +225,10 @@ function findOrthogonalPath(
 export function routeSopReworkEdge(
     edge: SopEdge,
     steps: SopStepData[],
-    displayMode: 'compact' | 'standard' | 'detailed',
     laneIndex: number,
     occupiedSegments: Set<string>
 ): SopReworkRoute | null {
-    const routeNodes: RouteNode[] = steps.map((step) => ({ id: step.id, bounds: stepBounds(step, displayMode) }));
+    const routeNodes: RouteNode[] = steps.map((step) => ({ id: step.id, bounds: getSopNodeBounds(step) }));
     const source = routeNodes.find((node) => node.id === edge.source);
     const target = routeNodes.find((node) => node.id === edge.target);
     if (!source || !target) return null;

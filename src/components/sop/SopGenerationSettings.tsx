@@ -3,7 +3,7 @@
 import React from 'react';
 import { ChevronDown, ChevronUp, GitBranch, RotateCcw, Settings2, Sliders } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
-import { MAX_BRANCHES_MAX, MAX_BRANCHES_MIN, validateSopSetupConfig } from '@/lib/sop-setup-validation';
+import { MAX_BRANCHES_MAX, MAX_BRANCHES_MIN, SOP_DETAIL_LEVELS, SOP_DETAIL_LEVEL_GUIDE, SOP_BRANCH_POLICIES, SOP_BRANCH_POLICY_GUIDE, validateSopSetupConfig } from '@/lib/sop-setup-validation';
 
 const STEP_OPTIONS = Array.from({ length: 13 }, (_, index) => index + 4);
 
@@ -28,13 +28,10 @@ export const SopGenerationSettings: React.FC = () => {
                     <div className="mb-2 flex items-center justify-between gap-2"><label className="text-xs font-semibold text-zinc-800">업무 분해 수준</label><span className="text-[10px] font-medium text-indigo-700">SOP 생성 구조</span></div>
                     <p className="mb-2 text-[11px] leading-4 text-zinc-500">AI가 같은 업무를 어느 수준까지 나눠 SOP 단계로 만들지 정합니다. 캔버스 표시는 단계명 중심으로 유지됩니다.</p>
                     <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="업무 분해 수준">
-                        {[
-                            { id: 'simple' as const, label: '핵심 흐름', detail: 'Task의 핵심 흐름만' },
-                            { id: 'standard' as const, label: '업무 단계', detail: 'Activity별 주요 단계' },
-                            { id: 'detailed' as const, label: '실행 단위', detail: '조건·예외까지 분해' },
-                        ].map((level) => {
-                            const selected = setupConfig.detailLevel === level.id;
-                            return <button key={level.id} type="button" role="radio" aria-checked={selected} onClick={() => setSetupConfig({ detailLevel: level.id })} className={`min-h-[76px] rounded-md border p-2 text-left transition-colors ${selected ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200' : 'border-zinc-200 bg-zinc-50/70 hover:border-zinc-300 hover:bg-white'}`}><span className={`block text-xs font-semibold ${selected ? 'text-indigo-800' : 'text-zinc-800'}`}>{level.label}</span><span className="mt-1 block text-[10px] leading-4 text-zinc-500">{level.detail}</span></button>;
+                        {SOP_DETAIL_LEVELS.map((levelId) => {
+                            const level = SOP_DETAIL_LEVEL_GUIDE[levelId];
+                            const selected = setupConfig.detailLevel === levelId;
+                            return <button key={levelId} type="button" role="radio" aria-checked={selected} onClick={() => setSetupConfig({ detailLevel: levelId })} className={`min-h-[76px] rounded-md border p-2 text-left transition-colors ${selected ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200' : 'border-zinc-200 bg-zinc-50/70 hover:border-zinc-300 hover:bg-white'}`}><span className={`block text-xs font-semibold ${selected ? 'text-indigo-800' : 'text-zinc-800'}`}>{level.label}</span><span className="mt-1 block text-[10px] leading-4 text-zinc-500">{level.shortDetail}</span></button>;
                         })}
                     </div>
                 </div>
@@ -47,7 +44,7 @@ export const SopGenerationSettings: React.FC = () => {
                     </div>
                     <div>
                         <label className="flex items-center gap-1 text-xs font-semibold text-zinc-800"><GitBranch className="h-3.5 w-3.5 text-indigo-600" /> 분기 처리</label>
-                        <select value={setupConfig.branchPolicy} onChange={(event) => setSetupConfig({ branchPolicy: event.target.value as 'auto' | 'none' | 'max' })} className="mt-1.5 w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-zinc-900 focus:border-indigo-500 focus:outline-none"><option value="auto">AI 자동 판단</option><option value="none">분기 없음</option><option value="max">최대 개수 지정</option></select>
+                        <select value={setupConfig.branchPolicy} onChange={(event) => setSetupConfig({ branchPolicy: event.target.value as (typeof SOP_BRANCH_POLICIES)[number] })} className="mt-1.5 w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-xs font-semibold text-zinc-900 focus:border-indigo-500 focus:outline-none">{SOP_BRANCH_POLICIES.map((policyId) => <option key={policyId} value={policyId}>{SOP_BRANCH_POLICY_GUIDE[policyId].label}</option>)}</select>
                         {setupConfig.branchPolicy === 'max' && <div className="mt-1.5 flex items-center gap-1.5"><input type="number" min={MAX_BRANCHES_MIN} max={MAX_BRANCHES_MAX} value={Number.isNaN(setupConfig.maxBranches) ? '' : setupConfig.maxBranches} onChange={(event) => setSetupConfig({ maxBranches: parseIntFieldValue(event.target.value) })} className={`w-16 rounded-md border px-2 py-1 text-xs ${issueFor('maxBranches') ? 'border-rose-400' : 'border-zinc-300'}`} aria-label="최대 분기 수" /><span className="text-[10px] text-zinc-500">{MAX_BRANCHES_MIN}–{MAX_BRANCHES_MAX}개</span></div>}
                     </div>
                 </div>

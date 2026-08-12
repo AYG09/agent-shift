@@ -1,5 +1,5 @@
 import { SAMPLE_SOP_MEMBER, SAMPLE_WORK_LIBRARY, SAMPLE_SOP_DOCUMENT } from '../src/lib/sop-sample-data';
-import { SopDocument, SopSetupConfig, SopStepData, SopDisplayMode } from '../src/lib/sop-types';
+import { SopDocument, SopSetupConfig, SopStepData } from '../src/lib/sop-types';
 import { createSopDocumentFromGeneration } from '../src/lib/sop-normalizer';
 import {
     validateSopGraph,
@@ -19,11 +19,24 @@ import { buildSopNodes, buildSopEdges, syncSopCanvasNodes } from '../src/lib/sop
 import { buildSopGenerationRequestBody } from '../src/lib/sop-ai-request';
 import { generateSopViaApi } from '../src/lib/sop-ai-generation';
 import { runSopValidationPipeline } from '../src/lib/sop-generation-pipeline';
-import { getSopPrompt } from '../src/app/api/ai/route';
+import { getSopPrompt } from '../src/server/sop/sop-prompt';
+import { POST as sopApiPost } from '../src/app/api/ai/route';
 import { sanitizeModelId, DEFAULT_GEMINI_MODEL } from '../src/lib/gemini-models';
 import { validateSopSetupConfig } from '../src/lib/sop-setup-validation';
+import { type SopRecord } from '../src/lib/sop-repository';
+import { scopeSopRecordsForActor, type SopActorContext } from '../src/lib/sop-actor';
+import { InMemorySopRepository } from '../src/server/sop/sop-repository-memory';
+import { POST as sopRepoPost, GET as sopRepoList } from '../src/app/api/sop/route';
+import { GET as sopRepoGetById, PUT as sopRepoPut } from '../src/app/api/sop/[id]/route';
+import { createSafeDraftStorage, createBrowserSopDraftStorage, type RawKeyValueStorage } from '../src/lib/sop-draft-storage';
+import { SopDocumentSchema } from '../src/lib/sop-document-schema';
+import { SopGenerationResponseSchema, SopStepAiSchema } from '../src/lib/sop-schemas';
+import { validateFullSopConfirmation } from '../src/lib/sop-review';
+import { SopRecordSchema } from '../src/lib/sop-record-schema';
+import { SopRecordResponseSchema, SopRecordListResponseSchema, SopCreateConflictResponseSchema, SopUpdateConflictResponseSchema } from '../src/lib/sop-response-schemas';
+import { respondValidated } from '../src/server/sop/sop-response';
 
-type SopCanvasNodeData = { step: SopStepData; index: number; displayMode: SopDisplayMode };
+type SopCanvasNodeData = { step: SopStepData; index: number };
 
 const BASE_SETUP_CONFIG: SopSetupConfig = {
     sourceType: 'task',
@@ -360,6 +373,116 @@ assert(!useSopPrototypeStore.getState().document!.agentizationReview?.confirmedA
 console.log('  ✅ Workflow/step agentization review preserves selections and requires re-review after content edits.');
 
 // ---------------------------------------------------------
+// 3.7 고객 검토 모드는 모든 문서 mutation을 Store 레벨에서 차단한다 (P0-1)
+// ---------------------------------------------------------
+console.log('Test 3.7: customerReviewMode locks every document mutation at the store level...');
+store.resetStore();
+store.generateFromSample();
+store.toggleCustomerReviewMode();
+assert(useSopPrototypeStore.getState().customerReviewMode === true, 'customerReviewMode must be enabled after toggling');
+
+const lockedDocSnapshot = JSON.stringify(useSopPrototypeStore.getState().document);
+const lockedStepId = useSopPrototypeStore.getState().document!.steps[0].id;
+const lockedEdgeId = useSopPrototypeStore.getState().document!.edges[0].id;
+const lockedNonTerminalStepId = useSopPrototypeStore.getState().document!.steps.find((s) => !s.terminalType)!.id;
+
+// Attempt every document-mutating action; none may change the document while locked.
+store.updateDocumentTitle('우회 시도 제목');
+store.updateStep(lockedStepId, { title: '우회 시도' });
+// A canvas node drag calls updateStep with only `position` — must be blocked identically
+// to a content edit, not treated as an exempt "no reviewable meaning" case.
+store.updateStep(lockedStepId, { position: { x: 999, y: 999 } });
+store.addStep({ id: 'bypass-step', title: '우회 단계', definition: '우회', shape: 'process', requiredSkills: [], position: { x: 0, y: 0 }, reviewStatus: 'ai-draft' });
+const bypassInsert = store.insertStepBeforeEnd({ id: 'bypass-insert', title: '우회 삽입', definition: '우회', shape: 'process', requiredSkills: [], position: { x: 0, y: 0 }, reviewStatus: 'ai-draft' });
+assert(bypassInsert.success === false, 'insertStepBeforeEnd must fail while customer review mode is locked');
+const bypassDelete = store.deleteStep(lockedNonTerminalStepId);
+assert(bypassDelete.success === false, 'deleteStep must fail while customer review mode is locked');
+const bypassDuplicate = store.duplicateStep(lockedNonTerminalStepId);
+assert(bypassDuplicate.success === false, 'duplicateStep must fail while customer review mode is locked');
+store.updateEdge(lockedEdgeId, { label: '우회 라벨' });
+store.addEdge({ id: 'bypass-edge', source: lockedStepId, target: lockedStepId });
+store.deleteEdge(lockedEdgeId);
+store.acceptAiSkill(lockedStepId, 'anything');
+store.rejectAiSkill(lockedStepId, 'anything');
+store.addSkillToStep(lockedStepId, { name: '우회 SKILL', source: 'work-library', accepted: true });
+store.removeSkillFromStep(lockedStepId, 'anything');
+store.updateStepReviewStatus(lockedStepId, 'reviewed');
+const bypassConfirmSop = store.confirmFullSop();
+assert(bypassConfirmSop.success === false, 'confirmFullSop must fail while customer review mode is locked');
+store.saveSnapshot();
+store.undo();
+store.redo();
+store.setAgentizationScope('workflow');
+store.setAgentizationDefaultMode('assist');
+store.setAgentizationStepMode(lockedNonTerminalStepId, 'automation');
+store.toggleAgentizationStep(lockedNonTerminalStepId);
+store.setAgentizationNote('우회 메모');
+const bypassAgentization = store.confirmAgentization();
+assert(bypassAgentization.success === false, 'confirmAgentization must fail while customer review mode is locked');
+
+assert(JSON.stringify(useSopPrototypeStore.getState().document) === lockedDocSnapshot, 'No mutation action may change the document while customerReviewMode is on');
+
+// Navigation/selection must remain usable while locked.
+store.selectStep(lockedStepId);
+assert(useSopPrototypeStore.getState().selectedStepId === lockedStepId, 'selectStep must remain usable in customer review mode');
+store.selectEdge(lockedEdgeId);
+assert(useSopPrototypeStore.getState().selectedEdgeId === lockedEdgeId, 'selectEdge must remain usable in customer review mode');
+
+store.toggleCustomerReviewMode();
+assert(useSopPrototypeStore.getState().customerReviewMode === false, 'customerReviewMode must be toggleable back off');
+store.updateDocumentTitle('잠금 해제 후 제목 변경');
+assert(useSopPrototypeStore.getState().document!.title === '잠금 해제 후 제목 변경', 'Mutations must work again once customerReviewMode is off');
+console.log('  ✅ customerReviewMode blocks every document mutation while leaving navigation/selection usable.');
+
+// ---------------------------------------------------------
+// 3.8 SKILL 변경은 확정된 Agent화 판단을 무효화한다 (P0-2) + 미지정 값은 undefined로 모델링된다 (P0-3)
+// ---------------------------------------------------------
+console.log('Test 3.8: SKILL edits invalidate Agent화 confirmation; unset mode clears the step key...');
+store.resetStore();
+store.generateFromSample();
+const skillTestStepId = useSopPrototypeStore.getState().document!.steps.find((s) => !s.terminalType)!.id;
+store.setAgentizationScope('workflow');
+store.setAgentizationDefaultMode('assist');
+assert(store.confirmAgentization().success === true, 'Agentization review must be confirmable before the SKILL invalidation check');
+assert(Boolean(useSopPrototypeStore.getState().document!.agentizationReview?.confirmedAt), 'confirmedAt must be set before exercising SKILL actions');
+
+store.addSkillToStep(skillTestStepId, { name: 'P0-2 검증용 SKILL', source: 'ai-suggested', accepted: false });
+assert(!useSopPrototypeStore.getState().document!.agentizationReview?.confirmedAt, 'addSkillToStep must clear a confirmed agentization review');
+
+store.setAgentizationScope('workflow');
+store.setAgentizationDefaultMode('assist');
+assert(store.confirmAgentization().success === true, 'Re-confirm before testing acceptAiSkill');
+store.acceptAiSkill(skillTestStepId, 'P0-2 검증용 SKILL');
+assert(!useSopPrototypeStore.getState().document!.agentizationReview?.confirmedAt, 'acceptAiSkill must clear a confirmed agentization review');
+
+store.setAgentizationScope('workflow');
+store.setAgentizationDefaultMode('assist');
+assert(store.confirmAgentization().success === true, 'Re-confirm before testing rejectAiSkill');
+store.rejectAiSkill(skillTestStepId, 'P0-2 검증용 SKILL');
+assert(!useSopPrototypeStore.getState().document!.agentizationReview?.confirmedAt, 'rejectAiSkill must clear a confirmed agentization review');
+
+store.addSkillToStep(skillTestStepId, { name: '삭제될 SKILL', source: 'work-library', accepted: true });
+store.setAgentizationScope('workflow');
+store.setAgentizationDefaultMode('assist');
+assert(store.confirmAgentization().success === true, 'Re-confirm before testing removeSkillFromStep');
+store.removeSkillFromStep(skillTestStepId, '삭제될 SKILL');
+assert(!useSopPrototypeStore.getState().document!.agentizationReview?.confirmedAt, 'removeSkillFromStep must clear a confirmed agentization review');
+
+// P0-3: an explicit mode can be cleared back to "unset" (undefined), not a fake empty-string mode.
+store.setAgentizationScope('steps');
+store.toggleAgentizationStep(skillTestStepId);
+store.setAgentizationStepMode(skillTestStepId, 'automation');
+assert(useSopPrototypeStore.getState().document!.agentizationReview?.stepModes[skillTestStepId] === 'automation', 'Step mode must be settable to automation');
+store.setAgentizationStepMode(skillTestStepId, undefined);
+assert(!(skillTestStepId in (useSopPrototypeStore.getState().document!.agentizationReview?.stepModes || {})), 'Clearing a step mode must delete the key rather than store a placeholder value');
+const unsetConfirmAttempt = store.confirmAgentization();
+assert(unsetConfirmAttempt.success === false, 'confirmAgentization must fail when a selected step has no explicit mode');
+store.setAgentizationStepMode(skillTestStepId, 'assist');
+assert(useSopPrototypeStore.getState().document!.agentizationReview?.stepModes[skillTestStepId] === 'assist', 'Step mode must be re-assignable after being cleared');
+assert(store.confirmAgentization().success === true, 'confirmAgentization must succeed once the step mode is set again');
+console.log('  ✅ SKILL edits invalidate Agent화 confirmation, and unset step modes are modeled as absent keys, not placeholder strings.');
+
+// ---------------------------------------------------------
 // 4. 단계별 UI에서 confirmed 직접 설정 금지 테스트 (Item 4)
 // ---------------------------------------------------------
 console.log('Test 4: Step UI direct confirmed setting bypass prevention...');
@@ -412,10 +535,10 @@ const baseRequestParams = {
     taskName: '신입 채용',
     skills: [] as Array<{ id?: string; name: string; description?: string }>,
     context: '맥락',
-    detailLevel: 'standard',
+    detailLevel: 'standard' as const,
     minSteps: 6,
     maxSteps: 8,
-    branchPolicy: 'auto',
+    branchPolicy: 'auto' as const,
     maxBranches: 2,
     allowRework: true,
 };
@@ -464,6 +587,11 @@ const requestBodyNoKey = buildSopGenerationRequestBody({ ...baseRequestParams, r
 assert(!('apiKey' in requestBodyNoKey), 'apiKey must be omitted from body when not provided');
 console.log('  ✅ Selected AI model/reasoning/API key are sanitized and built into the request body; invalid values never pass through raw.');
 
+const validSopRequestBody = {
+    action: 'generateSop' as const,
+    ...baseRequestParams,
+};
+
 // ---------------------------------------------------------
 // 7. Real Store -> Canvas Integration Node & Edge Mapping Tests (Item 7)
 // ---------------------------------------------------------
@@ -499,10 +627,6 @@ const firstEdgeId = useSopPrototypeStore.getState().document!.edges[0].id;
 store.updateEdge(firstEdgeId, { label: '캔버스 연결선' });
 const edgesAfterEdit = buildSopEdges(useSopPrototypeStore.getState().document!, null);
 assert(edgesAfterEdit[0].label === '캔버스 연결선', 'Canvas edge label must update');
-
-// 7.4 Canvas nodes always use the compact workflow display
-const compactNodes = buildSopNodes(useSopPrototypeStore.getState().document!, null);
-assert((compactNodes[0].data as SopCanvasNodeData).displayMode === 'compact', 'SOP canvas must always use the compact workflow display');
 
 // 7.5 Undo reflects in document & node list
 store.undo();
@@ -559,7 +683,6 @@ console.log('  ✅ Explicit edge handle IDs survive the store -> canvas edge map
 console.log('Test 7.8: SOP canvas edges use coordinate-aware shortest handles and smooth routing...');
 const coordinateRouteDoc = {
     ...SAMPLE_SOP_DOCUMENT,
-    displayMode: 'standard' as const,
     steps: [
         { ...SAMPLE_SOP_DOCUMENT.steps[0], id: 'route-left', position: { x: 100, y: 200 } },
         { ...SAMPLE_SOP_DOCUMENT.steps[1], id: 'route-right', position: { x: 620, y: 200 } },
@@ -1397,6 +1520,26 @@ console.log('  ✅ validateSopSetupConfig rejects negative/fractional/blank/inve
 
 async function runAsyncTests() {
     // ---------------------------------------------------------
+    // 6f. 잘못된 SOP 요청은 500이 아닌 400을 반환한다 (client/server 공용 Zod 스키마)
+    // ---------------------------------------------------------
+    console.log('Test 6f: Malformed SOP requests are rejected with 400, never a 500 crash...');
+    async function postSopRequest(body: unknown) {
+        const fakeRequest = { json: async () => body } as unknown as Parameters<typeof sopApiPost>[0];
+        return sopApiPost(fakeRequest);
+    }
+    const badApiKeyResponse = await postSopRequest({ ...validSopRequestBody, apiKey: 12345 });
+    assert(badApiKeyResponse.status === 400, `A numeric apiKey must produce 400, got ${badApiKeyResponse.status}`);
+    const badApiKeyBody = await badApiKeyResponse.json();
+    assert(Array.isArray(badApiKeyBody.issues), 'A 400 response must include field-level issues');
+
+    const badDetailLevelResponse = await postSopRequest({ ...validSopRequestBody, detailLevel: 'not-a-real-level' });
+    assert(badDetailLevelResponse.status === 400, `An invalid detailLevel must produce 400, got ${badDetailLevelResponse.status}`);
+
+    const badBranchPolicyResponse = await postSopRequest({ ...validSopRequestBody, branchPolicy: 'not-a-real-policy' });
+    assert(badBranchPolicyResponse.status === 400, `An invalid branchPolicy must produce 400, got ${badBranchPolicyResponse.status}`);
+    console.log('  ✅ Malformed SOP requests (bad apiKey type, invalid detailLevel/branchPolicy) return 400 with field issues, never a 500.');
+
+    // ---------------------------------------------------------
     // 9. AI 생성 orchestration이 실패를 문서/샘플/라우팅 변경 없이 처리하는지 테스트
     // ---------------------------------------------------------
     console.log('Test 9: generateSopViaApi isolates fetch failures/throws from the store...');
@@ -1611,6 +1754,582 @@ async function runAsyncTests() {
     assert(!pipeline5.ok && pipeline5.issues.some((i) => i.type === 'decision-not-allowed'), 'Pipeline failure must report decision-not-allowed');
     assert(generateCallCount5 === 1, 'Pipeline must still attempt exactly one repair before failing');
     console.log('  ✅ Structural constraints (branchPolicy) are enforced end-to-end through the real pipeline, not just as an isolated pure function.');
+
+    // ---------------------------------------------------------
+    // 21. SopRepository contract: create (incl. already-exists conflict) / getById /
+    //     update (incl. version conflict, both preserving existing data) / listByMember /
+    //     listByOrganization / listAll
+    // ---------------------------------------------------------
+    console.log('Test 21: SopRepository contract (in-memory reference adapter)...');
+    const repo = new InMemorySopRepository();
+    const repoDocA: SopDocument = { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-a' };
+    const createdResult = await repo.create({ memberId: 'member-a', organizationId: 'org-1', document: repoDocA });
+    assert(createdResult.ok && createdResult.record.version === 1, 'A newly created record starts at version 1');
+    assert((await repo.getById('repo-doc-a'))?.id === 'repo-doc-a', 'getById must return the created record');
+    assert((await repo.getById('missing-id')) === null, 'getById must return null for an unknown id');
+
+    // create() must never silently overwrite an existing id - it is not an implicit upsert.
+    const duplicateCreate = await repo.create({ memberId: 'someone-else', organizationId: 'org-9', document: { ...repoDocA, title: '가짜 덮어쓰기 시도' } });
+    assert(!duplicateCreate.ok && duplicateCreate.reason === 'already-exists', 'create() with an id that already exists must fail as already-exists');
+    const afterDuplicateAttempt = await repo.getById('repo-doc-a');
+    assert(
+        afterDuplicateAttempt?.memberId === 'member-a' &&
+        afterDuplicateAttempt?.organizationId === 'org-1' &&
+        afterDuplicateAttempt?.document.title === repoDocA.title &&
+        afterDuplicateAttempt?.version === 1,
+        'A failed duplicate create must leave the existing memberId/organizationId/document/version completely unchanged'
+    );
+
+    const staleUpdate = await repo.update('repo-doc-a', { document: repoDocA, expectedVersion: 999 });
+    assert(!staleUpdate.ok && staleUpdate.reason === 'version-conflict', 'A stale expectedVersion must be rejected as a version-conflict, never silently overwritten');
+    const afterStaleUpdate = await repo.getById('repo-doc-a');
+    assert(afterStaleUpdate?.version === 1 && afterStaleUpdate?.document.title === repoDocA.title, 'A rejected version-conflict update must leave the existing record completely unchanged');
+
+    const goodUpdate = await repo.update('repo-doc-a', { document: { ...repoDocA, title: '갱신된 제목' }, expectedVersion: 1 });
+    assert(goodUpdate.ok && goodUpdate.record.version === 2 && goodUpdate.record.document.title === '갱신된 제목', 'A correct expectedVersion must apply the update and bump the version');
+
+    await repo.create({ memberId: 'member-b', organizationId: 'org-1', document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-b' } });
+    await repo.create({ memberId: 'member-c', organizationId: 'org-2', document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-c' } });
+    const memberAList = await repo.listByMember('member-a');
+    const org1List = await repo.listByOrganization('org-1');
+    const allList = await repo.listAll();
+    assert(memberAList.length === 1 && memberAList[0].id === 'repo-doc-a', 'listByMember must return only that member\'s records');
+    assert(org1List.length === 2 && org1List.every((r) => r.organizationId === 'org-1'), 'listByOrganization must return every record in that org, and only that org');
+    assert(allList.length === 3 && new Set(allList.map((r) => r.organizationId)).size === 2, 'listAll must return every record across every organization (HR scope)');
+    console.log('  ✅ SopRepository create (incl. already-exists conflict)/getById/update (incl. version conflict, both preserving prior data)/listByMember/listByOrganization/listAll all behave correctly.');
+
+    // ---------------------------------------------------------
+    // 21b. SopRepository contract: update() itself (not just the API boundary) must reject a
+    //      document whose id disagrees with the target record id, and must leave every field of
+    //      the stored record — document, memberId, organizationId, version — completely untouched.
+    // ---------------------------------------------------------
+    console.log('Test 21b: InMemorySopRepository.update() rejects id-mismatched documents at the repository level...');
+    const idMismatchDoc: SopDocument = { ...SAMPLE_SOP_DOCUMENT, id: 'some-other-id', title: '엉뚱한 문서로 덮어쓰기 시도' };
+    const beforeMismatchUpdate = await repo.getById('repo-doc-a');
+    const idMismatchUpdate = await repo.update('repo-doc-a', { document: idMismatchDoc, expectedVersion: beforeMismatchUpdate!.version });
+    assert(!idMismatchUpdate.ok && idMismatchUpdate.reason === 'id-mismatch', 'update() called directly (not through the API) must itself reject document.id !== the target record id');
+    const afterMismatchUpdate = await repo.getById('repo-doc-a');
+    assert(
+        afterMismatchUpdate?.document.id === 'repo-doc-a' &&
+        afterMismatchUpdate?.document.title === beforeMismatchUpdate?.document.title &&
+        afterMismatchUpdate?.memberId === beforeMismatchUpdate?.memberId &&
+        afterMismatchUpdate?.organizationId === beforeMismatchUpdate?.organizationId &&
+        afterMismatchUpdate?.version === beforeMismatchUpdate?.version,
+        'A rejected id-mismatch update (called directly on the repository) must leave document/memberId/organizationId/version completely unchanged'
+    );
+    console.log('  ✅ The repository itself (not merely the API route) enforces record.id === document.id and preserves every field of the existing record on rejection.');
+
+    // ---------------------------------------------------------
+    // 22. Role-scoped visibility: member/leader/hr return different scopes from the same record set
+    // ---------------------------------------------------------
+    console.log('Test 22: scopeSopRecordsForActor returns different scopes per role...');
+    const now = new Date().toISOString();
+    const makeRecord = (overrides: Partial<SopRecord>): SopRecord => ({
+        id: 'r', memberId: 'm', organizationId: 'o', taskId: 't', taskName: 'T',
+        document: SAMPLE_SOP_DOCUMENT, version: 1, createdAt: now, updatedAt: now,
+        ...overrides,
+    });
+    const multiOrgRecords: SopRecord[] = [
+        makeRecord({ id: 'r1', memberId: 'member-x', organizationId: 'org-1' }),
+        makeRecord({ id: 'r2', memberId: 'member-y', organizationId: 'org-1' }),
+        makeRecord({ id: 'r3', memberId: 'member-z', organizationId: 'org-2' }),
+    ];
+    const memberActor: SopActorContext = { actorId: 'member-x', role: 'member', organizationId: 'org-1' };
+    const leaderActor: SopActorContext = { actorId: 'leader-1', role: 'leader', organizationId: 'org-1' };
+    const hrActor: SopActorContext = { actorId: 'hr-1', role: 'hr', organizationId: 'org-1' };
+    const memberScope = scopeSopRecordsForActor(memberActor, multiOrgRecords).map((r) => r.id);
+    const leaderScope = scopeSopRecordsForActor(leaderActor, multiOrgRecords).map((r) => r.id);
+    const hrScope = scopeSopRecordsForActor(hrActor, multiOrgRecords).map((r) => r.id);
+    assert(memberScope.length === 1 && memberScope[0] === 'r1', 'A member must see only their own SOP records');
+    assert(leaderScope.length === 2 && leaderScope.includes('r1') && leaderScope.includes('r2') && !leaderScope.includes('r3'), 'A leader must see every record in their own organization, and no other');
+    assert(hrScope.length === 3, 'HR must see every record across every organization');
+    console.log('  ✅ member/leader/hr each resolve to a distinct, correctly-scoped set from the identical underlying record list.');
+
+    // ---------------------------------------------------------
+    // 24. /api/sop POST: actor context, member-only creation, ownership, schema validation, and
+    //     duplicate-id 409 (never a silent overwrite)
+    // ---------------------------------------------------------
+    console.log('Test 24: /api/sop POST enforces actor context, member-only creation, ownership, schema, and duplicate-id conflict...');
+    function sopApiRequest(headers: Record<string, string>, body?: unknown) {
+        return { headers: new Headers(headers), json: async () => body } as unknown as Parameters<typeof sopRepoPost>[0];
+    }
+    const noActorResponse = await sopRepoPost(sopApiRequest({}, {}));
+    assert(noActorResponse.status === 401, 'A request with no actor headers must be rejected with 401, not treated as anonymous-allowed');
+
+    const leaderPostHeaders = { 'x-sop-actor-id': 'leader-9', 'x-sop-actor-role': 'leader', 'x-sop-actor-organization-id': 'org-3' };
+    const leaderPostResponse = await sopRepoPost(sopApiRequest(leaderPostHeaders, {
+        memberId: 'leader-9', organizationId: 'org-3', document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-leader-attempt' },
+    }));
+    assert(leaderPostResponse.status === 403, 'A leader must not be able to create a SOP record, even under their own identity');
+
+    const hrPostHeaders = { 'x-sop-actor-id': 'hr-9', 'x-sop-actor-role': 'hr', 'x-sop-actor-organization-id': 'org-3' };
+    const hrPostResponse = await sopRepoPost(sopApiRequest(hrPostHeaders, {
+        memberId: 'hr-9', organizationId: 'org-3', document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-hr-attempt' },
+    }));
+    assert(hrPostResponse.status === 403, 'HR must not be able to create a SOP record, even under their own identity');
+
+    const memberHeaders = { 'x-sop-actor-id': 'member-d', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-3' };
+    const wrongOwnerResponse = await sopRepoPost(sopApiRequest(memberHeaders, {
+        memberId: 'someone-else', organizationId: 'org-3', document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d' },
+    }));
+    assert(wrongOwnerResponse.status === 403, 'A member must not be able to create a record under a different memberId');
+
+    const badBodyResponse = await sopRepoPost(sopApiRequest(memberHeaders, { memberId: 'member-d', organizationId: 'org-3' }));
+    assert(badBodyResponse.status === 400, 'A create request missing the document must be rejected with 400, not 500');
+
+    const createResponse = await sopRepoPost(sopApiRequest(memberHeaders, {
+        memberId: 'member-d', organizationId: 'org-3', document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d' },
+    }));
+    assert(createResponse.status === 201, `A well-formed, self-owned, member-role create request must succeed, got ${createResponse.status}`);
+    const createdBody = await createResponse.json();
+    assert(createdBody.record.version === 1, 'The created record is returned in the response body at version 1');
+
+    // A duplicate POST with the same document.id must 409, and must not touch the first record.
+    const duplicatePostResponse = await sopRepoPost(sopApiRequest(memberHeaders, {
+        memberId: 'member-d', organizationId: 'org-3', document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d', title: '덮어쓰기 시도 제목' },
+    }));
+    assert(duplicatePostResponse.status === 409, 'POST with an id that already exists must return 409 Conflict, never overwrite');
+    const afterDuplicatePostGet = await sopRepoGetById(sopApiRequest(memberHeaders), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    const afterDuplicatePostBody = await afterDuplicatePostGet.json();
+    assert(
+        afterDuplicatePostBody.record.version === 1 && afterDuplicatePostBody.record.document.title === SAMPLE_SOP_DOCUMENT.title,
+        'The original record\'s version and document must be completely unchanged after a rejected duplicate POST'
+    );
+    console.log('  ✅ /api/sop POST enforces actor-header presence, member-only creation (leader/hr rejected), ownership, schema validation, and a duplicate-id 409 that never overwrites.');
+
+    // ---------------------------------------------------------
+    // 25. /api/sop GET across two organizations: member/leader/hr each resolve to a distinct,
+    //     correctly-scoped list at the real API level (not just the pure scoping function)
+    // ---------------------------------------------------------
+    console.log('Test 25: /api/sop GET resolves member/leader/hr to distinct scopes across two organizations...');
+    const orgAMemberHeaders = { 'x-sop-actor-id': 'member-orgA-1', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-A' };
+    const orgAMemberHeaders2 = { 'x-sop-actor-id': 'member-orgA-2', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-A' };
+    const orgBMemberHeaders = { 'x-sop-actor-id': 'member-orgB-1', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-B' };
+    await sopRepoPost(sopApiRequest(orgAMemberHeaders, { memberId: 'member-orgA-1', organizationId: 'org-A', document: { ...SAMPLE_SOP_DOCUMENT, id: 'multi-org-a1' } }));
+    await sopRepoPost(sopApiRequest(orgAMemberHeaders2, { memberId: 'member-orgA-2', organizationId: 'org-A', document: { ...SAMPLE_SOP_DOCUMENT, id: 'multi-org-a2' } }));
+    await sopRepoPost(sopApiRequest(orgBMemberHeaders, { memberId: 'member-orgB-1', organizationId: 'org-B', document: { ...SAMPLE_SOP_DOCUMENT, id: 'multi-org-b1' } }));
+
+    const memberGetResponse = await sopRepoList(sopApiRequest(orgAMemberHeaders));
+    const memberGetBody = await memberGetResponse.json();
+    const memberGetIds = memberGetBody.records.map((r: SopRecord) => r.id);
+    assert(memberGetIds.includes('multi-org-a1') && !memberGetIds.includes('multi-org-a2') && !memberGetIds.includes('multi-org-b1'), 'A member must see only their own SOP via GET /api/sop, not their org-mate\'s or another org\'s');
+
+    const leaderOrgAHeaders = { 'x-sop-actor-id': 'leader-orgA', 'x-sop-actor-role': 'leader', 'x-sop-actor-organization-id': 'org-A' };
+    const leaderGetResponse = await sopRepoList(sopApiRequest(leaderOrgAHeaders));
+    const leaderGetBody = await leaderGetResponse.json();
+    const leaderGetIds = leaderGetBody.records.map((r: SopRecord) => r.id);
+    assert(leaderGetIds.includes('multi-org-a1') && leaderGetIds.includes('multi-org-a2') && !leaderGetIds.includes('multi-org-b1'), 'A leader must see every SOP in their own organization via GET /api/sop, and none from another organization');
+
+    const hrHeaders = { 'x-sop-actor-id': 'hr-global', 'x-sop-actor-role': 'hr', 'x-sop-actor-organization-id': 'org-A' };
+    const hrGetResponse = await sopRepoList(sopApiRequest(hrHeaders));
+    const hrGetBody = await hrGetResponse.json();
+    const hrGetIds = hrGetBody.records.map((r: SopRecord) => r.id);
+    assert(hrGetIds.includes('multi-org-a1') && hrGetIds.includes('multi-org-a2') && hrGetIds.includes('multi-org-b1'), 'HR must see every SOP across every organization via GET /api/sop, including org-B despite their own organizationId being org-A');
+    console.log('  ✅ GET /api/sop resolves member (own only), leader (own org only), and HR (every org) to distinct, correctly-scoped record lists at the real API level.');
+
+    // ---------------------------------------------------------
+    // 26. /api/sop/[id] PUT: URL id vs document.id mismatch, ownership, version conflict
+    //     (all preserving the original record), and a correctly-versioned success
+    // ---------------------------------------------------------
+    console.log('Test 26: /api/sop/[id] PUT rejects id mismatches and preserves data on every failure path...');
+    const fakePutRequest = (headers: Record<string, string>, body: unknown) => sopApiRequest(headers, body) as unknown as Parameters<typeof sopRepoPut>[0];
+
+    const mismatchedIdUpdate = await sopRepoPut(fakePutRequest(memberHeaders, { document: { ...SAMPLE_SOP_DOCUMENT, id: 'a-completely-different-id' }, expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    assert(mismatchedIdUpdate.status === 400, 'A PUT whose body document.id disagrees with the URL id must be rejected with 400, before any repository call');
+    const afterMismatchGet = await sopRepoGetById(sopApiRequest(memberHeaders), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    const afterMismatchBody = await afterMismatchGet.json();
+    assert(afterMismatchBody.record.version === 1, 'A rejected id-mismatch PUT must leave the original record\'s version unchanged');
+
+    const staleApiUpdate = await sopRepoPut(fakePutRequest(memberHeaders, { document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d' }, expectedVersion: 999 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    assert(staleApiUpdate.status === 409, 'PUT /api/sop/[id] with a stale expectedVersion must return 409, not silently overwrite');
+    const afterStaleApiGet = await sopRepoGetById(sopApiRequest(memberHeaders), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    assert((await afterStaleApiGet.json()).record.version === 1, 'A rejected version-conflict PUT must leave the original record\'s version unchanged');
+
+    // A different member can't even see this record (visibility is member-own-only), so it 404s
+    // rather than leaking that the id exists via a 403.
+    const otherMemberHeaders = { 'x-sop-actor-id': 'member-e', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-3' };
+    const invisibleApiUpdate = await sopRepoPut(fakePutRequest(otherMemberHeaders, { document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d' }, expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    assert(invisibleApiUpdate.status === 404, 'A member who cannot see another member\'s record must get 404, not a 403 that leaks its existence');
+
+    // A leader in the same org CAN see the record (org-scoped visibility), but editing is still
+    // restricted to the owning member — this is the actual 403 (authorization, not visibility) path.
+    const leaderHeaders = { 'x-sop-actor-id': 'leader-3', 'x-sop-actor-role': 'leader', 'x-sop-actor-organization-id': 'org-3' };
+    const forbiddenApiUpdate = await sopRepoPut(fakePutRequest(leaderHeaders, { document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d' }, expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    assert(forbiddenApiUpdate.status === 403, 'A leader may view but must not be able to edit a member\'s SOP record through this boundary');
+
+    const goodApiUpdate = await sopRepoPut(fakePutRequest(memberHeaders, { document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d', title: 'API로 갱신된 제목' }, expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    assert(goodApiUpdate.status === 200, `The owning member's correctly-versioned, id-matched update must succeed, got ${goodApiUpdate.status}`);
+    const goodApiUpdateBody = await goodApiUpdate.json();
+    assert(goodApiUpdateBody.record.version === 2, 'A successful update must bump the version');
+    console.log('  ✅ PUT /api/sop/[id] rejects URL/body id mismatches, stale versions, and non-owner edits — each preserving the original record — and accepts a correctly-versioned, id-matched update.');
+
+    // ---------------------------------------------------------
+    // 29. /api/sop and /api/sop/[id] response bodies actually conform to the shared response
+    //     schemas (single record, record list, conflict) — not just "the test's own ad-hoc field
+    //     checks happen to pass". A schema mismatch here would mean the route's real behavior and
+    //     its declared contract have drifted apart.
+    // ---------------------------------------------------------
+    console.log('Test 29: /api/sop and /api/sop/[id] response bodies validate against the shared response schemas...');
+    assert(SopRecordResponseSchema.safeParse(createdBody).success, 'POST /api/sop 201 response body must conform to SopRecordResponseSchema');
+    assert(SopRecordResponseSchema.safeParse(goodApiUpdateBody).success, 'PUT /api/sop/[id] 200 response body must conform to SopRecordResponseSchema');
+
+    const duplicatePostBody = await duplicatePostResponse.json();
+    assert(SopCreateConflictResponseSchema.safeParse(duplicatePostBody).success, 'POST /api/sop 409 (already-exists) response body must conform to SopCreateConflictResponseSchema (no `current`)');
+
+    const staleApiUpdateBody = await staleApiUpdate.json();
+    assert(SopUpdateConflictResponseSchema.safeParse(staleApiUpdateBody).success, 'PUT /api/sop/[id] 409 (version-conflict) response body must conform to SopUpdateConflictResponseSchema (owner-only `current` is fine)');
+
+    // The list schema is checked against the actual HR/leader/member-scoped GET bodies from Test 25
+    // above, not a hand-built stand-in — each role's real response must conform to the same shared schema.
+    assert(SopRecordListResponseSchema.safeParse(memberGetBody).success, 'GET /api/sop member-scoped response body must conform to SopRecordListResponseSchema');
+    assert(SopRecordListResponseSchema.safeParse(leaderGetBody).success, 'GET /api/sop leader-scoped response body must conform to SopRecordListResponseSchema');
+    assert(SopRecordListResponseSchema.safeParse(hrGetBody).success, 'GET /api/sop HR (全社) response body must conform to SopRecordListResponseSchema');
+    console.log('  ✅ Every checked /api/sop and /api/sop/[id] success/conflict response body (including HR/leader/member list responses) validates against its shared response schema.');
+
+    // ---------------------------------------------------------
+    // 27. createSafeDraftStorage: normal read/write/remove pass through, and a throwing
+    //     getItem/setItem/removeItem on the underlying raw storage never propagates — it
+    //     degrades to a safe no-op/null instead of crashing the caller.
+    // ---------------------------------------------------------
+    console.log('Test 27: createSafeDraftStorage passes through normally and swallows a throwing raw storage...');
+    function makeWorkingRawStorage(): RawKeyValueStorage & { dump: () => Record<string, string> } {
+        const backing = new Map<string, string>();
+        return {
+            getItem: (name) => (backing.has(name) ? backing.get(name)! : null),
+            setItem: (name, value) => { backing.set(name, value); },
+            removeItem: (name) => { backing.delete(name); },
+            dump: () => Object.fromEntries(backing),
+        };
+    }
+    const workingRaw = makeWorkingRawStorage();
+    const safeStorage = createSafeDraftStorage(workingRaw);
+    assert(safeStorage.getItem('k') === null, 'getItem on an empty working storage must return null, not throw');
+    safeStorage.setItem('k', 'v1');
+    assert(safeStorage.getItem('k') === 'v1', 'setItem/getItem must round-trip normally through a working raw storage');
+    safeStorage.removeItem('k');
+    assert(safeStorage.getItem('k') === null, 'removeItem must actually remove the value from the underlying raw storage');
+
+    function makeThrowingRawStorage(overrides: Partial<RawKeyValueStorage>): RawKeyValueStorage {
+        return {
+            getItem: () => { throw new Error('SecurityError: storage blocked'); },
+            setItem: () => { throw new Error('QuotaExceededError: storage full'); },
+            removeItem: () => { throw new Error('boom'); },
+            ...overrides,
+        };
+    }
+    const throwingGetStorage = createSafeDraftStorage(makeThrowingRawStorage({ setItem: () => {}, removeItem: () => {} }));
+    let getThrew = false;
+    let getResult: string | null = 'not-called';
+    try { getResult = throwingGetStorage.getItem('any'); } catch { getThrew = true; }
+    assert(!getThrew && getResult === null, 'A throwing raw getItem must not propagate — the safe adapter must catch it and return null');
+
+    const throwingSetStorage = createSafeDraftStorage(makeThrowingRawStorage({ getItem: () => null, removeItem: () => {} }));
+    let setThrew = false;
+    try { throwingSetStorage.setItem('any', 'value'); } catch { setThrew = true; }
+    assert(!setThrew, 'A throwing raw setItem must not propagate — the safe adapter must catch it and degrade to a no-op');
+
+    const throwingRemoveStorage = createSafeDraftStorage(makeThrowingRawStorage({ getItem: () => null, setItem: () => {} }));
+    let removeThrew = false;
+    try { throwingRemoveStorage.removeItem('any'); } catch { removeThrew = true; }
+    assert(!removeThrew, 'A throwing raw removeItem must not propagate — the safe adapter must catch it and degrade to a no-op');
+    console.log('  ✅ createSafeDraftStorage round-trips normally against a working raw storage, and catches a throwing getItem/setItem/removeItem so the Store/screen never crashes.');
+
+    // ---------------------------------------------------------
+    // 28. AI generation response schema vs. persisted document schema are genuinely separate:
+    //     an incomplete/empty-content draft can be persisted, the SAME document is still rejected
+    //     by full-SOP-confirmation, a structurally-invalid persist document is rejected, and the
+    //     AI schema's own content-quality minimums are unaffected by any of this.
+    // ---------------------------------------------------------
+    console.log('Test 28: SopDocumentSchema (persist) vs. SopGenerationResponseSchema (AI quality gate) are separate schemas with separate responsibilities...');
+    const draftWithEmptyDefinition: SopDocument = {
+        ...SAMPLE_SOP_DOCUMENT,
+        id: 'draft-empty-definition',
+        reviewStatus: 'ai-draft',
+        steps: SAMPLE_SOP_DOCUMENT.steps.map((s, i) => (i === 0 ? { ...s, definition: '', reviewStatus: 'ai-draft' as const } : s)),
+    };
+    const draftParse = SopDocumentSchema.safeParse(draftWithEmptyDefinition);
+    assert(draftParse.success, `A draft document with an empty step definition must be accepted by the persist schema (structural safety only, no content-quality gate) — got: ${!draftParse.success ? JSON.stringify(draftParse.error.issues) : ''}`);
+
+    const confirmationResult = validateFullSopConfirmation(draftWithEmptyDefinition);
+    assert(confirmationResult.success === false, 'The exact same draft document must still be rejected by full-SOP-confirmation (sop-review.ts) — persist-schema acceptance is not confirmation-readiness');
+
+    // ---------------------------------------------------------
+    // 28b. validateFullSopConfirmation must independently reject an empty title/definition even
+    //      when EVERY OTHER confirmation condition is already met (all steps reviewed, every
+    //      AI-suggested SKILL accepted, graph structurally valid). Test 28 above cannot tell this
+    //      apart from "rejected because the step is still ai-draft" — that gap is exactly the bug
+    //      this reproduces and fixes: an otherwise fully-reviewed SOP with one blank field must
+    //      still be blocked from becoming 'confirmed'.
+    // ---------------------------------------------------------
+    console.log('Test 28b: validateFullSopConfirmation rejects empty title/definition even when every other confirmation condition is met...');
+    const confirmReadySteps: SopStepData[] = SAMPLE_SOP_DOCUMENT.steps.map((s) => ({
+        ...s,
+        reviewStatus: 'reviewed' as const,
+        requiredSkills: s.requiredSkills.map((sk) => (sk.source === 'ai-suggested' ? { ...sk, accepted: true } : sk)),
+    }));
+    const confirmReadyDoc: SopDocument = { ...SAMPLE_SOP_DOCUMENT, id: 'confirm-ready-base', steps: confirmReadySteps };
+
+    // Sanity check on the fixture itself: it must be genuinely confirmable before we can trust that
+    // the failures below are caused by the one field we intentionally blanked out, and nothing else.
+    const baseConfirmResult = validateFullSopConfirmation(confirmReadyDoc);
+    assert(baseConfirmResult.success === true, `Fixture sanity check failed — the otherwise-complete document should confirm cleanly, got errors: ${!baseConfirmResult.success ? baseConfirmResult.errors.join(' | ') : ''}`);
+
+    const emptyDefinitionDoc: SopDocument = { ...confirmReadyDoc, id: 'confirm-empty-definition', steps: confirmReadyDoc.steps.map((s, i) => (i === 0 ? { ...s, definition: '' } : s)) };
+    assert(SopDocumentSchema.safeParse(emptyDefinitionDoc).success, 'The persist schema must still accept the empty-definition document (draft-friendly save must keep working)');
+    const emptyDefinitionConfirm = validateFullSopConfirmation(emptyDefinitionDoc);
+    assert(emptyDefinitionConfirm.success === false, 'An otherwise fully-reviewed SOP with one empty step definition must still fail confirmation');
+    assert(!emptyDefinitionConfirm.success && emptyDefinitionConfirm.errors.some((e) => e.includes('definition')), `Confirmation error must name the empty definition, got: ${!emptyDefinitionConfirm.success ? emptyDefinitionConfirm.errors.join(' | ') : ''}`);
+
+    const whitespaceDefinitionDoc: SopDocument = { ...confirmReadyDoc, id: 'confirm-whitespace-definition', steps: confirmReadyDoc.steps.map((s, i) => (i === 0 ? { ...s, definition: '   ' } : s)) };
+    const whitespaceDefinitionConfirm = validateFullSopConfirmation(whitespaceDefinitionDoc);
+    assert(whitespaceDefinitionConfirm.success === false, 'A whitespace-only step definition must be treated as empty and fail confirmation, not just a literal empty string');
+
+    const emptyTitleDoc: SopDocument = { ...confirmReadyDoc, id: 'confirm-empty-title', title: '' };
+    const emptyTitleConfirm = validateFullSopConfirmation(emptyTitleDoc);
+    assert(emptyTitleConfirm.success === false, 'An empty SOP document title must fail confirmation even when every step/graph condition is met');
+    assert(!emptyTitleConfirm.success && emptyTitleConfirm.errors.some((e) => e.includes('제목')), `Confirmation error must name the empty document title, got: ${!emptyTitleConfirm.success ? emptyTitleConfirm.errors.join(' | ') : ''}`);
+
+    const whitespaceStepTitleDoc: SopDocument = { ...confirmReadyDoc, id: 'confirm-whitespace-step-title', steps: confirmReadyDoc.steps.map((s, i) => (i === 1 ? { ...s, title: '   ' } : s)) };
+    const whitespaceStepTitleConfirm = validateFullSopConfirmation(whitespaceStepTitleDoc);
+    assert(whitespaceStepTitleConfirm.success === false, 'A whitespace-only step title must be treated as empty and fail confirmation');
+    console.log('  ✅ validateFullSopConfirmation rejects an empty/whitespace-only document title, step title, or step definition even when every other confirmation condition is already satisfied.');
+
+    const invalidShapeDoc = { ...SAMPLE_SOP_DOCUMENT, id: 'invalid-shape', steps: SAMPLE_SOP_DOCUMENT.steps.map((s, i) => (i === 0 ? { ...s, shape: 'not-a-real-shape' } : s)) };
+    assert(!SopDocumentSchema.safeParse(invalidShapeDoc).success, 'An unrecognized step shape must be rejected by the persist schema (type/enum safety is still enforced)');
+
+    const invalidReviewStatusDoc = { ...SAMPLE_SOP_DOCUMENT, id: 'invalid-review-status', reviewStatus: 'not-a-real-status' };
+    assert(!SopDocumentSchema.safeParse(invalidReviewStatusDoc).success, 'An unrecognized document reviewStatus must be rejected by the persist schema');
+
+    const invalidPositionDoc = { ...SAMPLE_SOP_DOCUMENT, id: 'invalid-position', steps: SAMPLE_SOP_DOCUMENT.steps.map((s, i) => (i === 0 ? { ...s, position: { x: 'oops', y: 0 } } : s)) };
+    assert(!SopDocumentSchema.safeParse(invalidPositionDoc).success, 'A wrong-typed step position must be rejected by the persist schema');
+    console.log('  ✅ The persist schema accepts an incomplete draft while still enforcing type/enum/shape safety, and full-SOP-confirmation independently rejects the same draft as not confirmation-ready.');
+
+    const shortDefinitionAiStep = { ...SAMPLE_SOP_DOCUMENT.steps[0], definition: '짧음' };
+    assert(!SopStepAiSchema.safeParse(shortDefinitionAiStep).success, 'The AI generation step schema must still reject a too-short definition (its content-quality minimum is unaffected by the persist schema split)');
+    const shortDefinitionGenerationResponse = {
+        title: SAMPLE_SOP_DOCUMENT.title,
+        steps: [shortDefinitionAiStep],
+        edges: [],
+    };
+    assert(!SopGenerationResponseSchema.safeParse(shortDefinitionGenerationResponse).success, 'The full AI generation response schema must still reject a response containing a too-short step definition');
+    console.log('  ✅ The AI generation response schema still enforces its own content-quality minimums (min(5) on definition) independently of the persist schema.');
+
+    // ---------------------------------------------------------
+    // 30. POST /api/sop duplicate-id conflict across DIFFERENT members/organizations must never
+    //     leak the existing SOP's owner or content — only a generic error + machine-readable code.
+    // ---------------------------------------------------------
+    console.log('Test 30: cross-organization duplicate-id POST conflict never leaks the existing SOP...');
+    const collisionOwnerHeaders = { 'x-sop-actor-id': 'member-collision-owner', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-collision-owner' };
+    const collisionAttackerHeaders = { 'x-sop-actor-id': 'member-collision-attacker', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-collision-attacker' };
+    const collisionOwnerCreate = await sopRepoPost(sopApiRequest(collisionOwnerHeaders, {
+        memberId: 'member-collision-owner', organizationId: 'org-collision-owner', document: { ...SAMPLE_SOP_DOCUMENT, id: 'collision-demo', title: '소유자만 볼 수 있어야 하는 제목' },
+    }));
+    assert(collisionOwnerCreate.status === 201, 'Fixture setup: the owner\'s initial create must succeed');
+
+    const collisionAttackerCreate = await sopRepoPost(sopApiRequest(collisionAttackerHeaders, {
+        memberId: 'member-collision-attacker', organizationId: 'org-collision-attacker', document: { ...SAMPLE_SOP_DOCUMENT, id: 'collision-demo', title: '공격자가 시도한 다른 제목' },
+    }));
+    assert(collisionAttackerCreate.status === 409, 'A different member/organization attempting to create the same id must still get a 409');
+    const collisionAttackerBody = await collisionAttackerCreate.json();
+    const collisionAttackerBodyText = JSON.stringify(collisionAttackerBody);
+    assert(SopCreateConflictResponseSchema.safeParse(collisionAttackerBody).success, 'The cross-org duplicate-id conflict response body must conform to SopCreateConflictResponseSchema (no `current`)');
+    assert(!('current' in collisionAttackerBody), 'The cross-org duplicate-id conflict response must not include `current` at all');
+    assert(
+        !collisionAttackerBodyText.includes('member-collision-owner') &&
+        !collisionAttackerBodyText.includes('org-collision-owner') &&
+        !collisionAttackerBodyText.includes('소유자만 볼 수 있어야 하는 제목'),
+        'The cross-org duplicate-id conflict response must not leak the existing owner\'s memberId, organizationId, or document title'
+    );
+    assert(collisionAttackerBody.code === 'already-exists', 'The conflict response must carry a machine-readable code');
+
+    // The existing owner's record must be completely untouched by the rejected attacker create.
+    const collisionOwnerAfterAttack = await sopRepoGetById(sopApiRequest(collisionOwnerHeaders), { params: Promise.resolve({ id: 'collision-demo' }) });
+    const collisionOwnerAfterAttackBody = await collisionOwnerAfterAttack.json();
+    assert(
+        collisionOwnerAfterAttackBody.record.version === 1 &&
+        collisionOwnerAfterAttackBody.record.memberId === 'member-collision-owner' &&
+        collisionOwnerAfterAttackBody.record.organizationId === 'org-collision-owner' &&
+        collisionOwnerAfterAttackBody.record.document.title === '소유자만 볼 수 있어야 하는 제목',
+        'The existing owner\'s record (memberId/organizationId/document/version) must be completely unchanged after a rejected cross-org duplicate-id attempt'
+    );
+    console.log('  ✅ A cross-organization duplicate-id POST returns 409 with only {error, code}, never the existing SOP\'s owner or content, and leaves the existing record untouched.');
+
+    // ---------------------------------------------------------
+    // 31. InMemorySopRepository must never share a mutable object reference with a caller — not
+    //     on the way in (create/update input) and not on the way out (create/update/getById/list
+    //     results, or a version-conflict's `current`). A caller mutating any of these must never
+    //     change what is actually stored, and must never bump the version as a side effect.
+    // ---------------------------------------------------------
+    console.log('Test 31: InMemorySopRepository never shares mutable object references with callers...');
+    const mutationRepo = new InMemorySopRepository();
+    // Deep-cloned so this test is free to mutate it without corrupting the shared SAMPLE_SOP_DOCUMENT
+    // fixture that every other test in this file also reads.
+    const mutationInputDoc: SopDocument = { ...structuredClone(SAMPLE_SOP_DOCUMENT), id: 'mutation-doc-a', title: '원본 제목' };
+    const mutationCreateResult = await mutationRepo.create({ memberId: 'mutation-member', organizationId: 'mutation-org', document: mutationInputDoc });
+    assert(mutationCreateResult.ok, 'Fixture setup: create must succeed');
+
+    // 1. Mutating the ORIGINAL input document object after create() must not affect the stored copy.
+    mutationInputDoc.title = '입력 객체를 직접 변조한 제목';
+    mutationInputDoc.steps[0].definition = '입력 객체 steps 배열까지 직접 변조';
+    const afterInputMutation = await mutationRepo.getById('mutation-doc-a');
+    assert(
+        afterInputMutation?.document.title === '원본 제목' &&
+        afterInputMutation?.document.steps[0].definition === SAMPLE_SOP_DOCUMENT.steps[0].definition &&
+        afterInputMutation?.version === 1,
+        'Mutating the original input document object after create() must not change the stored record (create() must clone its input)'
+    );
+
+    // 2. Mutating the RESULT record returned by create() must not affect the stored copy.
+    if (mutationCreateResult.ok) {
+        mutationCreateResult.record.document.title = '반환된 create() 결과를 직접 변조한 제목';
+        mutationCreateResult.record.version = 999;
+    }
+    const afterCreateResultMutation = await mutationRepo.getById('mutation-doc-a');
+    assert(
+        afterCreateResultMutation?.document.title === '원본 제목' && afterCreateResultMutation?.version === 1,
+        'Mutating the record object returned by create() must not change the stored record (create() must clone its output)'
+    );
+
+    // 3. Mutating the result of getById() must not affect what a SUBSEQUENT getById() call returns.
+    const getByIdResultA = await mutationRepo.getById('mutation-doc-a');
+    getByIdResultA!.document.title = 'getById 결과를 직접 변조한 제목';
+    getByIdResultA!.version = 777;
+    const getByIdResultB = await mutationRepo.getById('mutation-doc-a');
+    assert(
+        getByIdResultB?.document.title === '원본 제목' && getByIdResultB?.version === 1,
+        'Mutating a getById() result must not change what a subsequent getById() call returns (getById() must clone its output)'
+    );
+
+    // 4. Mutating a listByMember() result must not affect what a SUBSEQUENT list call returns.
+    const listResultA = await mutationRepo.listByMember('mutation-member');
+    listResultA[0].document.title = 'list 결과를 직접 변조한 제목';
+    listResultA[0].version = 555;
+    const listResultB = await mutationRepo.listByMember('mutation-member');
+    assert(
+        listResultB[0].document.title === '원본 제목' && listResultB[0].version === 1,
+        'Mutating a list*() result must not change what a subsequent list*() call returns (list*() must clone its output)'
+    );
+
+    // 5. update() must also clone its input and output, and a version-conflict's `current` must be
+    //    a clone too — mutating any of them must not affect the stored record or bump its version.
+    const mutationUpdateInputDoc: SopDocument = { ...structuredClone(mutationInputDoc), id: 'mutation-doc-a', title: '정상적으로 저장되어야 할 새 제목' };
+    const mutationUpdateResult = await mutationRepo.update('mutation-doc-a', { document: mutationUpdateInputDoc, expectedVersion: 1 });
+    assert(mutationUpdateResult.ok && mutationUpdateResult.record.version === 2, 'Fixture setup: a correctly-versioned update must succeed and bump the version to 2');
+    mutationUpdateInputDoc.title = 'update() 입력 객체를 직접 변조한 제목';
+    if (mutationUpdateResult.ok) {
+        mutationUpdateResult.record.document.title = 'update() 결과 객체를 직접 변조한 제목';
+        mutationUpdateResult.record.version = 999;
+    }
+    const afterUpdateMutation = await mutationRepo.getById('mutation-doc-a');
+    assert(
+        afterUpdateMutation?.document.title === '정상적으로 저장되어야 할 새 제목' && afterUpdateMutation?.version === 2,
+        'Mutating update()\'s input document or result record must not change the stored record (update() must clone both its input and output)'
+    );
+
+    const conflictUpdateInputDoc: SopDocument = { ...structuredClone(mutationInputDoc), id: 'mutation-doc-a' };
+    const conflictUpdateResult = await mutationRepo.update('mutation-doc-a', { document: conflictUpdateInputDoc, expectedVersion: 1 });
+    assert(!conflictUpdateResult.ok && conflictUpdateResult.reason === 'version-conflict', 'Fixture setup: a stale expectedVersion must produce a version-conflict');
+    if (!conflictUpdateResult.ok && conflictUpdateResult.reason === 'version-conflict') {
+        conflictUpdateResult.current.document.title = 'conflict.current를 직접 변조한 제목';
+        conflictUpdateResult.current.version = 999;
+    }
+    const afterConflictCurrentMutation = await mutationRepo.getById('mutation-doc-a');
+    assert(
+        afterConflictCurrentMutation?.document.title === '정상적으로 저장되어야 할 새 제목' && afterConflictCurrentMutation?.version === 2,
+        'Mutating a version-conflict result\'s `current` record must not change the stored record (the conflict `current` must also be a clone)'
+    );
+    console.log('  ✅ InMemorySopRepository clones every value crossing its boundary (create/update input+output, getById, list*, conflict.current) — no caller can mutate stored data, or its version, by holding a reference.');
+
+    // ---------------------------------------------------------
+    // 32. SopRecordSchema rejects a record whose envelope (id/taskId/taskName/activityId/
+    //     activityName) disagrees with the document it wraps — a denormalized-summary drift that
+    //     only the repository's own id check (Test 21b) covered before; a future adapter bug that
+    //     drifts the OTHER envelope fields would not have been caught without this.
+    // ---------------------------------------------------------
+    console.log('Test 32: SopRecordSchema rejects a record whose envelope disagrees with its document...');
+    const envelopeBaseRecord: SopRecord = {
+        id: SAMPLE_SOP_DOCUMENT.id,
+        memberId: 'envelope-member',
+        organizationId: 'envelope-org',
+        taskId: SAMPLE_WORK_LIBRARY.taskId,
+        taskName: SAMPLE_WORK_LIBRARY.taskName,
+        activityId: SAMPLE_WORK_LIBRARY.activityId,
+        activityName: SAMPLE_WORK_LIBRARY.activityName,
+        document: SAMPLE_SOP_DOCUMENT,
+        version: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    };
+    assert(SopRecordSchema.safeParse(envelopeBaseRecord).success, 'Fixture sanity check: a genuinely-consistent record must parse successfully');
+
+    const mismatchedIdResult = SopRecordSchema.safeParse({ ...envelopeBaseRecord, id: 'a-totally-different-id' });
+    assert(!mismatchedIdResult.success && mismatchedIdResult.error.issues.some((i) => i.path.join('.') === 'id'), 'A record whose id disagrees with document.id must fail SopRecordSchema, with the error pointing at the id field');
+
+    const mismatchedTaskIdResult = SopRecordSchema.safeParse({ ...envelopeBaseRecord, taskId: 'a-different-task-id' });
+    assert(!mismatchedTaskIdResult.success && mismatchedTaskIdResult.error.issues.some((i) => i.path.join('.') === 'taskId'), 'A record whose taskId disagrees with document.workLibrary.taskId must fail SopRecordSchema');
+
+    const mismatchedTaskNameResult = SopRecordSchema.safeParse({ ...envelopeBaseRecord, taskName: '다른 업무명' });
+    assert(!mismatchedTaskNameResult.success && mismatchedTaskNameResult.error.issues.some((i) => i.path.join('.') === 'taskName'), 'A record whose taskName disagrees with document.workLibrary.taskName must fail SopRecordSchema');
+
+    const mismatchedActivityIdResult = SopRecordSchema.safeParse({ ...envelopeBaseRecord, activityId: 'a-different-activity-id' });
+    assert(!mismatchedActivityIdResult.success && mismatchedActivityIdResult.error.issues.some((i) => i.path.join('.') === 'activityId'), 'A record whose activityId disagrees with document.workLibrary.activityId must fail SopRecordSchema');
+
+    const mismatchedActivityNameResult = SopRecordSchema.safeParse({ ...envelopeBaseRecord, activityName: '다른 액티비티명' });
+    assert(!mismatchedActivityNameResult.success && mismatchedActivityNameResult.error.issues.some((i) => i.path.join('.') === 'activityName'), 'A record whose activityName disagrees with document.workLibrary.activityName must fail SopRecordSchema');
+    console.log('  ✅ SopRecordSchema rejects a record whenever its envelope (id/taskId/taskName/activityId/activityName) disagrees with the document it wraps, naming the specific mismatched field.');
+
+    // ---------------------------------------------------------
+    // 33. respondValidated() — the exact function every /api/sop response goes through — converts
+    //     a malformed repository result into a generic 500 instead of shipping it, and the 500
+    //     leaks none of the malformed record's document content, memberId, or organizationId.
+    // ---------------------------------------------------------
+    console.log('Test 33: respondValidated() converts a malformed repository result into a generic 500, never leaking document content...');
+    const malformedRecord: SopRecord = { ...envelopeBaseRecord, id: 'malformed-record-id-mismatch' }; // deliberately disagrees with document.id
+    const malformedResponse = respondValidated(SopRecordResponseSchema, { record: malformedRecord }, 200);
+    assert(malformedResponse.status === 500, `A response whose body fails its own declared schema must be converted to a 500, got ${malformedResponse.status}`);
+    const malformedResponseBody = await malformedResponse.json();
+    const malformedResponseText = JSON.stringify(malformedResponseBody);
+    assert(
+        Object.keys(malformedResponseBody).length === 1 && typeof malformedResponseBody.error === 'string',
+        'A 500 from respondValidated() must contain only a generic error message, no other fields'
+    );
+    assert(
+        !malformedResponseText.includes(SAMPLE_SOP_DOCUMENT.title) && !malformedResponseText.includes('envelope-member') && !malformedResponseText.includes('envelope-org'),
+        'A 500 from respondValidated() must not leak the malformed record\'s document content, memberId, or organizationId'
+    );
+    console.log('  ✅ respondValidated() refuses to send a response body that fails its own schema — it substitutes a generic 500 with no document/PII detail, which is the safety net every /api/sop response relies on.');
+
+    // ---------------------------------------------------------
+    // 34. createBrowserSopDraftStorage must not propagate a throw raised while resolving the raw
+    //     storage itself (e.g. `window.localStorage` throwing SecurityError as a property getter),
+    //     which is a distinct failure point from a throw inside getItem/setItem/removeItem
+    //     (already covered by Test 27's createSafeDraftStorage checks).
+    // ---------------------------------------------------------
+    console.log('Test 34: createBrowserSopDraftStorage does not propagate a throw from resolving the raw storage itself...');
+    function throwingStorageResolver(): RawKeyValueStorage | null {
+        throw new Error('SecurityError: localStorage is not available in this context');
+    }
+    let resolverThrew = false;
+    let resolvedStorage: ReturnType<typeof createBrowserSopDraftStorage> | undefined;
+    try {
+        resolvedStorage = createBrowserSopDraftStorage(throwingStorageResolver);
+    } catch {
+        resolverThrew = true;
+    }
+    assert(!resolverThrew, 'createBrowserSopDraftStorage must not propagate a throw raised while resolving the raw storage itself (e.g. reading window.localStorage as a getter)');
+    assert(resolvedStorage !== undefined && resolvedStorage.getItem('any') === null, 'When the resolver itself throws, createBrowserSopDraftStorage must fall back to a safe no-op storage (read returns null)');
+    resolvedStorage!.setItem('any', 'value');
+    resolvedStorage!.removeItem('any');
+
+    function nullStorageResolver(): RawKeyValueStorage | null {
+        return null;
+    }
+    const nullResolvedStorage = createBrowserSopDraftStorage(nullStorageResolver);
+    assert(nullResolvedStorage.getItem('any') === null, 'When the resolver returns null (storage genuinely unavailable, no throw), createBrowserSopDraftStorage must also fall back to a safe no-op');
+
+    const defaultResolvedStorage = createBrowserSopDraftStorage();
+    assert(defaultResolvedStorage.getItem('any') === null, 'With no resolver argument (the real default), createBrowserSopDraftStorage must not crash in this non-browser test environment (typeof window === "undefined")');
+    console.log('  ✅ createBrowserSopDraftStorage never propagates a throw from resolving the raw storage itself, falls back to a safe no-op whether the resolver throws or returns null, and the default (no-arg) call is safe in a non-browser test environment.');
 }
 
 runAsyncTests()

@@ -23,6 +23,7 @@ import { SopSidebar } from './SopSidebar';
 import { SopCanvas } from './SopCanvas';
 import { SopStepInspector } from './SopStepInspector';
 import { SopStepData } from '@/lib/sop-types';
+import { SOP_REVIEW_STATUS_BADGE_CLASS } from '@/lib/sop-review-status-meta';
 
 export const SopWorkspace: React.FC = () => {
     const router = useRouter();
@@ -53,7 +54,7 @@ export const SopWorkspace: React.FC = () => {
 
     // Auto-load sample SOP if document is missing on direct /sop/workspace URL access
     useEffect(() => {
-        if (!document || (document.isSampleData && document.displayMode !== 'compact')) {
+        if (!document) {
             generateFromSample();
         }
     }, [document, generateFromSample]);
@@ -69,12 +70,14 @@ export const SopWorkspace: React.FC = () => {
     }
 
     const handleSaveDraft = () => {
+        if (customerReviewMode) return;
         saveSnapshot();
         setSaveToast(true);
         setTimeout(() => setSaveToast(false), 2000);
     };
 
     const handleConfirmSop = () => {
+        if (customerReviewMode) return;
         const result = confirmFullSop();
         if (!result.success) {
             setConfirmErrors(result.errors);
@@ -108,15 +111,17 @@ export const SopWorkspace: React.FC = () => {
         }
     };
 
+    // No server storage is connected yet (see SopRepository, src/lib/sop-repository.ts) —
+    // this document lives only in this browser's localStorage, not on a shared server.
     const formatTimestamp = (tsString: string | null) => {
-        if (!tsString) return '자동 저장됨';
+        if (!tsString) return '이 브라우저에 저장됨';
         const d = new Date(tsString);
-        return `자동 저장됨 (${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')})`;
+        return `이 브라우저에 저장됨 (${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')})`;
     };
 
     return (
         <div className="h-screen flex flex-col bg-zinc-100 overflow-hidden font-sans">
-            {/* Top Banner if Sample Data Mode (Item 9 Requirement) */}
+            {/* Sample-data banner: this document is a canned example, not an AI generation result. */}
             {document.isSampleData && (
                 <div className="bg-amber-500 text-white text-xs font-bold py-1 px-4 text-center flex items-center justify-center gap-2 shrink-0">
                     <BookOpen className="w-3.5 h-3.5" />
@@ -145,19 +150,15 @@ export const SopWorkspace: React.FC = () => {
                             type="text"
                             value={document.title}
                             onChange={(e) => updateDocumentTitle(e.target.value)}
-                            className="text-sm font-bold text-zinc-900 bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-indigo-500 focus:bg-white px-1.5 py-0.5 rounded focus:outline-hidden max-w-[260px] truncate"
+                            disabled={customerReviewMode}
+                            title={customerReviewMode ? '고객 검토 모드에서는 제목을 수정할 수 없습니다.' : undefined}
+                            className="text-sm font-bold text-zinc-900 bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-indigo-500 focus:bg-white px-1.5 py-0.5 rounded focus:outline-hidden max-w-[260px] truncate disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:border-transparent"
                         />
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200 shrink-0">
                             {document.member.name} ({document.member.jobRole})
                         </span>
                         <span
-                            className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                                document.reviewStatus === 'confirmed'
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                    : document.reviewStatus === 'reviewed'
-                                    ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                                    : 'bg-amber-100 text-amber-800 border border-amber-300'
-                            }`}
+                            className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${SOP_REVIEW_STATUS_BADGE_CLASS[document.reviewStatus]}`}
                         >
                             {document.reviewStatus === 'confirmed'
                                 ? '확정 완료'
@@ -188,40 +189,38 @@ export const SopWorkspace: React.FC = () => {
                 {/* Right Action Buttons */}
                 <div className="flex items-center gap-2">
                     {/* Undo / Redo */}
-                    {!customerReviewMode && (
-                        <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200 mr-1">
-                            <button
-                                type="button"
-                                onClick={undo}
-                                disabled={history.length === 0}
-                                className="p-1 text-zinc-600 hover:text-zinc-900 disabled:opacity-30"
-                                title="실행 취소 (Undo)"
-                                aria-label="실행 취소"
-                            >
-                                <Undo2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={redo}
-                                disabled={future.length === 0}
-                                className="p-1 text-zinc-600 hover:text-zinc-900 disabled:opacity-30"
-                                title="다시 실행 (Redo)"
-                                aria-label="다시 실행"
-                            >
-                                <Redo2 className="w-3.5 h-3.5" />
-                            </button>
-                        </div>
-                    )}
-
-                    {!customerReviewMode && (
+                    <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200 mr-1">
                         <button
                             type="button"
-                            onClick={handleAddStepClick}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-semibold rounded-xl border border-zinc-300 transition-colors"
+                            onClick={undo}
+                            disabled={customerReviewMode || history.length === 0}
+                            className="p-1 text-zinc-600 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={customerReviewMode ? '고객 검토 모드에서는 실행 취소를 사용할 수 없습니다.' : '실행 취소 (Undo)'}
+                            aria-label="실행 취소"
                         >
-                            <Plus className="w-3.5 h-3.5" /> 단계 추가
+                            <Undo2 className="w-3.5 h-3.5" />
                         </button>
-                    )}
+                        <button
+                            type="button"
+                            onClick={redo}
+                            disabled={customerReviewMode || future.length === 0}
+                            className="p-1 text-zinc-600 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={customerReviewMode ? '고객 검토 모드에서는 다시 실행을 사용할 수 없습니다.' : '다시 실행 (Redo)'}
+                            aria-label="다시 실행"
+                        >
+                            <Redo2 className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={handleAddStepClick}
+                        disabled={customerReviewMode}
+                        title={customerReviewMode ? '고객 검토 모드에서는 단계를 추가할 수 없습니다.' : undefined}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-semibold rounded-xl border border-zinc-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-zinc-100"
+                    >
+                        <Plus className="w-3.5 h-3.5" /> 단계 추가
+                    </button>
 
                     <button
                         type="button"
@@ -234,17 +233,20 @@ export const SopWorkspace: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => setShowRegenerateModal(true)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold rounded-xl border border-amber-200 transition-colors"
+                        disabled={customerReviewMode}
+                        title={customerReviewMode ? '고객 검토 모드에서는 다시 생성할 수 없습니다.' : undefined}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold rounded-xl border border-amber-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-amber-50"
                     >
                         <RotateCcw className="w-3.5 h-3.5" /> 다시 생성
                     </button>
 
-                    {/* Auto-save Status & Snapshot Button (Item 11 Requirement) */}
+                    {/* Auto-save Status & Snapshot Button */}
                     <button
                         type="button"
                         onClick={handleSaveDraft}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl transition-colors shadow-2xs"
-                        title={formatTimestamp(lastSavedTimestamp)}
+                        disabled={customerReviewMode}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl transition-colors shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-zinc-900"
+                        title={customerReviewMode ? '고객 검토 모드에서는 저장할 수 없습니다.' : formatTimestamp(lastSavedTimestamp)}
                     >
                         <Save className="w-3.5 h-3.5 text-emerald-400" />
                         <span className="hidden sm:inline">{formatTimestamp(lastSavedTimestamp)}</span>
@@ -254,12 +256,20 @@ export const SopWorkspace: React.FC = () => {
                     <button
                         type="button"
                         onClick={handleConfirmSop}
-                        className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-600/20"
+                        disabled={customerReviewMode}
+                        title={customerReviewMode ? '고객 검토 모드에서는 SOP를 확정할 수 없습니다.' : undefined}
+                        className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-600/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
                     >
                         <CheckCircle2 className="w-3.5 h-3.5" /> SOP 확정
                     </button>
                 </div>
             </header>
+
+            {customerReviewMode && (
+                <div className="bg-indigo-50 text-indigo-800 text-[11px] font-medium py-1 px-4 text-center border-b border-indigo-200 shrink-0">
+                    고객 검토 모드에서는 열람과 단계·연결선 탐색만 가능하며, 내용 수정·SKILL 변경·Agent화 판단·SOP 확정은 비활성화됩니다.
+                </div>
+            )}
 
             {/* Add-step Notice (safe auto-insert not possible) */}
             {addStepNotice && (
@@ -275,7 +285,7 @@ export const SopWorkspace: React.FC = () => {
             {/* Save Toast Notification */}
             {saveToast && (
                 <div className="fixed top-16 right-6 z-50 bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg flex items-center gap-2 animate-bounce">
-                    <Check className="w-4 h-4" /> SOP 스냅샷이 수동 저장되었습니다.
+                    <Check className="w-4 h-4" /> 이 브라우저에 현재 초안을 저장했습니다. (프로토타입 로컬 저장)
                 </div>
             )}
 
@@ -300,7 +310,7 @@ export const SopWorkspace: React.FC = () => {
                 </div>
             </div>
 
-            {/* Criteria Modal (Accessible Dialog Item 11) */}
+            {/* Criteria Modal (keyboard/screen-reader accessible dialog) */}
             {showCriteriaModal && (
                 <div
                     role="dialog"

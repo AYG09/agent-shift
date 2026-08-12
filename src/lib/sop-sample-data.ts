@@ -80,7 +80,6 @@ export const SAMPLE_SOP_DOCUMENT: SopDocument = {
     workLibrary: SAMPLE_WORK_LIBRARY,
     context:
         '현업 부서의 채용 요청부터 공고 게재, 지원서 수신, 서류 및 면접 심사, 처우 협의 및 계약서 작성까지 전체 채용 프로세스를 검토하고 불확실성을 최소화하여 우수 인재를 적시에 확보하는 표준 절차입니다.',
-    displayMode: 'compact',
     reviewStatus: 'ai-draft',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

@@ -11,31 +11,21 @@ import {
     SopRequiredSkill,
     SopAgentizationScope,
     SopAiApplicationMode,
-    SopAgentizationReview,
 } from './sop-types';
 import { SAMPLE_SOP_DOCUMENT, SAMPLE_SOP_MEMBER, SAMPLE_WORK_LIBRARY } from './sop-sample-data';
-import { validateSopGraph } from './graph-validation';
 import { layoutSopGraph } from './sop-layout';
-import { normalizeAgentizationMode } from './sop-agentization';
-
-const customStorage = {
-    getItem: (name: string) => {
-        if (typeof window !== 'undefined' && window.localStorage) {
-            return localStorage.getItem(name);
-        }
-        return null;
-    },
-    setItem: (name: string, value: string) => {
-        if (typeof window !== 'undefined' && window.localStorage) {
-            localStorage.setItem(name, value);
-        }
-    },
-    removeItem: (name: string) => {
-        if (typeof window !== 'undefined' && window.localStorage) {
-            localStorage.removeItem(name);
-        }
-    },
-};
+import {
+    resetAgentizationConfirmation,
+    withAgentizationScope,
+    withAgentizationDefaultMode,
+    withAgentizationStepMode,
+    withToggledAgentizationStep,
+    withAgentizationNote,
+    confirmAgentizationReview,
+} from './sop-agentization';
+import * as mutations from './sop-document-mutations';
+import { applyStepReviewStatus, validateFullSopConfirmation } from './sop-review';
+import { createBrowserSopDraftStorage, SOP_DRAFT_STORAGE_KEY } from './sop-draft-storage';
 
 function withWorkLibraryCatalog(library: unknown): WorkLibrarySelection | undefined {
     if (!library || typeof library !== 'object') return undefined;
@@ -69,70 +59,6 @@ function withWorkLibraryCatalog(library: unknown): WorkLibrarySelection | undefi
     };
 }
 
-const MEANINGFUL_STEP_FIELDS: (keyof SopStepData)[] = [
-    'title',
-    'definition',
-    'detailedInstructions',
-    'responsibleRole',
-    'inputs',
-    'outputs',
-    'tools',
-    'cautions',
-    'decisionRules',
-    'requiredSkills',
-    'estimatedDuration',
-    'type',
-    'shape',
-    'terminalType',
-    'ioType',
-];
-
-export function isMeaningfulStepEdit(partial: Partial<SopStepData>): boolean {
-    return MEANINGFUL_STEP_FIELDS.some((field) => field in partial);
-}
-
-export function getAgentizableSopStepIds(document: SopDocument | null): string[] {
-    return (document?.steps || [])
-        .filter((step) => step.terminalType !== 'start' && step.terminalType !== 'end')
-        .map((step) => step.id);
-}
-
-const resetAgentizationConfirmation = (document: SopDocument) =>
-    document.agentizationReview
-        ? { ...document.agentizationReview, confirmedAt: undefined }
-        : undefined;
-
-const normalizeAgentizationReview = (
-    document: SopDocument,
-    review: SopAgentizationReview | undefined,
-    fallbackScope: SopAgentizationScope = 'steps'
-): SopAgentizationReview => {
-    const eligibleIds = getAgentizableSopStepIds(document);
-    const rawReview = review as unknown as { defaultMode?: unknown; mode?: unknown; stepModes?: Record<string, unknown> } | undefined;
-    const rawStepModes = rawReview?.stepModes || {};
-    const stepModes = Object.fromEntries(
-        Object.entries(rawStepModes)
-            .map(([id, value]) => [id, normalizeAgentizationMode(value)] as const)
-            .filter((entry): entry is [string, SopAiApplicationMode] => Boolean(entry[1]))
-    );
-    const legacyHumanOnly = rawReview?.mode === 'human-only'
-        && Object.values(rawStepModes).every((value) => normalizeAgentizationMode(value) === undefined);
-    const scope = legacyHumanOnly ? 'steps' : (review?.scope || fallbackScope);
-    const excludedLegacyHumanOnlyIds = new Set(
-        Object.entries(rawStepModes)
-            .filter(([, value]) => value === 'human-only')
-            .map(([id]) => id)
-    );
-    const stepIds = (scope === 'workflow' ? eligibleIds : review?.stepIds || [])
-        .filter((id) => eligibleIds.includes(id) && !excludedLegacyHumanOnlyIds.has(id));
-    const defaultMode = normalizeAgentizationMode(rawReview?.defaultMode) || normalizeAgentizationMode(rawReview?.mode);
-    // Migrate the former single-mode persisted value into explicit node values.
-    if (defaultMode && Object.keys(stepModes).length === 0) {
-        stepIds.forEach((id) => { stepModes[id] = defaultMode; });
-    }
-    return { scope, stepIds, defaultMode, stepModes, note: review?.note || '', confirmedAt: review?.confirmedAt };
-};
-
 interface SopPrototypeState {
     // Setup Gate States
     memberInfo: SopMember;
@@ -164,11 +90,11 @@ interface SopPrototypeState {
     // Actions - Workspace Navigation & Selection
     selectStep: (stepId: string | null) => void;
     selectEdge: (edgeId: string | null) => void;
-    setCustomerReviewMode: (enabled: boolean) => void;
     toggleCustomerReviewMode: () => void;
     setAgentizationScope: (scope: SopAgentizationScope) => void;
     setAgentizationDefaultMode: (mode: SopAiApplicationMode) => void;
-    setAgentizationStepMode: (stepId: string, mode: SopAiApplicationMode) => void;
+    /** `mode` undefined clears the step's judgement; an unset step remains human-performed. */
+    setAgentizationStepMode: (stepId: string, mode?: SopAiApplicationMode) => void;
     toggleAgentizationStep: (stepId: string) => void;
     setAgentizationNote: (note: string) => void;
     confirmAgentization: () => { success: boolean; message: string };
@@ -224,11 +150,44 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 return { history: [...history, currentDoc], future: [] };
             };
 
-            const computeDocumentReviewStatus = (steps: SopStepData[]): SopReviewStatus => {
-                const anyUnreviewed = steps.some((s) => s.reviewStatus === 'ai-draft');
-                if (anyUnreviewed) return 'ai-draft';
-                // Note: Step-level edits or UI updates can only produce 'reviewed', NEVER 'confirmed'!
-                return 'reviewed';
+            // Customer review mode guarantees the document a customer is looking at cannot
+            // change underneath them. Every action that edits `document` (or replays/reverts
+            // it) must check this first; navigation/selection actions are exempt.
+            const isCustomerReviewLocked = () => get().customerReviewMode;
+
+            // Single path for edits that must invalidate both the SOP review status and any
+            // confirmed Agent화 judgement, since both attest to a document state the edit just
+            // moved past. `invalidate: false` is only for edits with no reviewable meaning
+            // (e.g. a node drag that only moves `position`). The actual patch content (what
+            // changed) is computed by pure builders in sop-document-mutations.ts; this helper
+            // only owns the state-wiring (history, invalidation, timestamp, set()).
+            const applyDocumentMutation = (
+                doc: SopDocument,
+                docPatch: Partial<SopDocument>,
+                options?: { invalidate?: boolean; extraState?: Partial<SopPrototypeState> }
+            ) => {
+                const invalidate = options?.invalidate ?? true;
+                set({
+                    ...pushHistory(doc),
+                    ...options?.extraState,
+                    document: {
+                        ...doc,
+                        ...docPatch,
+                        reviewStatus: invalidate ? 'ai-draft' : doc.reviewStatus,
+                        agentizationReview: invalidate ? resetAgentizationConfirmation(doc) : doc.agentizationReview,
+                        updatedAt: new Date().toISOString(),
+                    },
+                });
+            };
+
+            // Wires an Agent화 review builder (sop-agentization.ts) through the same
+            // guard + history + set() path every agentization action shares.
+            const applyAgentizationReview = (doc: SopDocument, review: ReturnType<typeof withAgentizationScope> | null) => {
+                if (!review) return;
+                set({
+                    ...pushHistory(doc),
+                    document: { ...doc, agentizationReview: review, updatedAt: new Date().toISOString() },
+                });
             };
 
             return {
@@ -289,7 +248,6 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                         member: { ...state.memberInfo },
                         workLibrary: { ...state.workLibrary, confirmed: true },
                         context: state.context || SAMPLE_SOP_DOCUMENT.context,
-                        displayMode: 'compact',
                         reviewStatus: 'ai-draft',
                         steps: layout.steps.map((s) => ({ ...s, reviewStatus: 'ai-draft' as const })),
                         edges: layout.edges,
@@ -324,494 +282,179 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 selectStep: (stepId) => set({ selectedStepId: stepId, selectedEdgeId: null }),
                 selectEdge: (edgeId) => set({ selectedEdgeId: edgeId, selectedStepId: null }),
 
-                setCustomerReviewMode: (enabled) => set({ customerReviewMode: enabled }),
                 toggleCustomerReviewMode: () =>
                     set((state) => ({ customerReviewMode: !state.customerReviewMode })),
 
                 setAgentizationScope: (scope) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    const eligibleIds = getAgentizableSopStepIds(doc);
-                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, scope);
-                    const stepIds = scope === 'workflow'
-                        ? eligibleIds
-                        : current.scope === 'steps'
-                          ? current.stepIds.filter((id) => eligibleIds.includes(id))
-                          : [];
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            agentizationReview: { ...current, scope, stepIds, confirmedAt: undefined },
-                            updatedAt: new Date().toISOString(),
-                        },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyAgentizationReview(doc, withAgentizationScope(doc, scope));
                 },
 
                 setAgentizationDefaultMode: (mode) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, 'workflow');
-                    const targetIds = current.scope === 'workflow'
-                        ? getAgentizableSopStepIds(doc)
-                        : current.stepIds;
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            agentizationReview: {
-                                ...current,
-                                stepIds: targetIds,
-                                defaultMode: mode,
-                                stepModes: { ...current.stepModes, ...Object.fromEntries(targetIds.map((id) => [id, mode])) },
-                                confirmedAt: undefined,
-                            },
-                            updatedAt: new Date().toISOString(),
-                        },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyAgentizationReview(doc, withAgentizationDefaultMode(doc, mode));
                 },
 
                 setAgentizationStepMode: (stepId, mode) => {
                     const doc = get().document;
-                    if (!doc || !getAgentizableSopStepIds(doc).includes(stepId)) return;
-                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, 'steps');
-                    const stepIds = current.scope === 'workflow'
-                        ? getAgentizableSopStepIds(doc)
-                        : Array.from(new Set([...current.stepIds, stepId]));
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            agentizationReview: { ...current, stepIds, stepModes: { ...current.stepModes, [stepId]: mode }, confirmedAt: undefined },
-                            updatedAt: new Date().toISOString(),
-                        },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyAgentizationReview(doc, withAgentizationStepMode(doc, stepId, mode));
                 },
 
                 toggleAgentizationStep: (stepId) => {
                     const doc = get().document;
-                    if (!doc || !getAgentizableSopStepIds(doc).includes(stepId)) return;
-                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, 'steps');
-                    const stepIds = current.scope === 'workflow'
-                        ? [stepId]
-                        : current.stepIds.includes(stepId)
-                          ? current.stepIds.filter((id) => id !== stepId)
-                          : [...current.stepIds, stepId];
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            agentizationReview: {
-                                ...current,
-                                scope: 'steps',
-                                stepIds,
-                                stepModes: Object.fromEntries(Object.entries(current.stepModes).filter(([id]) => stepIds.includes(id))),
-                                confirmedAt: undefined,
-                            },
-                            updatedAt: new Date().toISOString(),
-                        },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyAgentizationReview(doc, withToggledAgentizationStep(doc, stepId));
                 },
 
                 setAgentizationNote: (note) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, 'steps');
-                    set({
-                        document: {
-                            ...doc,
-                            agentizationReview: { ...current, note, confirmedAt: undefined },
-                            updatedAt: new Date().toISOString(),
-                        },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyAgentizationReview(doc, withAgentizationNote(doc, note));
                 },
 
                 confirmAgentization: () => {
                     const doc = get().document;
                     if (!doc) return { success: false, message: 'SOP 문서가 없습니다.' };
-                    const current = normalizeAgentizationReview(doc, doc.agentizationReview, 'steps');
-                    const eligibleIds = getAgentizableSopStepIds(doc);
-                    const stepIds = current.scope === 'workflow'
-                        ? eligibleIds
-                        : current.stepIds.filter((id) => eligibleIds.includes(id));
-                    if (stepIds.length === 0) {
-                        return { success: false, message: 'Agent화 검토 대상 단계를 하나 이상 선택해 주세요.' };
+                    if (isCustomerReviewLocked()) return { success: false, message: '고객 검토 모드에서는 Agent화 판단을 확정할 수 없습니다.' };
+                    const result = confirmAgentizationReview(doc);
+                    if (result.success && result.review) {
+                        set({
+                            ...pushHistory(doc),
+                            document: { ...doc, agentizationReview: result.review, updatedAt: result.review.confirmedAt! },
+                        });
                     }
-                    if (stepIds.some((id) => !current.stepModes[id])) {
-                        return { success: false, message: '선택한 각 단계에 AI 적용 방식을 지정해 주세요.' };
-                    }
-                    const confirmedAt = new Date().toISOString();
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            agentizationReview: { ...current, stepIds, confirmedAt },
-                            updatedAt: confirmedAt,
-                        },
-                    });
-                    return { success: true, message: 'Agent화 검토 결과를 확정했습니다.' };
+                    return { success: result.success, message: result.message };
                 },
 
                 updateDocumentTitle: (title) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    // Item 3: Document title edit invalidates document reviewStatus back to 'ai-draft'!
-                    set({
-                        ...pushHistory(doc),
-                        document: { ...doc, title, reviewStatus: 'ai-draft', updatedAt: new Date().toISOString() },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyDocumentMutation(doc, { title });
                 },
 
-                // Item 3: Step Edits (Reverts step and document status to ai-draft on ANY meaningful edit)
+                // Reverts step and document status to 'ai-draft' on any meaningful edit; a
+                // position-only change (drag) carries no reviewable meaning and is exempt.
                 updateStep: (stepId, partial) => {
                     const doc = get().document;
-                    if (!doc) return;
-
-                    const isContentEdit = isMeaningfulStepEdit(partial);
-
-                    const steps = doc.steps.map((s) => {
-                        if (s.id !== stepId) return s;
-                        const nextStep = { ...s, ...partial };
-                        if (isContentEdit) {
-                            nextStep.reviewStatus = 'ai-draft' as const;
-                        }
-                        return nextStep;
-                    });
-
-                    const nextDocStatus = isContentEdit ? 'ai-draft' : doc.reviewStatus;
-
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            steps,
-                            reviewStatus: nextDocStatus,
-                            agentizationReview: isContentEdit ? resetAgentizationConfirmation(doc) : doc.agentizationReview,
-                            updatedAt: new Date().toISOString(),
-                        },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    const { steps, invalidate } = mutations.buildUpdateStepPatch(doc, stepId, partial);
+                    applyDocumentMutation(doc, { steps }, { invalidate });
                 },
 
                 addStep: (newStep, edgeData) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    const steps = [...doc.steps, { ...newStep, reviewStatus: 'ai-draft' as const }];
-                    const edges = edgeData ? [...doc.edges, edgeData] : doc.edges;
-
-                    // Item 3: Step addition invalidates document reviewStatus to 'ai-draft'
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            steps,
-                            edges,
-                            reviewStatus: 'ai-draft',
-                            agentizationReview: resetAgentizationConfirmation(doc),
-                            updatedAt: new Date().toISOString(),
-                        },
-                        selectedStepId: newStep.id,
-                        selectedEdgeId: null,
+                    if (!doc || isCustomerReviewLocked()) return;
+                    const patch = mutations.buildAddStepPatch(doc, newStep, edgeData);
+                    applyDocumentMutation(doc, patch, {
+                        extraState: { selectedStepId: newStep.id, selectedEdgeId: null },
                     });
                 },
 
-                // "단계 추가"의 기본 동작: 종료 노드 바로 앞에 새 단계를 끼워 넣는다.
-                // 종료 노드로 직접 들어오던 모든 edge를 새 단계로 재배선하고(incoming -> newStep),
-                // 새 단계 -> 종료 edge를 하나 추가한다 - 여러 경로가 종료로 직접 들어와도(예: YES/NO가
-                // 둘 다 바로 종료로 향하는 경우) 모든 경로가 새 단계를 거쳐 종료하게 되므로 도달성이
-                // 보존된다. 종료 노드가 정확히 1개가 아니거나, 종료로 들어오는 edge가 하나도 없어
-                // "안전한 삽입 지점"을 결정할 수 없으면 어떤 edge도 만들지 않고 실패를 반환한다 -
-                // 호출자(SopWorkspace)가 사용자에게 삽입 위치를 직접 선택하도록 안내해야 한다.
                 insertStepBeforeEnd: (newStep) => {
                     const doc = get().document;
                     if (!doc) return { success: false, reason: 'SOP 문서가 없습니다.' };
-
-                    const endSteps = doc.steps.filter((s) => s.terminalType === 'end');
-                    if (endSteps.length !== 1) {
-                        return {
-                            success: false,
-                            reason:
-                                endSteps.length === 0
-                                    ? '종료 노드가 없어 자동으로 삽입할 위치를 정할 수 없습니다. 캔버스에서 직접 위치를 지정해 주세요.'
-                                    : '종료 노드가 여러 개여서 자동으로 삽입할 위치를 정할 수 없습니다. 캔버스에서 직접 위치를 지정해 주세요.',
-                        };
+                    if (isCustomerReviewLocked()) {
+                        return { success: false, reason: '고객 검토 모드에서는 단계를 추가할 수 없습니다.' };
                     }
-
-                    const endId = endSteps[0].id;
-                    const incomingToEnd = doc.edges.filter((e) => e.target === endId);
-                    if (incomingToEnd.length === 0) {
-                        return {
-                            success: false,
-                            reason:
-                                '종료 노드로 들어오는 연결선이 없어 안전하게 자동 삽입할 수 없습니다. 캔버스에서 새 단계를 추가한 뒤 직접 연결선을 그어 주세요.',
-                        };
-                    }
-
-                    const rewired = incomingToEnd.map((e) => ({ ...e, target: newStep.id }));
-                    const untouchedEdges = doc.edges.filter((e) => e.target !== endId);
-                    const bridgeEdge: SopEdge = {
-                        id: `e-${newStep.id}-${endId}`,
-                        source: newStep.id,
-                        target: endId,
-                        label: '다음',
-                        branchType: 'default',
-                        sourceHandle: 'bottom',
-                        targetHandle: 'top-target',
-                    };
-
-                    const steps = [...doc.steps, { ...newStep, reviewStatus: 'ai-draft' as const }];
-                    const edges = [...untouchedEdges, ...rewired, bridgeEdge];
-
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            steps,
-                            edges,
-                            reviewStatus: 'ai-draft',
-                            agentizationReview: resetAgentizationConfirmation(doc),
-                            updatedAt: new Date().toISOString(),
-                        },
-                        selectedStepId: newStep.id,
-                        selectedEdgeId: null,
+                    const result = mutations.buildInsertStepBeforeEndPatch(doc, newStep);
+                    if (!result.success) return result;
+                    applyDocumentMutation(doc, { steps: result.steps, edges: result.edges }, {
+                        extraState: { selectedStepId: newStep.id, selectedEdgeId: null },
                     });
                     return { success: true };
                 },
 
-                // 시작·종료 노드 삭제 정책: 기본적으로 차단한다. 문서에 시작/종료가 정확히 1개씩
-                // 있어야 한다는 불변식(validateSopGraph의 missing/multiple-start/end-nodes)을
-                // Inspector의 명시적 삭제 버튼에서 미리 깨뜨리지 않기 위함이다. 다른 terminal로
-                // 바꾸고 싶다면 도형을 변경(normalizeStepShapeChange)한 뒤 삭제해야 한다.
                 deleteStep: (stepId) => {
                     const doc = get().document;
                     if (!doc) return { success: false, reason: 'SOP 문서가 없습니다.' };
-                    const target = doc.steps.find((s) => s.id === stepId);
-                    if (!target) return { success: false, reason: '해당 단계를 찾을 수 없습니다.' };
-                    if (target.terminalType === 'start' || target.terminalType === 'end') {
-                        return {
-                            success: false,
-                            reason: `${target.terminalType === 'start' ? '시작' : '종료'} 노드는 삭제할 수 없습니다. SOP에는 시작·종료 노드가 각각 정확히 1개씩 있어야 합니다. 도형을 다른 유형으로 먼저 변경한 뒤 삭제해 주세요.`,
-                        };
+                    if (isCustomerReviewLocked()) {
+                        return { success: false, reason: '고객 검토 모드에서는 단계를 삭제할 수 없습니다.' };
                     }
-
-                    const steps = doc.steps.filter((s) => s.id !== stepId);
-                    const edges = doc.edges.filter(
-                        (e) => e.source !== stepId && e.target !== stepId
-                    );
-                    const currentSelected = get().selectedStepId;
-                    const nextSelected = currentSelected === stepId ? (steps[0]?.id || null) : currentSelected;
-
-                    // Item 3: Step deletion invalidates document reviewStatus to 'ai-draft'!
-                    // NEVER auto-set to 'confirmed' even if remaining steps are confirmed!
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            steps,
-                            edges,
-                            reviewStatus: 'ai-draft',
-                            agentizationReview: resetAgentizationConfirmation(doc),
-                            updatedAt: new Date().toISOString(),
-                        },
-                        selectedStepId: nextSelected,
+                    const result = mutations.buildDeleteStepPatch(doc, stepId, get().selectedStepId);
+                    if (!result.success) return result;
+                    // Step deletion always invalidates reviewStatus to 'ai-draft' — it must
+                    // never auto-promote to 'confirmed' even if the remaining steps are.
+                    applyDocumentMutation(doc, { steps: result.steps, edges: result.edges }, {
+                        extraState: { selectedStepId: result.nextSelectedStepId },
                     });
                     return { success: true };
                 },
 
-                // terminal(시작/종료) 노드는 복제할 수 없다 - 그대로 복제하면 terminalType이 같은
-                // 노드가 2개가 되어 SOP의 "시작·종료 각각 정확히 1개" 불변식이 즉시 깨진다.
                 duplicateStep: (stepId) => {
                     const doc = get().document;
                     if (!doc) return { success: false, reason: 'SOP 문서가 없습니다.' };
-                    const original = doc.steps.find((s) => s.id === stepId);
-                    if (!original) return { success: false, reason: '해당 단계를 찾을 수 없습니다.' };
-                    if (original.terminalType === 'start' || original.terminalType === 'end') {
-                        return {
-                            success: false,
-                            reason: `${original.terminalType === 'start' ? '시작' : '종료'} 노드는 복제할 수 없습니다. 복제하면 중복된 시작·종료 노드가 생성됩니다.`,
-                        };
+                    if (isCustomerReviewLocked()) {
+                        return { success: false, reason: '고객 검토 모드에서는 단계를 복제할 수 없습니다.' };
                     }
-
-                    const newId = `step-${Date.now()}`;
-                    const dupStep: SopStepData = {
-                        ...original,
-                        id: newId,
-                        title: `${original.title} (사본)`,
-                        position: { x: original.position.x + 40, y: original.position.y + 40 },
-                        reviewStatus: 'ai-draft',
-                    };
-                    const steps = [...doc.steps, dupStep];
-
-                    // Item 3: Step duplication invalidates document reviewStatus to 'ai-draft'
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            steps,
-                            reviewStatus: 'ai-draft',
-                            agentizationReview: resetAgentizationConfirmation(doc),
-                            updatedAt: new Date().toISOString(),
-                        },
-                        selectedStepId: newId,
-                        selectedEdgeId: null,
+                    const result = mutations.buildDuplicateStepPatch(doc, stepId);
+                    if (!result.success) return result;
+                    applyDocumentMutation(doc, { steps: result.steps }, {
+                        extraState: { selectedStepId: result.newStepId, selectedEdgeId: null },
                     });
                     return { success: true };
                 },
 
-                // Edge Edits (Item 3: Invalidates document reviewStatus)
+                // Edge Edits (invalidate document reviewStatus + agentization confirmation)
                 updateEdge: (edgeId, partial) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    const edges = doc.edges.map((e) => (e.id === edgeId ? { ...e, ...partial } : e));
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            edges,
-                            reviewStatus: 'ai-draft',
-                            agentizationReview: resetAgentizationConfirmation(doc),
-                            updatedAt: new Date().toISOString(),
-                        },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyDocumentMutation(doc, mutations.buildUpdateEdgePatch(doc, edgeId, partial));
                 },
 
                 addEdge: (newEdge) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            edges: [...doc.edges, newEdge],
-                            reviewStatus: 'ai-draft',
-                            agentizationReview: resetAgentizationConfirmation(doc),
-                            updatedAt: new Date().toISOString(),
-                        },
-                        selectedEdgeId: newEdge.id,
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyDocumentMutation(doc, mutations.buildAddEdgePatch(doc, newEdge), {
+                        extraState: { selectedEdgeId: newEdge.id },
                     });
                 },
 
                 deleteEdge: (edgeId) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    const edges = doc.edges.filter((e) => e.id !== edgeId);
-                    const currentSelectedEdge = get().selectedEdgeId;
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            edges,
-                            reviewStatus: 'ai-draft',
-                            agentizationReview: resetAgentizationConfirmation(doc),
-                            updatedAt: new Date().toISOString(),
-                        },
-                        selectedEdgeId: currentSelectedEdge === edgeId ? null : currentSelectedEdge,
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    const { edges, nextSelectedEdgeId } = mutations.buildDeleteEdgePatch(doc, edgeId, get().selectedEdgeId);
+                    applyDocumentMutation(doc, { edges }, { extraState: { selectedEdgeId: nextSelectedEdgeId } });
                 },
 
-                // Skill Actions (Item 3: Invalidates step and document status to ai-draft)
+                // Skill Actions — invalidate step/document review status AND any confirmed
+                // Agent화 judgement, since a changed skill set can change what a step's AI
+                // participation judgement was actually made against.
                 acceptAiSkill: (stepId, skillName) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    const steps = doc.steps.map((s) => {
-                        if (s.id !== stepId) return s;
-                        const requiredSkills = s.requiredSkills.map((sk) =>
-                            sk.name === skillName ? { ...sk, accepted: true } : sk
-                        );
-                        return { ...s, requiredSkills, reviewStatus: 'ai-draft' as const };
-                    });
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            steps,
-                            reviewStatus: 'ai-draft',
-                            updatedAt: new Date().toISOString(),
-                        },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyDocumentMutation(doc, mutations.buildAcceptAiSkillPatch(doc, stepId, skillName));
                 },
 
                 rejectAiSkill: (stepId, skillName) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    const steps = doc.steps.map((s) => {
-                        if (s.id !== stepId) return s;
-                        const requiredSkills = s.requiredSkills.filter((sk) => sk.name !== skillName);
-                        return { ...s, requiredSkills, reviewStatus: 'ai-draft' as const };
-                    });
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            steps,
-                            reviewStatus: 'ai-draft',
-                            updatedAt: new Date().toISOString(),
-                        },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyDocumentMutation(doc, mutations.buildRejectAiSkillPatch(doc, stepId, skillName));
                 },
 
                 addSkillToStep: (stepId, skill) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    const steps = doc.steps.map((s) => {
-                        if (s.id !== stepId) return s;
-                        if (s.requiredSkills.some((sk) => sk.name === skill.name)) return s;
-                        return {
-                            ...s,
-                            requiredSkills: [...s.requiredSkills, skill],
-                            reviewStatus: 'ai-draft' as const,
-                        };
-                    });
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            steps,
-                            reviewStatus: 'ai-draft',
-                            updatedAt: new Date().toISOString(),
-                        },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyDocumentMutation(doc, mutations.buildAddSkillToStepPatch(doc, stepId, skill));
                 },
 
                 removeSkillFromStep: (stepId, skillName) => {
                     const doc = get().document;
-                    if (!doc) return;
-                    const steps = doc.steps.map((s) => {
-                        if (s.id !== stepId) return s;
-                        return {
-                            ...s,
-                            requiredSkills: s.requiredSkills.filter((sk) => sk.name !== skillName),
-                            reviewStatus: 'ai-draft' as const,
-                        };
-                    });
-                    set({
-                        ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            steps,
-                            reviewStatus: 'ai-draft',
-                            updatedAt: new Date().toISOString(),
-                        },
-                    });
+                    if (!doc || isCustomerReviewLocked()) return;
+                    applyDocumentMutation(doc, mutations.buildRemoveSkillFromStepPatch(doc, stepId, skillName));
                 },
 
-                // Item 4: Step UI Review Status Updates (CANNOT directly set 'confirmed')
+                // Step-level review status toggle. Cannot directly set 'confirmed' — that
+                // status is only reachable through confirmFullSop's full validation pass.
                 updateStepReviewStatus: (stepId, status) => {
                     const doc = get().document;
-                    if (!doc) return;
-
-                    // Item 4: Block setting 'confirmed' via step UI!
-                    const allowedStatus: SopReviewStatus = status === 'confirmed' ? 'reviewed' : status;
-                    const steps = doc.steps.map((s) => (s.id === stepId ? { ...s, reviewStatus: allowedStatus } : s));
-                    const overallStatus = computeDocumentReviewStatus(steps);
-
+                    if (!doc || isCustomerReviewLocked()) return;
+                    const { steps, reviewStatus } = applyStepReviewStatus(doc, stepId, status);
                     set({
                         ...pushHistory(doc),
-                        document: {
-                            ...doc,
-                            steps,
-                            reviewStatus: overallStatus,
-                            updatedAt: new Date().toISOString(),
-                        },
+                        document: { ...doc, steps, reviewStatus, updatedAt: new Date().toISOString() },
                     });
                 },
 
@@ -819,62 +462,22 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 confirmFullSop: () => {
                     const doc = get().document;
                     if (!doc) return { success: false, errors: ['SOP 데이터가 존재하지 않습니다.'] };
-
-                    const errors: string[] = [];
-
-                    // 1. Unreviewed steps check - any step that is NOT 'reviewed'
-                    const unreviewedSteps = doc.steps.filter((s) => s.reviewStatus !== 'reviewed' && s.reviewStatus !== 'confirmed');
-                    if (unreviewedSteps.length > 0) {
-                        errors.push(
-                            `미검토 단계가 ${unreviewedSteps.length}개 남아있습니다 (${unreviewedSteps.map((s) => s.title).join(', ')})`
-                        );
+                    if (isCustomerReviewLocked()) {
+                        return { success: false, errors: ['고객 검토 모드에서는 SOP를 확정할 수 없습니다.'] };
                     }
-
-                    // 2. Pending AI skills check
-                    const unacceptedAiSkills: string[] = [];
-                    doc.steps.forEach((s) => {
-                        s.requiredSkills.forEach((sk) => {
-                            if (sk.source === 'ai-suggested' && !sk.accepted) {
-                                unacceptedAiSkills.push(`[${s.title}] ${sk.name}`);
-                            }
-                        });
-                    });
-                    if (unacceptedAiSkills.length > 0) {
-                        errors.push(`미처리된 AI 제안 SKILL이 ${unacceptedAiSkills.length}개 있습니다 (${unacceptedAiSkills.join(', ')})`);
-                    }
-
-                    // 3. Graph level validation (Start/End nodes, decision branches, orphan nodes, cycles)
-                    const graphIssues = validateSopGraph(doc.steps, doc.edges);
-                    graphIssues.forEach((issue) => {
-                        errors.push(issue.message);
-                    });
-
-                    if (errors.length > 0) {
-                        return { success: false, errors };
-                    }
-
-                    // Confirm document ONLY when all validations pass!
-                    const updatedSteps = doc.steps.map((s) => ({ ...s, reviewStatus: 'confirmed' as const }));
-                    const now = new Date().toISOString();
-                    const updatedDoc: SopDocument = {
-                        ...doc,
-                        steps: updatedSteps,
-                        reviewStatus: 'confirmed',
-                        updatedAt: now,
-                    };
-
+                    const result = validateFullSopConfirmation(doc);
+                    if (!result.success) return { success: false, errors: result.errors };
                     set({
                         ...pushHistory(doc),
-                        document: updatedDoc,
-                        lastSavedTimestamp: now,
+                        document: result.confirmedDocument,
+                        lastSavedTimestamp: result.confirmedDocument.updatedAt,
                     });
-
                     return { success: true, errors: [] };
                 },
 
                 saveSnapshot: () => {
                     const doc = get().document;
-                    if (!doc) return;
+                    if (!doc || isCustomerReviewLocked()) return;
                     const now = new Date().toISOString();
                     set({
                         lastSavedTimestamp: now,
@@ -885,7 +488,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 // Undo / Redo
                 undo: () => {
                     const { history, document, future } = get();
-                    if (history.length === 0 || !document) return;
+                    if (history.length === 0 || !document || isCustomerReviewLocked()) return;
                     const previous = history[history.length - 1];
                     const newHistory = history.slice(0, history.length - 1);
                     set({
@@ -897,7 +500,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
 
                 redo: () => {
                     const { future, document, history } = get();
-                    if (future.length === 0 || !document) return;
+                    if (future.length === 0 || !document || isCustomerReviewLocked()) return;
                     const next = future[0];
                     const newFuture = future.slice(1);
                     set({
@@ -924,7 +527,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
             };
         },
         {
-            name: 'sop-prototype-storage',
+            name: SOP_DRAFT_STORAGE_KEY,
             version: 2,
             migrate: (persistedState: unknown) => {
                 if (!persistedState || typeof persistedState !== 'object') return persistedState;
@@ -940,7 +543,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                     customerReviewMode: state.customerReviewMode || false,
                 };
             },
-            storage: createJSONStorage(() => customStorage),
+            storage: createJSONStorage(createBrowserSopDraftStorage),
             partialize: (state) => ({
                 memberInfo: state.memberInfo,
                 workLibrary: state.workLibrary,

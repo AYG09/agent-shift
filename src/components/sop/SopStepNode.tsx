@@ -5,14 +5,13 @@ import { Handle, Position, NodeProps } from '@xyflow/react';
 import { FlowShapeRenderer } from '@/components/flow/FlowShapeRenderer';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { SopStepData } from '@/lib/sop-types';
-import { getSopNodeSize } from '@/lib/sop-canvas-utils';
+import { getSopNodeSize } from '@/lib/sop-node-geometry';
 import { getAgentizationModeForStep, getAgentizationModeMeta } from '@/lib/sop-agentization';
 import { CheckCircle2, Clock } from 'lucide-react';
 
 export const SopStepNode = memo(({ data, selected }: NodeProps) => {
     const step = data.step as SopStepData;
     const stepNumber = (data.index as number) || 1;
-    const displayMode = 'compact';
 
     const selectStep = useSopPrototypeStore((state) => state.selectStep);
     const document = useSopPrototypeStore((state) => state.document);
@@ -20,7 +19,7 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
 
     if (!step) return null;
 
-    const { width, height } = getSopNodeSize(step, displayMode);
+    const { width, height } = getSopNodeSize(step);
 
     const isConfirmed = step.reviewStatus === 'confirmed';
     const isReviewed = step.reviewStatus === 'reviewed';
@@ -63,7 +62,7 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
             onMouseLeave={() => setIsHovered(false)}
             style={{ width, height }}
         >
-            {/* Standardized React Flow Target Handles (Item 5) */}
+            {/* Standardized React Flow Target Handles */}
             <Handle type="target" position={Position.Top} id="top-target" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
             <Handle type="target" position={Position.Left} id="left-target" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
             <Handle type="target" position={Position.Right} id="right-target" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
@@ -73,7 +72,7 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
             <Handle type="target" position={Position.Right} id="right-rework-target" className="!opacity-0" style={{ top: '65%' }} />
             <Handle type="target" position={Position.Bottom} id="bottom-rework-target" className="!opacity-0" style={{ left: '65%' }} />
 
-            {/* Standardized React Flow Source Handles (Item 5) */}
+            {/* Standardized React Flow Source Handles */}
             <Handle type="source" position={Position.Top} id="top" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
             <Handle type="source" position={Position.Left} id="left" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />
             <Handle type="source" position={Position.Right} id="right" className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white" />

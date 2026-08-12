@@ -9,6 +9,7 @@ import {
     Search,
 } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
+import { SOP_REVIEW_STATUS_BADGE_CLASS } from '@/lib/sop-review-status-meta';
 
 interface SopSidebarProps {
     showMiniMap: boolean;
@@ -29,6 +30,7 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
         document,
         selectedStepId,
         selectStep,
+        customerReviewMode: readOnly,
     } = useSopPrototypeStore();
 
     const [activeTab, setActiveTab] = useState<TabType>('steps');
@@ -77,7 +79,13 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
 
     return (
         <div className="h-full flex flex-col bg-white border-r border-zinc-200 w-72 shrink-0 select-none">
-            {/* Sidebar Tabs */}
+            {readOnly && (
+                <div className="px-3 py-1.5 text-[10px] font-semibold text-indigo-700 bg-indigo-50 border-b border-indigo-100 text-center">
+                    고객 검토 모드 · 열람 전용
+                </div>
+            )}
+            {/* Sidebar Tabs — search/filter/display toggles here are local view state,
+                not document edits, so they stay usable in customer review mode. */}
             <div className="flex items-center border-b border-zinc-200 bg-zinc-50/70 p-1">
                 {[
                     { id: 'overview' as const, icon: LayoutDashboard, title: '개요' },
@@ -295,13 +303,7 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                         <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl text-center">
                             <span className="text-xs font-semibold text-zinc-500 block mb-1">전체 SOP 상태</span>
                             <span
-                                className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
-                                    document.reviewStatus === 'confirmed'
-                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                        : document.reviewStatus === 'reviewed'
-                                        ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                                        : 'bg-amber-100 text-amber-800 border border-amber-300'
-                                }`}
+                                className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${SOP_REVIEW_STATUS_BADGE_CLASS[document.reviewStatus]}`}
                             >
                                 {document.reviewStatus === 'confirmed'
                                     ? 'SOP 확정 완료'

@@ -12,7 +12,6 @@ import {
     NodeSplitResponseSchema,
 } from '@/lib/ai-schemas';
 import { SopGenerationResponseSchema } from '@/lib/sop-schemas';
-import { validateSopSetupConfig } from '@/lib/sop-setup-validation';
 import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
 import { normalizeFlowShape } from '@/lib/flow-shapes';
 import { FULL_SHAPE_SELECTION_GUIDE, MULTI_MEANING_SPLIT_GUIDE, BRANCH_EDGE_GUIDE } from '@/lib/ai-shape-guide';
@@ -25,8 +24,10 @@ import {
     type ValidatableNode,
     type ValidatableEdge,
 } from '@/lib/graph-validation';
-import { runSopValidationPipeline } from '@/lib/sop-generation-pipeline';
-import type { SopStructuralConstraints } from '@/lib/graph-validation';
+import { getSopPrompt } from '@/server/sop/sop-prompt';
+import { parseSopGenerationRequest } from '@/server/sop/sop-request';
+import type { SopGenerationRequest } from '@/lib/sop-ai-request';
+import { runSopGenerationPostProcessing } from '@/server/sop/sop-generation-runner';
 
 // AI 응답의 숫자 필드를 정규화 (부동소수점 오버플로우 방지)
 function normalizeMetrics(obj: unknown): unknown {
@@ -714,104 +715,6 @@ ${FULL_SHAPE_SELECTION_GUIDE}
 ${MULTI_MEANING_SPLIT_GUIDE}`;
 }
 
-export function getSopPrompt(params: {
-    memberRole?: string;
-    taskName?: string;
-    activityName?: string;
-    activities?: Array<{ name: string; description?: string; skills?: { name: string; description?: string }[] }>;
-    skills?: { name: string; description?: string }[];
-    context?: string;
-    detailLevel?: string;
-    minSteps?: number;
-    maxSteps?: number;
-    maxTotalNodes?: number;
-    branchPolicy?: string;
-    maxBranches?: number;
-    allowRework?: boolean;
-    maxLoops?: number;
-    splitComplexSteps?: boolean;
-}) {
-    const skillsList = (params.skills || []).map((s) => `- ${s.name}: ${s.description || ''}`).join('\n');
-    const activitiesList = (params.activities || [])
-        .map((activity, index) => {
-            const activitySkills = (activity.skills || []).map((skill) => skill.name).join(', ');
-            return `${index + 1}. ${activity.name}${activity.description ? ` — ${activity.description}` : ''}${activitySkills ? `\n   - 유관 SKILL: ${activitySkills}` : ''}`;
-        })
-        .join('\n');
-    // 0처럼 유효한 값이 falsy라서 기본값으로 덮어써지지 않도록 `||`가 아니라 `??`를 쓴다
-    // (예: maxLoops=0은 "재작업 루프를 허용하지 않음"이라는 유효한 사용자 설정이다).
-    const minSteps = params.minSteps ?? 6;
-    const maxSteps = params.maxSteps ?? 8;
-    const maxTotalNodes = params.maxTotalNodes ?? 15;
-    const branchPolicy = params.branchPolicy ?? 'auto';
-    const maxBranches = params.maxBranches ?? 2;
-    const allowRework = params.allowRework !== false;
-    const maxLoops = params.maxLoops ?? 3;
-    const splitComplexSteps = params.splitComplexSteps !== false;
-
-    const detailLevelGuide: Record<string, string> = {
-        simple: '핵심 흐름: Task의 핵심 Activity와 주요 승인 지점만 묶어 큰 단계 중심으로 작성하세요. 세부 실행을 불필요하게 분할하지 마세요.',
-        standard: '업무 단계: 주요 Activity를 독립적인 업무 단계로 나누고, 실제로 필요한 판단·분기·재작업 지점을 포함하세요.',
-        detailed: '실행 단위: 입력·산출물, 승인 기준, 예외·재작업 조건이 달라지는 지점까지 세분화하세요. 각 단계가 Agent화 가능성을 검토할 수 있는 하나의 실행 단위가 되도록 작성하세요.',
-    };
-
-    const branchPolicyGuide: Record<string, string> = {
-        none: `- 분기 정책: none - decision(판단) 노드를 절대 생성하지 마세요. 모든 단계는 순차적으로 연결되어야 합니다.`,
-        max: `- 분기 정책: max - decision(판단) 노드를 최대 ${maxBranches}개까지만 생성하세요. 그 이상은 허용되지 않습니다.`,
-        auto: `- 분기 정책: auto - 업무 맥락에 실제로 판단/승인/조건 분기가 필요한 지점에서만 decision 노드를 만드세요. decision 노드 개수에 고정 상한은 없지만, 의미 없이 남발하지 마세요.`,
-    };
-
-    return `당신은 프로세스 설계 및 SOP (Standard Operating Procedure) 작성 전문가입니다.
-고객사와 구성원이 즉시 업무에 활용할 수 있도록 정밀하고 완성도 높은 SOP를 설계하세요.
-
-## 입력 정보
-- 담당 직무: ${params.memberRole || '담당자'}
-- 대상 Task: ${params.taskName || '업무'}
-- SOP 생성 범위: ${params.activities && params.activities.length > 1 ? `Task 전체 (${params.activities.length}개 주요 Activity)` : '특정 Activity'}
-- 대상 Activity: ${params.activityName || '해당 Task의 전체 Activity'}
-- 반영 Activity 목록:
-${activitiesList || `1. ${params.activityName || '상세 업무'}`}
-- Work Library SKILL 목록:
-${skillsList || '없음'}
-- 업무 맥락:
-${params.context || '없음'}
-
-## 설정 조건
-- 업무 분해 수준: ${params.detailLevel || 'standard'} — ${detailLevelGuide[params.detailLevel || 'standard'] || detailLevelGuide.standard}
-- 주요 단계 수 범위: ${minSteps} ~ ${maxSteps}단계 (시작·종료 노드는 제외한 개수입니다)
-- 전체 노드 수 상한: ${maxTotalNodes}개 (시작·종료·decision·loopLimit을 모두 포함한 개수입니다)
-${branchPolicyGuide[branchPolicy] || branchPolicyGuide.auto}
-- 재작업/되돌아가는 경로: ${allowRework ? `허용 (정적 그래프 내 재작업 루프는 최대 ${maxLoops}개까지)` : '금지 (되돌아가는 edge를 만들지 마세요)'}
-- 복합 단계 자동 분리: ${splitComplexSteps ? '허용 - 하나의 레이블에 여러 의미가 섞인 단계는 의미 단위로 나누어 각각의 단계로 작성하세요.' : '금지 - 하나의 레이블에 여러 의미가 섞여 있어도 강제로 쪼개지 말고 하나의 단계로 유지하세요.'}
-
-## 작성 필수 원칙
-0. **워크플로우 가독성 원칙**:
-   - AI는 업무의 선후 관계와 분기 의미를 정확히 작성하고, 캔버스 좌표는 최종 결과로 간주하지 마세요. 플랫폼이 주 흐름을 여러 행으로 재배치하고 연결선을 최단 방향으로 연결합니다.
-   - 기본 진행은 하나의 명확한 주 흐름으로 연결하고, 재검토·반려·재협의는 반드시 branchType을 no 또는 condition으로 표시하세요. 그러면 주 흐름 밖으로 우회해 표시됩니다.
-   - 불필요한 교차 연결, 의미 없는 병렬 분기, 동일 노드 사이의 중복 edge를 만들지 마세요.
-1. **단계 정의(definition) 작성 원칙**:
-   - 절대로 단계명(title)을 단순 반복하는 문장을 쓰지 마세요.
-   - 다음 3가지 요소를 명확히 포함한 1~2문장의 완결된 정의를 작성하세요:
-     (1) 무엇을 수행하는가 (2) 어떤 기준/도구로 수행하는가 (3) 어떤 결과/산출물을 만들어내는가
-2. **SKILL 할당 원칙**:
-   - 제공된 Work Library SKILL을 우선 적용하세요 (source: 'work-library', accepted: true).
-   - 반드시 필요한 추가 SKILL이 있다면 제안하되, source: 'ai-suggested', accepted: false로 표시하고 이유(reason)를 명시하세요.
-3. **도형 및 흐름 구조**:
-   - 시작 단계는 반드시 shape: 'terminal', terminalType: 'start'로 정확히 1개만 작성하세요.
-   - 종료 단계는 반드시 shape: 'terminal', terminalType: 'end'로 정확히 1개만 작성하세요.
-     (terminalType을 생략하면 오류로 처리되며, 배열에서의 위치로 시작/종료를 추정하지 않습니다.
-     시작/종료가 아닌 단계에는 shape: 'terminal'을 사용하지 마세요.)
-   - 판단 분기점은 shape: 'decision' (위 분기 정책을 반드시 지키세요)
-   - 데이터 입출력은 shape: 'manualInput' 또는 'data'
-   - 문서 작성 단계는 shape: 'document'
-   - 재작업/루프 한계점은 shape: 'loopLimit'
-   - decision 노드의 outgoing edge 작성 규칙은 아래 "분기(decision) edge 작성 규칙"을 정확히 따르세요.
-
-${FULL_SHAPE_SELECTION_GUIDE}
-${splitComplexSteps ? MULTI_MEANING_SPLIT_GUIDE : ''}
-${BRANCH_EDGE_GUIDE}`;
-}
-
 export async function POST(request: NextRequest) {
     // 검증 실패 시 catch 블록에서도 스키마가 필요하므로 try 밖에 둔다
     let schema: z.ZodType | undefined;
@@ -820,8 +723,10 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { action, context, asIsNodes, framework, apiKey, node, flowType, scenario } = body;
 
-        // BYOK: 사용자 제공 키 또는 환경 변수 키 사용 (개행 문자 방지를 위해 trim)
-        const trimmedApiKey = apiKey?.trim();
+        // BYOK: 사용자 제공 키 또는 환경 변수 키 사용 (개행 문자 방지를 위해 trim).
+        // apiKey는 아직 검증되지 않은 요청 바디 값이므로, 문자열이 아닌 값(숫자/객체 등)이
+        // 와도 500을 던지지 않고 "키 없음"으로 처리한다.
+        const trimmedApiKey = typeof apiKey === 'string' ? apiKey.trim() : undefined;
 
         // 클라이언트가 설정창에서 고른 모델. 형식이 어긋나거나 구형이면 기본 모델로 되돌린다.
         const modelId = sanitizeModelId(body.model);
@@ -859,6 +764,10 @@ export async function POST(request: NextRequest) {
         // 생성 결과에 그래프 수준 의미 검증(+ 최대 1회 repair)을 적용할지 여부.
         // 'flow'는 nodes/edges 전체 그래프, 'drilldown'은 subSteps/subEdges를 검사한다.
         let graphKind: 'flow' | 'drilldown' | 'sop' | 'none' = 'none';
+        // Set only inside the 'generateSop' case below. The post-processing pipeline
+        // (graphKind === 'sop') reads this validated value instead of re-deriving
+        // constraints from the raw, untyped `body` a second time.
+        let sopRequest: SopGenerationRequest | undefined;
 
         switch (action) {
             case 'generateAsIsFlow':
@@ -923,44 +832,35 @@ export async function POST(request: NextRequest) {
                 break;
 
             case 'generateSop': {
-                // UI 검증만 신뢰하지 않는다 - 잘못된 워크플로우 구조 설정은 모델을 호출하기 전에
-                // 여기서 400으로 막는다. 클라이언트(SopSetupGate)와 완전히 동일한 검증 함수를 쓴다.
-                const setupIssues = validateSopSetupConfig({
-                    minSteps: body.minSteps,
-                    maxSteps: body.maxSteps,
-                    maxTotalNodes: body.maxTotalNodes,
-                    branchPolicy: body.branchPolicy,
-                    maxBranches: body.maxBranches,
-                    allowRework: body.allowRework,
-                    maxLoops: body.maxLoops,
-                });
-                if (setupIssues.length > 0) {
-                    return NextResponse.json(
-                        {
-                            error: `워크플로우 구조 설정이 유효하지 않습니다: ${setupIssues.map((i) => i.message).join(' / ')}`,
-                            issues: setupIssues,
-                        },
-                        { status: 400 }
-                    );
-                }
+                // 서버는 클라이언트 검증을 신뢰하지 않는다 - 요청 전체를 client/server 공용
+                // 스키마(SopGenerationRequestSchema, src/server/sop/sop-request.ts)로 즉시
+                // 파싱하고, 실패하면 필드별 issue를 포함한 400으로 막는다. apiKey/detailLevel/
+                // branchPolicy가 잘못된 타입이어도 여기서 400으로 끝나며 이후 로직에서 500을
+                // 만들지 않는다.
+                const parsedSopRequest = parseSopGenerationRequest(body);
+                if (!parsedSopRequest.ok) return parsedSopRequest.response;
+                // Assigns the outer `sopRequest` (declared above the switch) rather than
+                // shadowing it — the post-processing pipeline below reads this same
+                // validated value instead of re-parsing/casting raw `body` fields.
+                sopRequest = parsedSopRequest.request;
 
                 schema = SopGenerationResponseSchema;
                 prompt = getSopPrompt({
-                    memberRole: body.memberRole,
-                    taskName: body.taskName,
-                    activityName: body.activityName,
-                    activities: body.activities,
-                    skills: body.skills,
-                    context: body.context,
-                    detailLevel: body.detailLevel,
-                    minSteps: body.minSteps,
-                    maxSteps: body.maxSteps,
-                    maxTotalNodes: body.maxTotalNodes,
-                    branchPolicy: body.branchPolicy,
-                    maxBranches: body.maxBranches,
-                    allowRework: body.allowRework,
-                    maxLoops: body.maxLoops,
-                    splitComplexSteps: body.splitComplexSteps,
+                    memberRole: sopRequest.memberRole,
+                    taskName: sopRequest.taskName,
+                    activityName: sopRequest.activityName,
+                    activities: sopRequest.activities,
+                    skills: sopRequest.skills,
+                    context: sopRequest.context,
+                    detailLevel: sopRequest.detailLevel,
+                    minSteps: sopRequest.minSteps,
+                    maxSteps: sopRequest.maxSteps,
+                    maxTotalNodes: sopRequest.maxTotalNodes,
+                    branchPolicy: sopRequest.branchPolicy,
+                    maxBranches: sopRequest.maxBranches,
+                    allowRework: sopRequest.allowRework,
+                    maxLoops: sopRequest.maxLoops,
+                    splitComplexSteps: sopRequest.splitComplexSteps,
                 });
                 graphKind = 'sop';
                 break;
@@ -991,23 +891,21 @@ export async function POST(request: NextRequest) {
         const graphKindType: 'flow' | 'drilldown' | 'sop' | 'none' = graphKind;
 
         if (graphKindType === 'sop') {
-            // 클라이언트(SopSetupGate/SopGenerationSettings)의 워크플로우 구조 설정을 실제
-            // 검증 제약으로 변환한다. 여기서 쓰는 기본값은 DEFAULT_SETUP_CONFIG(스토어)와 동일하게
-            // 맞춰 둔다 - 값이 누락되면 프롬프트에 쓴 기본값과 검증 기준이 어긋나지 않도록 한다.
-            const sopConstraints: SopStructuralConstraints = {
-                minSteps: body.minSteps ?? 6,
-                maxSteps: body.maxSteps ?? 8,
-                maxTotalNodes: body.maxTotalNodes ?? 15,
-                branchPolicy: (body.branchPolicy as SopStructuralConstraints['branchPolicy']) ?? 'auto',
-                maxBranches: body.maxBranches ?? 2,
-                allowRework: body.allowRework !== false,
-                maxLoops: body.maxLoops ?? 3,
-            };
-
-            const pipelineResult = await runSopValidationPipeline(
+            if (!sopRequest) {
+                // graphKind is only ever set to 'sop' in the same 'generateSop' case block
+                // that assigns sopRequest, so this narrows rather than asserts past it —
+                // unreachable in practice, but never trusted with a cast either.
+                return NextResponse.json({ error: 'SOP 요청이 올바르게 파싱되지 않았습니다.' }, { status: 500 });
+            }
+            // SOP-specific generate -> validate -> repair -> fallback -> revalidate pipeline,
+            // extracted to src/server/sop/sop-generation-runner.ts. `sopRequest` is the same
+            // schema-validated value the prompt above was built from — no re-parsing/casting
+            // of the raw request body a second time.
+            const sopResult = await runSopGenerationPostProcessing({
                 object,
-                resolvedPrompt,
-                async (repairPrompt) => {
+                prompt: resolvedPrompt,
+                sopRequest,
+                generateRepair: async (repairPrompt) => {
                     const { object: repaired } = await generateObject({
                         model,
                         schema: resolvedSchema,
@@ -1017,17 +915,11 @@ export async function POST(request: NextRequest) {
                     });
                     return repaired;
                 },
-                sopConstraints
-            );
+            });
 
-            if (!pipelineResult.ok) {
-                return NextResponse.json(
-                    { error: pipelineResult.error, issues: pipelineResult.issues },
-                    { status: 400 }
-                );
-            }
-            object = pipelineResult.object;
-            graphWarnings = pipelineResult.warnings;
+            if (!sopResult.ok) return sopResult.response;
+            object = sopResult.object;
+            graphWarnings = sopResult.warnings;
         }
 
         if (graphKindType === 'flow') {

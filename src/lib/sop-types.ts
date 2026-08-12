@@ -1,6 +1,5 @@
 import { type FlowShape } from './flow-shapes';
 
-export type SopDisplayMode = 'compact' | 'standard' | 'detailed';
 export type SopReviewStatus = 'ai-draft' | 'reviewed' | 'confirmed';
 export type SopAgentizationScope = 'workflow' | 'steps';
 /**
@@ -137,7 +136,6 @@ export interface SopDocument {
     setupConfig?: SopSetupConfig;
     steps: SopStepData[];
     edges: SopEdge[];
-    displayMode: SopDisplayMode;
     reviewStatus: SopReviewStatus;
     agentizationReview?: SopAgentizationReview;
     createdAt: string;

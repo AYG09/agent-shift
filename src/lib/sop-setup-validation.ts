@@ -10,6 +10,51 @@
 export const MAX_BRANCHES_MIN = 1;
 export const MAX_BRANCHES_MAX = 20;
 
+/**
+ * Single source of truth for the SOP detail-level and branch-policy option sets.
+ * The UI option order/labels (SopGenerationSettings), the request schema's enum
+ * (sop-ai-request.ts), and the AI prompt guidance (server/sop/sop-prompt.ts) all
+ * read from these instead of maintaining three independently hand-written lists.
+ */
+export const SOP_DETAIL_LEVELS = ['simple', 'standard', 'detailed'] as const;
+export type SopDetailLevel = (typeof SOP_DETAIL_LEVELS)[number];
+
+export const SOP_DETAIL_LEVEL_GUIDE: Readonly<Record<SopDetailLevel, { label: string; shortDetail: string; promptGuide: string }>> = {
+    simple: {
+        label: '핵심 흐름',
+        shortDetail: 'Task의 핵심 흐름만',
+        promptGuide: '핵심 흐름: Task의 핵심 Activity와 주요 승인 지점만 묶어 큰 단계 중심으로 작성하세요. 세부 실행을 불필요하게 분할하지 마세요.',
+    },
+    standard: {
+        label: '업무 단계',
+        shortDetail: 'Activity별 주요 단계',
+        promptGuide: '업무 단계: 주요 Activity를 독립적인 업무 단계로 나누고, 실제로 필요한 판단·분기·재작업 지점을 포함하세요.',
+    },
+    detailed: {
+        label: '실행 단위',
+        shortDetail: '조건·예외까지 분해',
+        promptGuide: '실행 단위: 입력·산출물, 승인 기준, 예외·재작업 조건이 달라지는 지점까지 세분화하세요. 각 단계가 Agent화 가능성을 검토할 수 있는 하나의 실행 단위가 되도록 작성하세요.',
+    },
+};
+
+export const SOP_BRANCH_POLICIES = ['auto', 'none', 'max'] as const;
+export type SopBranchPolicy = (typeof SOP_BRANCH_POLICIES)[number];
+
+export const SOP_BRANCH_POLICY_GUIDE: Readonly<Record<SopBranchPolicy, { label: string; promptGuide: (maxBranches: number) => string }>> = {
+    auto: {
+        label: 'AI 자동 판단',
+        promptGuide: () => '- 분기 정책: auto - 업무 맥락에 실제로 판단/승인/조건 분기가 필요한 지점에서만 decision 노드를 만드세요. decision 노드 개수에 고정 상한은 없지만, 의미 없이 남발하지 마세요.',
+    },
+    none: {
+        label: '분기 없음',
+        promptGuide: () => '- 분기 정책: none - decision(판단) 노드를 절대 생성하지 마세요. 모든 단계는 순차적으로 연결되어야 합니다.',
+    },
+    max: {
+        label: '최대 개수 지정',
+        promptGuide: (maxBranches) => `- 분기 정책: max - decision(판단) 노드를 최대 ${maxBranches}개까지만 생성하세요. 그 이상은 허용되지 않습니다.`,
+    },
+};
+
 export type SopSetupValidationField =
     | 'minSteps'
     | 'maxSteps'
@@ -32,8 +77,6 @@ export interface SopSetupValidationInput {
     allowRework: unknown;
     maxLoops?: unknown;
 }
-
-const VALID_BRANCH_POLICIES = ['auto', 'none', 'max'] as const;
 
 function isPositiveInteger(v: unknown): v is number {
     return typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v) && v > 0;
@@ -79,7 +122,7 @@ export function validateSopSetupConfig(input: SopSetupValidationInput): SopSetup
         }
     }
 
-    if (typeof input.branchPolicy !== 'string' || !VALID_BRANCH_POLICIES.includes(input.branchPolicy as (typeof VALID_BRANCH_POLICIES)[number])) {
+    if (typeof input.branchPolicy !== 'string' || !SOP_BRANCH_POLICIES.includes(input.branchPolicy as SopBranchPolicy)) {
         issues.push({ field: 'branchPolicy', message: "분기 정책은 'auto', 'none', 'max' 중 하나여야 합니다." });
     }
 
@@ -103,8 +146,4 @@ export function validateSopSetupConfig(input: SopSetupValidationInput): SopSetup
     }
 
     return issues;
-}
-
-export function hasSopSetupErrors(issues: SopSetupValidationIssue[]): boolean {
-    return issues.length > 0;
 }
