@@ -11,6 +11,7 @@
         "test:flow-branches": "tsx tests/flow-branches.test.ts",
         "test:sop": "tsx tests/sop.test.ts && tsx tests/sop-readonly-inspectors.test.tsx && tsx tests/sop-setup-actions.test.ts",
         "test:sop-demo": "tsx tests/sop-demo.test.ts",
+        "verify:sop-customer": "node .agents/skills/implement-sop-customer-requirements/scripts/verify-sop-customer.mjs",
         "format": "prettier --write ."
     },
     "dependencies": {

@@ -1,0 +1,7 @@
+interface:
+  display_name: "SOP Customer Requirements"
+  short_description: "Safely implement customer-backed SOP Gate and Workspace changes"
+  default_prompt: "Use $implement-sop-customer-requirements to implement the approved SOP Task Library and Workspace requirements without changing /flow."
+
+policy:
+  allow_implicit_invocation: true
