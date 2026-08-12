@@ -848,6 +848,7 @@ export async function POST(request: NextRequest) {
                 prompt = getSopPrompt({
                     memberRole: sopRequest.memberRole,
                     taskName: sopRequest.taskName,
+                    sourceType: sopRequest.sourceType,
                     activityName: sopRequest.activityName,
                     activities: sopRequest.activities,
                     skills: sopRequest.skills,

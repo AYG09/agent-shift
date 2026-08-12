@@ -5,8 +5,16 @@ import { scopeSopRecordsForActor } from '@/lib/sop-actor';
 import { sopRepository } from '@/server/sop/sop-repository-memory';
 import { readSopActorContext } from '@/server/sop/sop-actor-context';
 import { respondValidated } from '@/server/sop/sop-response';
+import { validateSopDocumentOwner, validateSopPersistenceState } from '@/lib/sop-persistence-validation';
 
 type RouteContext = { params: Promise<{ id: string }> };
+
+function invalidSopStateResponse(errors: string[]) {
+    return NextResponse.json(
+        { error: `SOP 상태가 저장 조건을 충족하지 않습니다: ${errors.join(' / ')}`, issues: errors.map((message) => ({ field: 'document', message })) },
+        { status: 400 }
+    );
+}
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
     const actorResult = readSopActorContext(request);
@@ -60,6 +68,12 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
             { status: 400 }
         );
     }
+
+    const stateErrors = [
+        ...validateSopDocumentOwner(parsed.data.document, existing.memberId),
+        ...validateSopPersistenceState(parsed.data.document),
+    ];
+    if (stateErrors.length > 0) return invalidSopStateResponse(stateErrors);
 
     const result = await sopRepository.update(id, parsed.data);
     if (!result.ok) {

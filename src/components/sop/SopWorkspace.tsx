@@ -19,6 +19,7 @@ import {
     BookOpen,
 } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
+import { returnSopWorkspaceToSetup } from '@/lib/sop-setup-actions';
 import { SopSidebar } from './SopSidebar';
 import { SopCanvas } from './SopCanvas';
 import { SopStepInspector } from './SopStepInspector';
@@ -31,6 +32,7 @@ export const SopWorkspace: React.FC = () => {
         document,
         generateFromSample,
         customerReviewMode,
+        setCustomerReviewMode,
         toggleCustomerReviewMode,
         confirmFullSop,
         saveSnapshot,
@@ -74,6 +76,13 @@ export const SopWorkspace: React.FC = () => {
         saveSnapshot();
         setSaveToast(true);
         setTimeout(() => setSaveToast(false), 2000);
+    };
+
+    // Returning to the setup gate is an explicit session transition, not a toggle:
+    // a new sample/AI result must be applicable after the user intentionally leaves
+    // customer review mode from either Workspace entry point.
+    const returnToSetup = () => {
+        returnSopWorkspaceToSetup({ setCustomerReviewMode, navigate: router.push });
     };
 
     const handleConfirmSop = () => {
@@ -135,7 +144,7 @@ export const SopWorkspace: React.FC = () => {
                 <div className="flex items-center gap-3 min-w-0">
                     <button
                         type="button"
-                        onClick={() => router.push('/sop/setup')}
+                        onClick={returnToSetup}
                         className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
                         title="게이트 설정으로 돌아가기"
                         aria-label="게이트 설정으로 돌아가기"
@@ -395,7 +404,7 @@ export const SopWorkspace: React.FC = () => {
                                 type="button"
                                 onClick={() => {
                                     setShowRegenerateModal(false);
-                                    router.push('/sop/setup');
+                                    returnToSetup();
                                 }}
                                 className="px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-700"
                             >

@@ -14,9 +14,9 @@ import {
     type ValidatableNode,
     type ValidatableEdge,
 } from '../src/lib/graph-validation';
-import { useSopPrototypeStore } from '../src/lib/sop-prototype-store';
+import { useSopPrototypeStore, migrateSopPrototypePersistedState } from '../src/lib/sop-prototype-store';
 import { buildSopNodes, buildSopEdges, syncSopCanvasNodes } from '../src/lib/sop-canvas-utils';
-import { buildSopGenerationRequestBody } from '../src/lib/sop-ai-request';
+import { buildSopGenerationRequestBody, SopGenerationRequestSchema } from '../src/lib/sop-ai-request';
 import { generateSopViaApi } from '../src/lib/sop-ai-generation';
 import { runSopValidationPipeline } from '../src/lib/sop-generation-pipeline';
 import { getSopPrompt } from '../src/server/sop/sop-prompt';
@@ -39,7 +39,6 @@ import { respondValidated } from '../src/server/sop/sop-response';
 type SopCanvasNodeData = { step: SopStepData; index: number };
 
 const BASE_SETUP_CONFIG: SopSetupConfig = {
-    sourceType: 'task',
     detailLevel: 'standard',
     minSteps: 2,
     maxSteps: 5,
@@ -77,6 +76,32 @@ assert(sampleTask!.activities.length >= 4, 'A Task must contain multiple major A
 assert(sampleTask!.activities.every((activity) => activity.skills.length > 0), 'Every sample Activity must own its related SKILL data');
 assert(SAMPLE_WORK_LIBRARY.skills.length >= sampleTask!.activities.length, 'Task-scope skills must be derived from the Task Activity set');
 console.log('  ✅Task includes multiple editable Activities and Activity-specific SKILLs.');
+
+// ---------------------------------------------------------
+// 0b. SOP 생성 범위는 Work Library sourceType 하나로만 결정한다.
+// ---------------------------------------------------------
+console.log('Test 0b: SOP generation scope has one Work Library source of truth...');
+const scopeStore = useSopPrototypeStore.getState();
+scopeStore.resetStore();
+scopeStore.setWorkLibrary({ sourceType: 'task' });
+const taskScopeDocument = scopeStore.generateFromSample()!;
+assert(taskScopeDocument.workLibrary.sourceType === 'task', 'Task generation must retain task scope on the document');
+assert(!('sourceType' in (taskScopeDocument.setupConfig || {})), 'Workflow structure settings must not duplicate SOP generation scope');
+scopeStore.setWorkLibrary({ sourceType: 'activity' });
+const activityScopeDocument = scopeStore.generateFromSample()!;
+assert(activityScopeDocument.workLibrary.sourceType === 'activity', 'Activity generation must retain activity scope on the document');
+assert(!('sourceType' in (activityScopeDocument.setupConfig || {})), 'Activity generation must not create a second sourceType value');
+console.log('  ✅ Task 전체/선택 Activity 모두 Work Library sourceType 하나로 생성 범위를 유지합니다.');
+
+console.log('Test 0c: persisted v2 setup scope is migrated to the Work Library source of truth...');
+const migratedV2State = migrateSopPrototypePersistedState({
+    setupConfig: { ...BASE_SETUP_CONFIG, sourceType: 'activity', maxSteps: 9 },
+    document: { ...SAMPLE_SOP_DOCUMENT, setupConfig: { ...BASE_SETUP_CONFIG, sourceType: 'task', maxBranches: 3 } },
+});
+const migratedV2Document = (migratedV2State as { document: SopDocument }).document;
+const migratedV2Setup = (migratedV2State as { setupConfig: SopSetupConfig }).setupConfig as SopSetupConfig & { sourceType?: string };
+assert(!('sourceType' in migratedV2Setup) && migratedV2Setup.maxSteps === 9, 'v2 -> v3 migration must remove setupConfig.sourceType while preserving other setup settings');
+assert(!('sourceType' in ((migratedV2Document.setupConfig || {}) as Record<string, unknown>)) && migratedV2Document.setupConfig?.maxBranches === 3, 'v2 -> v3 migration must also remove document setupConfig.sourceType without losing its other settings');
 
 // ---------------------------------------------------------
 // 1. 시작·종료 노드 판정 및 방향 검증 테스트 (Item 1)
@@ -419,6 +444,12 @@ store.toggleAgentizationStep(lockedNonTerminalStepId);
 store.setAgentizationNote('우회 메모');
 const bypassAgentization = store.confirmAgentization();
 assert(bypassAgentization.success === false, 'confirmAgentization must fail while customer review mode is locked');
+// Document replacement is a mutation too: an async generation completion or a sample
+// reload must not replace what the customer is reviewing.
+const blockedSetDocument = store.setDocument({ ...SAMPLE_SOP_DOCUMENT, id: 'customer-review-set-document-bypass' });
+assert(blockedSetDocument === false, 'setDocument must report that a customer-review lock blocked document replacement');
+const bypassSampleDocument = store.generateFromSample();
+assert(bypassSampleDocument === null, 'generateFromSample must return null and leave the document intact while customer review mode is locked');
 
 assert(JSON.stringify(useSopPrototypeStore.getState().document) === lockedDocSnapshot, 'No mutation action may change the document while customerReviewMode is on');
 
@@ -430,6 +461,9 @@ assert(useSopPrototypeStore.getState().selectedEdgeId === lockedEdgeId, 'selectE
 
 store.toggleCustomerReviewMode();
 assert(useSopPrototypeStore.getState().customerReviewMode === false, 'customerReviewMode must be toggleable back off');
+store.setCustomerReviewMode(true);
+store.setCustomerReviewMode(false);
+assert(useSopPrototypeStore.getState().customerReviewMode === false, 'Setup navigation can deterministically exit customer review mode without relying on a toggle');
 store.updateDocumentTitle('잠금 해제 후 제목 변경');
 assert(useSopPrototypeStore.getState().document!.title === '잠금 해제 후 제목 변경', 'Mutations must work again once customerReviewMode is off');
 console.log('  ✅ customerReviewMode blocks every document mutation while leaving navigation/selection usable.');
@@ -516,7 +550,7 @@ try {
         member: SAMPLE_SOP_MEMBER,
         workLibrary: SAMPLE_WORK_LIBRARY,
         context: '',
-        setupConfig: { sourceType: 'task', detailLevel: 'standard', minSteps: 2, maxSteps: 5, branchPolicy: 'auto', maxBranches: 2, allowRework: true },
+        setupConfig: { detailLevel: 'standard', minSteps: 2, maxSteps: 5, branchPolicy: 'auto', maxBranches: 2, allowRework: true },
     });
 } catch (err: unknown) {
     didThrowError = true;
@@ -533,6 +567,8 @@ console.log('Test 6: Connecting model, reasoning, and apiKey to SOP request body
 const baseRequestParams = {
     memberRole: '채용담당자',
     taskName: '신입 채용',
+    sourceType: 'task' as const,
+    activities: [{ name: '기본 Activity', skills: [] as Array<{ name: string }> }],
     skills: [] as Array<{ id?: string; name: string; description?: string }>,
     context: '맥락',
     detailLevel: 'standard' as const,
@@ -560,9 +596,17 @@ const taskScopeActivities = [
 ];
 const taskScopeRequest = buildSopGenerationRequestBody({ ...baseRequestParams, activities: taskScopeActivities });
 assert(taskScopeRequest.activities?.length === 2, 'Task-scope request must preserve every selected Activity, not just one activity name');
-const taskScopePrompt = getSopPrompt({ taskName: '채용 운영', activities: taskScopeActivities });
+const taskScopePrompt = getSopPrompt({ taskName: '채용 운영', sourceType: 'task', activities: taskScopeActivities });
 assert(taskScopePrompt.includes('Task 전체 (2개 주요 Activity)'), 'Task-scope prompt must explicitly identify the full Task scope');
 assert(taskScopePrompt.includes('채용 요청 검토') && taskScopePrompt.includes('후보자 소싱'), 'Task-scope prompt must include every selected Activity');
+const activityScopeRequest = buildSopGenerationRequestBody({ ...baseRequestParams, sourceType: 'activity', activityName: taskScopeActivities[0].name, activities: [taskScopeActivities[0]], skills: taskScopeActivities[0].skills });
+assert(activityScopeRequest.activities?.length === 1 && activityScopeRequest.activityName === taskScopeActivities[0].name, 'Activity-scope request must contain only the chosen Activity and its explicit name');
+
+const singleActivityTaskPrompt = getSopPrompt({ taskName: 'Activity가 하나인 Task', sourceType: 'task', activities: [taskScopeActivities[0]] });
+assert(singleActivityTaskPrompt.includes('Task 전체 (1개 주요 Activity)'), 'A one-Activity Task must still be described as Task 전체, never inferred as Activity scope');
+assert(SopGenerationRequestSchema.safeParse({ ...taskScopeRequest, sourceType: 'activity', activityName: taskScopeActivities[0].name, activities: taskScopeActivities }).success === false, 'Activity scope must reject a request containing more than one Activity');
+assert(SopGenerationRequestSchema.safeParse({ ...activityScopeRequest, activityName: '다른 Activity' }).success === false, 'Activity scope must reject an activityName that disagrees with activities[0].name');
+assert(SopGenerationRequestSchema.safeParse({ ...taskScopeRequest, activityName: taskScopeActivities[0].name }).success === false, 'Task scope must reject a conflicting activityName');
 
 // 6b. reasoning='default'는 그대로 'default'로 처리된다 (필드 자체는 항상 포함)
 const requestBodyDefault = buildSopGenerationRequestBody({ ...baseRequestParams, reasoning: 'default' });
@@ -720,7 +764,7 @@ const preservedDoc = createSopDocumentFromGeneration({
     member: SAMPLE_SOP_MEMBER,
     workLibrary: SAMPLE_WORK_LIBRARY,
     context: '',
-    setupConfig: { sourceType: 'task', detailLevel: 'standard', minSteps: 2, maxSteps: 5, branchPolicy: 'auto', maxBranches: 2, allowRework: true },
+    setupConfig: { detailLevel: 'standard', minSteps: 2, maxSteps: 5, branchPolicy: 'auto', maxBranches: 2, allowRework: true },
 });
 
 assert(preservedDoc.steps[0].position.x !== 150 || preservedDoc.steps[0].position.y !== 200, 'AI coordinates must not be trusted as final canvas geometry');
@@ -731,7 +775,7 @@ const multiRowLayoutDoc = createSopDocumentFromGeneration({
     member: SAMPLE_SOP_MEMBER,
     workLibrary: SAMPLE_WORK_LIBRARY,
     context: '',
-    setupConfig: { sourceType: 'task', detailLevel: 'standard', minSteps: 2, maxSteps: 16, branchPolicy: 'auto', maxBranches: 3, allowRework: true },
+    setupConfig: { detailLevel: 'standard', minSteps: 2, maxSteps: 16, branchPolicy: 'auto', maxBranches: 3, allowRework: true },
 });
 assert(new Set(multiRowLayoutDoc.steps.map((step) => step.position.y)).size >= 3, 'Long generated SOPs must use multiple rows instead of one long line');
 const routedReworkEdges = buildSopEdges(multiRowLayoutDoc, null).filter((edge) => edge.type === 'sopRework');
@@ -1825,7 +1869,7 @@ async function runAsyncTests() {
     console.log('Test 22: scopeSopRecordsForActor returns different scopes per role...');
     const now = new Date().toISOString();
     const makeRecord = (overrides: Partial<SopRecord>): SopRecord => ({
-        id: 'r', memberId: 'm', organizationId: 'o', taskId: 't', taskName: 'T',
+        id: 'r', memberId: 'm', organizationId: 'o', taskId: 't', taskName: 'T', sourceType: 'task',
         document: SAMPLE_SOP_DOCUMENT, version: 1, createdAt: now, updatedAt: now,
         ...overrides,
     });
@@ -1853,6 +1897,12 @@ async function runAsyncTests() {
     function sopApiRequest(headers: Record<string, string>, body?: unknown) {
         return { headers: new Headers(headers), json: async () => body } as unknown as Parameters<typeof sopRepoPost>[0];
     }
+    const documentForMember = (id: string, memberId: string, patch: Partial<SopDocument> = {}): SopDocument => ({
+        ...SAMPLE_SOP_DOCUMENT,
+        ...patch,
+        id,
+        member: { ...SAMPLE_SOP_DOCUMENT.member, id: memberId },
+    });
     const noActorResponse = await sopRepoPost(sopApiRequest({}, {}));
     assert(noActorResponse.status === 401, 'A request with no actor headers must be rejected with 401, not treated as anonymous-allowed');
 
@@ -1878,7 +1928,7 @@ async function runAsyncTests() {
     assert(badBodyResponse.status === 400, 'A create request missing the document must be rejected with 400, not 500');
 
     const createResponse = await sopRepoPost(sopApiRequest(memberHeaders, {
-        memberId: 'member-d', organizationId: 'org-3', document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d' },
+        memberId: 'member-d', organizationId: 'org-3', document: documentForMember('repo-doc-d', 'member-d'),
     }));
     assert(createResponse.status === 201, `A well-formed, self-owned, member-role create request must succeed, got ${createResponse.status}`);
     const createdBody = await createResponse.json();
@@ -1886,7 +1936,7 @@ async function runAsyncTests() {
 
     // A duplicate POST with the same document.id must 409, and must not touch the first record.
     const duplicatePostResponse = await sopRepoPost(sopApiRequest(memberHeaders, {
-        memberId: 'member-d', organizationId: 'org-3', document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d', title: '덮어쓰기 시도 제목' },
+        memberId: 'member-d', organizationId: 'org-3', document: documentForMember('repo-doc-d', 'member-d', { title: '덮어쓰기 시도 제목' }),
     }));
     assert(duplicatePostResponse.status === 409, 'POST with an id that already exists must return 409 Conflict, never overwrite');
     const afterDuplicatePostGet = await sopRepoGetById(sopApiRequest(memberHeaders), { params: Promise.resolve({ id: 'repo-doc-d' }) });
@@ -1905,9 +1955,9 @@ async function runAsyncTests() {
     const orgAMemberHeaders = { 'x-sop-actor-id': 'member-orgA-1', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-A' };
     const orgAMemberHeaders2 = { 'x-sop-actor-id': 'member-orgA-2', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-A' };
     const orgBMemberHeaders = { 'x-sop-actor-id': 'member-orgB-1', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-B' };
-    await sopRepoPost(sopApiRequest(orgAMemberHeaders, { memberId: 'member-orgA-1', organizationId: 'org-A', document: { ...SAMPLE_SOP_DOCUMENT, id: 'multi-org-a1' } }));
-    await sopRepoPost(sopApiRequest(orgAMemberHeaders2, { memberId: 'member-orgA-2', organizationId: 'org-A', document: { ...SAMPLE_SOP_DOCUMENT, id: 'multi-org-a2' } }));
-    await sopRepoPost(sopApiRequest(orgBMemberHeaders, { memberId: 'member-orgB-1', organizationId: 'org-B', document: { ...SAMPLE_SOP_DOCUMENT, id: 'multi-org-b1' } }));
+    await sopRepoPost(sopApiRequest(orgAMemberHeaders, { memberId: 'member-orgA-1', organizationId: 'org-A', document: documentForMember('multi-org-a1', 'member-orgA-1') }));
+    await sopRepoPost(sopApiRequest(orgAMemberHeaders2, { memberId: 'member-orgA-2', organizationId: 'org-A', document: documentForMember('multi-org-a2', 'member-orgA-2') }));
+    await sopRepoPost(sopApiRequest(orgBMemberHeaders, { memberId: 'member-orgB-1', organizationId: 'org-B', document: documentForMember('multi-org-b1', 'member-orgB-1') }));
 
     const memberGetResponse = await sopRepoList(sopApiRequest(orgAMemberHeaders));
     const memberGetBody = await memberGetResponse.json();
@@ -1934,13 +1984,13 @@ async function runAsyncTests() {
     console.log('Test 26: /api/sop/[id] PUT rejects id mismatches and preserves data on every failure path...');
     const fakePutRequest = (headers: Record<string, string>, body: unknown) => sopApiRequest(headers, body) as unknown as Parameters<typeof sopRepoPut>[0];
 
-    const mismatchedIdUpdate = await sopRepoPut(fakePutRequest(memberHeaders, { document: { ...SAMPLE_SOP_DOCUMENT, id: 'a-completely-different-id' }, expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    const mismatchedIdUpdate = await sopRepoPut(fakePutRequest(memberHeaders, { document: documentForMember('a-completely-different-id', 'member-d'), expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
     assert(mismatchedIdUpdate.status === 400, 'A PUT whose body document.id disagrees with the URL id must be rejected with 400, before any repository call');
     const afterMismatchGet = await sopRepoGetById(sopApiRequest(memberHeaders), { params: Promise.resolve({ id: 'repo-doc-d' }) });
     const afterMismatchBody = await afterMismatchGet.json();
     assert(afterMismatchBody.record.version === 1, 'A rejected id-mismatch PUT must leave the original record\'s version unchanged');
 
-    const staleApiUpdate = await sopRepoPut(fakePutRequest(memberHeaders, { document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d' }, expectedVersion: 999 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    const staleApiUpdate = await sopRepoPut(fakePutRequest(memberHeaders, { document: documentForMember('repo-doc-d', 'member-d'), expectedVersion: 999 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
     assert(staleApiUpdate.status === 409, 'PUT /api/sop/[id] with a stale expectedVersion must return 409, not silently overwrite');
     const afterStaleApiGet = await sopRepoGetById(sopApiRequest(memberHeaders), { params: Promise.resolve({ id: 'repo-doc-d' }) });
     assert((await afterStaleApiGet.json()).record.version === 1, 'A rejected version-conflict PUT must leave the original record\'s version unchanged');
@@ -1948,20 +1998,181 @@ async function runAsyncTests() {
     // A different member can't even see this record (visibility is member-own-only), so it 404s
     // rather than leaking that the id exists via a 403.
     const otherMemberHeaders = { 'x-sop-actor-id': 'member-e', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-3' };
-    const invisibleApiUpdate = await sopRepoPut(fakePutRequest(otherMemberHeaders, { document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d' }, expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    const invisibleApiUpdate = await sopRepoPut(fakePutRequest(otherMemberHeaders, { document: documentForMember('repo-doc-d', 'member-e'), expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
     assert(invisibleApiUpdate.status === 404, 'A member who cannot see another member\'s record must get 404, not a 403 that leaks its existence');
 
     // A leader in the same org CAN see the record (org-scoped visibility), but editing is still
     // restricted to the owning member — this is the actual 403 (authorization, not visibility) path.
     const leaderHeaders = { 'x-sop-actor-id': 'leader-3', 'x-sop-actor-role': 'leader', 'x-sop-actor-organization-id': 'org-3' };
-    const forbiddenApiUpdate = await sopRepoPut(fakePutRequest(leaderHeaders, { document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d' }, expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    const forbiddenApiUpdate = await sopRepoPut(fakePutRequest(leaderHeaders, { document: documentForMember('repo-doc-d', 'leader-3'), expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
     assert(forbiddenApiUpdate.status === 403, 'A leader may view but must not be able to edit a member\'s SOP record through this boundary');
 
-    const goodApiUpdate = await sopRepoPut(fakePutRequest(memberHeaders, { document: { ...SAMPLE_SOP_DOCUMENT, id: 'repo-doc-d', title: 'API로 갱신된 제목' }, expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    const goodApiUpdate = await sopRepoPut(fakePutRequest(memberHeaders, { document: documentForMember('repo-doc-d', 'member-d', { title: 'API로 갱신된 제목' }), expectedVersion: 1 }), { params: Promise.resolve({ id: 'repo-doc-d' }) });
     assert(goodApiUpdate.status === 200, `The owning member's correctly-versioned, id-matched update must succeed, got ${goodApiUpdate.status}`);
     const goodApiUpdateBody = await goodApiUpdate.json();
     assert(goodApiUpdateBody.record.version === 2, 'A successful update must bump the version');
     console.log('  ✅ PUT /api/sop/[id] rejects URL/body id mismatches, stale versions, and non-owner edits — each preserving the original record — and accepts a correctly-versioned, id-matched update.');
+
+    // ---------------------------------------------------------
+    // 26b. POST/PUT must validate the meaning of confirmed SOP/Agent화 states, not
+    //      merely trust a client-supplied enum value. Draft/reviewed saves stay permissive.
+    // ---------------------------------------------------------
+    console.log('Test 26b: /api/sop rejects forged confirmation claims and preserves prior data...');
+    const incompleteConfirmed = documentForMember('repo-doc-d', 'member-d', {
+        title: '',
+        reviewStatus: 'confirmed',
+        steps: SAMPLE_SOP_DOCUMENT.steps.map((step, index) => ({
+            ...step,
+            definition: index === 0 ? '' : step.definition,
+            reviewStatus: 'confirmed' as const,
+        })),
+    });
+    const incompleteConfirmedPut = await sopRepoPut(
+        fakePutRequest(memberHeaders, { document: incompleteConfirmed, expectedVersion: 2 }),
+        { params: Promise.resolve({ id: 'repo-doc-d' }) }
+    );
+    assert(incompleteConfirmedPut.status === 400, 'An incomplete document claiming confirmed must be rejected by PUT with 400');
+    const afterIncompleteConfirmedPut = await sopRepoGetById(sopApiRequest(memberHeaders), { params: Promise.resolve({ id: 'repo-doc-d' }) });
+    const afterIncompleteConfirmedPutBody = await afterIncompleteConfirmedPut.json();
+    assert(afterIncompleteConfirmedPutBody.record.version === 2 && afterIncompleteConfirmedPutBody.record.document.title === 'API로 갱신된 제목', 'A rejected confirmed PUT must not alter the stored record or version');
+
+    const incompleteConfirmedPost = await sopRepoPost(sopApiRequest(memberHeaders, {
+        memberId: 'member-d',
+        organizationId: 'org-3',
+        document: { ...incompleteConfirmed, id: 'incomplete-confirmed-post' },
+    }));
+    assert(incompleteConfirmedPost.status === 400, 'An incomplete document claiming confirmed must be rejected by POST with 400');
+    const recordsAfterIncompletePost = await sopRepoList(sopApiRequest(memberHeaders));
+    assert(!(await recordsAfterIncompletePost.json()).records.some((record: SopRecord) => record.id === 'incomplete-confirmed-post'), 'A rejected confirmed POST must not create a record');
+
+    const confirmableDraft = documentForMember('valid-confirmed-api', 'member-d', {
+        reviewStatus: 'reviewed',
+        steps: SAMPLE_SOP_DOCUMENT.steps.map((step) => ({
+            ...step,
+            reviewStatus: 'reviewed' as const,
+            requiredSkills: step.requiredSkills.map((skill) => skill.source === 'ai-suggested' ? { ...skill, accepted: true } : skill),
+        })),
+    });
+    const validConfirmedResult = validateFullSopConfirmation(confirmableDraft);
+    assert(validConfirmedResult.success, 'Fixture setup: a fully reviewed, complete SOP must be confirmable');
+    if (!validConfirmedResult.success) throw new Error('Unreachable: confirmation fixture must be valid');
+    const validConfirmedPost = await sopRepoPost(sopApiRequest(memberHeaders, {
+        memberId: 'member-d', organizationId: 'org-3', document: validConfirmedResult.confirmedDocument,
+    }));
+    assert(validConfirmedPost.status === 201, 'A genuinely validated confirmed SOP must save successfully');
+
+    const invalidAgentizationConfirmed = documentForMember('invalid-agentization-confirmed', 'member-d', {
+        agentizationReview: {
+            scope: 'steps',
+            stepIds: [SAMPLE_SOP_DOCUMENT.steps[0].id], // start terminal is never eligible
+            stepModes: { [SAMPLE_SOP_DOCUMENT.steps[0].id]: 'automation' },
+            confirmedAt: new Date().toISOString(),
+        },
+    });
+    const invalidAgentizationPost = await sopRepoPost(sopApiRequest(memberHeaders, {
+        memberId: 'member-d', organizationId: 'org-3', document: invalidAgentizationConfirmed,
+    }));
+    assert(invalidAgentizationPost.status === 400, 'A confirmed Agent화 review with a terminal/non-eligible step must be rejected');
+
+    const agentizableIds = SAMPLE_SOP_DOCUMENT.steps.filter((step) => !step.terminalType).map((step) => step.id);
+    const unassignedModePost = await sopRepoPost(sopApiRequest(memberHeaders, {
+        memberId: 'member-d', organizationId: 'org-3', document: documentForMember('agentization-unassigned-mode', 'member-d', {
+            agentizationReview: { scope: 'steps', stepIds: [agentizableIds[0]], stepModes: {}, confirmedAt: new Date().toISOString() },
+        }),
+    }));
+    assert(unassignedModePost.status === 400, 'A confirmed Agent화 review with an unassigned selected-step mode must be rejected');
+    const incompleteWorkflowAgentizationPost = await sopRepoPost(sopApiRequest(memberHeaders, {
+        memberId: 'member-d', organizationId: 'org-3', document: documentForMember('agentization-incomplete-workflow', 'member-d', {
+            agentizationReview: { scope: 'workflow', stepIds: [agentizableIds[0]], stepModes: { [agentizableIds[0]]: 'assist' }, confirmedAt: new Date().toISOString() },
+        }),
+    }));
+    assert(incompleteWorkflowAgentizationPost.status === 400, 'A confirmed workflow Agent화 review that excludes eligible steps must be rejected');
+    const outsideStepModePost = await sopRepoPost(sopApiRequest(memberHeaders, {
+        memberId: 'member-d', organizationId: 'org-3', document: documentForMember('agentization-outside-mode', 'member-d', {
+            agentizationReview: { scope: 'steps', stepIds: [agentizableIds[0]], stepModes: { [agentizableIds[0]]: 'assist', [SAMPLE_SOP_DOCUMENT.steps[0].id]: 'automation' }, confirmedAt: new Date().toISOString() },
+        }),
+    }));
+    assert(outsideStepModePost.status === 400, 'A confirmed Agent화 review with a mode outside its selected eligible steps must be rejected');
+
+    const mismatchedDocumentMemberPost = await sopRepoPost(sopApiRequest(memberHeaders, {
+        memberId: 'member-d', organizationId: 'org-3', document: documentForMember('mismatched-document-member', 'another-member'),
+    }));
+    assert(mismatchedDocumentMemberPost.status === 400, 'A record owner that disagrees with document.member.id must be rejected before storage');
+    console.log('  ✅ POST/PUT reject forged SOP/Agent화 confirmation claims and document-owner mismatches, while a genuinely confirmed SOP saves normally.');
+
+    // ---------------------------------------------------------
+    // 26c. Record list metadata carries the real generation scope. A Task-wide
+    //      SOP may retain an editing-focus Activity inside the full document,
+    //      but the summary must not claim that it was Activity-scoped.
+    // ---------------------------------------------------------
+    console.log('Test 26c: SOP records preserve Task/Activity scope without false Activity summaries...');
+    const scopeRepo = new InMemorySopRepository();
+    const taskScopeRecordDocument = documentForMember('task-scope-record', 'member-d', {
+        workLibrary: { ...SAMPLE_WORK_LIBRARY, sourceType: 'task' },
+    });
+    const activityScopeRecordDocument = documentForMember('activity-scope-record', 'member-d', {
+        workLibrary: { ...SAMPLE_WORK_LIBRARY, sourceType: 'activity' },
+    });
+    const taskScopeRecordCreate = await scopeRepo.create({ memberId: 'member-d', organizationId: 'org-3', document: taskScopeRecordDocument });
+    const activityScopeRecordCreate = await scopeRepo.create({ memberId: 'member-d', organizationId: 'org-3', document: activityScopeRecordDocument });
+    assert(taskScopeRecordCreate.ok && taskScopeRecordCreate.record.sourceType === 'task' && taskScopeRecordCreate.record.activityId === undefined && taskScopeRecordCreate.record.activityName === undefined, 'Task-scope record metadata must omit Activity summary fields');
+    assert(activityScopeRecordCreate.ok && activityScopeRecordCreate.record.sourceType === 'activity' && activityScopeRecordCreate.record.activityId === SAMPLE_WORK_LIBRARY.activityId && activityScopeRecordCreate.record.activityName === SAMPLE_WORK_LIBRARY.activityName, 'Activity-scope record metadata must retain its selected Activity summary');
+    assert(SopRecordSchema.safeParse(taskScopeRecordCreate.ok ? taskScopeRecordCreate.record : null).success, 'Task-scope record must satisfy the shared response schema');
+    assert(SopRecordSchema.safeParse(activityScopeRecordCreate.ok ? activityScopeRecordCreate.record : null).success, 'Activity-scope record must satisfy the shared response schema');
+    console.log('  ✅ Task 전체 record에는 Activity 요약을 남기지 않고, 선택 Activity record에만 해당 Activity를 기록합니다.');
+
+    // ---------------------------------------------------------
+    // 26d. Activity-scoped documents must name a real Activity in the selected
+    //      Task catalog. POST/PUT rejection happens before repository mutation.
+    // ---------------------------------------------------------
+    console.log('Test 26d: /api/sop rejects Activity scope without a catalog-backed Activity identity...');
+    const activityValidationHeaders = { 'x-sop-actor-id': 'member-activity-validation', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-activity-validation' };
+    const validActivityDocument = documentForMember('activity-validation-doc', 'member-activity-validation', {
+        workLibrary: { ...SAMPLE_WORK_LIBRARY, sourceType: 'activity' },
+    });
+    const validActivityCreate = await sopRepoPost(sopApiRequest(activityValidationHeaders, {
+        memberId: 'member-activity-validation', organizationId: 'org-activity-validation', document: validActivityDocument,
+    }));
+    assert(validActivityCreate.status === 201, 'Fixture setup: a catalog-backed Activity scope document must save');
+
+    const missingActivityId = { ...validActivityDocument, workLibrary: { ...validActivityDocument.workLibrary, activityId: undefined } };
+    const missingActivityIdPost = await sopRepoPost(sopApiRequest(activityValidationHeaders, {
+        memberId: 'member-activity-validation', organizationId: 'org-activity-validation', document: { ...missingActivityId, id: 'activity-missing-id-post' },
+    }));
+    assert(missingActivityIdPost.status === 400, 'Activity scope POST with no activityId must return 400');
+    const missingActivityIdPut = await sopRepoPut(fakePutRequest(activityValidationHeaders, { document: missingActivityId, expectedVersion: 1 }), { params: Promise.resolve({ id: 'activity-validation-doc' }) });
+    assert(missingActivityIdPut.status === 400, 'Activity scope PUT with no activityId must return 400');
+
+    const missingActivityName = { ...validActivityDocument, workLibrary: { ...validActivityDocument.workLibrary, activityName: undefined } };
+    const missingActivityNamePost = await sopRepoPost(sopApiRequest(activityValidationHeaders, {
+        memberId: 'member-activity-validation', organizationId: 'org-activity-validation', document: { ...missingActivityName, id: 'activity-missing-name-post' },
+    }));
+    assert(missingActivityNamePost.status === 400, 'Activity scope POST with no activityName must return 400');
+    const missingActivityNamePut = await sopRepoPut(fakePutRequest(activityValidationHeaders, { document: missingActivityName, expectedVersion: 1 }), { params: Promise.resolve({ id: 'activity-validation-doc' }) });
+    assert(missingActivityNamePut.status === 400, 'Activity scope PUT with no activityName must return 400');
+
+    const activityOutsideTaskCatalog = { ...validActivityDocument, workLibrary: { ...validActivityDocument.workLibrary, activityId: 'outside-selected-task', activityName: '없는 Activity' } };
+    const outsideActivityPost = await sopRepoPost(sopApiRequest(activityValidationHeaders, {
+        memberId: 'member-activity-validation', organizationId: 'org-activity-validation', document: { ...activityOutsideTaskCatalog, id: 'activity-outside-task-post' },
+    }));
+    assert(outsideActivityPost.status === 400, 'Activity scope POST whose Activity is absent from the selected Task catalog must return 400');
+    const outsideActivityPut = await sopRepoPut(fakePutRequest(activityValidationHeaders, { document: activityOutsideTaskCatalog, expectedVersion: 1 }), { params: Promise.resolve({ id: 'activity-validation-doc' }) });
+    assert(outsideActivityPut.status === 400, 'Activity scope PUT whose Activity is absent from the selected Task catalog must return 400');
+
+    const mismatchedPutMember = { ...validActivityDocument, member: { ...validActivityDocument.member, id: 'different-member' } };
+    const mismatchedPutMemberResponse = await sopRepoPut(fakePutRequest(activityValidationHeaders, { document: mismatchedPutMember, expectedVersion: 1 }), { params: Promise.resolve({ id: 'activity-validation-doc' }) });
+    assert(mismatchedPutMemberResponse.status === 400, 'PUT must reject document.member.id that disagrees with the existing record owner');
+    const afterActivityScopeRejections = await sopRepoGetById(sopApiRequest(activityValidationHeaders), { params: Promise.resolve({ id: 'activity-validation-doc' }) });
+    const afterActivityScopeRejectionsBody = await afterActivityScopeRejections.json();
+    assert(afterActivityScopeRejectionsBody.record.version === 1 && afterActivityScopeRejectionsBody.record.document.workLibrary.activityId === SAMPLE_WORK_LIBRARY.activityId, 'Rejected Activity scope PUTs must leave the stored version and document unchanged');
+
+    const missingActivityRecord = SopRecordSchema.safeParse({
+        id: validActivityDocument.id,
+        memberId: 'member-activity-validation', organizationId: 'org-activity-validation', taskId: validActivityDocument.workLibrary.taskId, taskName: validActivityDocument.workLibrary.taskName,
+        sourceType: 'activity', document: validActivityDocument, version: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    });
+    assert(!missingActivityRecord.success, 'Activity-scoped record schema must require Activity summary fields');
+    console.log('  ✅ Activity scope identity is required, catalog-backed, and rejected PUTs preserve stored data; Task summaries remain Activity-free.');
 
     // ---------------------------------------------------------
     // 29. /api/sop and /api/sop/[id] response bodies actually conform to the shared response
@@ -2122,12 +2333,12 @@ async function runAsyncTests() {
     const collisionOwnerHeaders = { 'x-sop-actor-id': 'member-collision-owner', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-collision-owner' };
     const collisionAttackerHeaders = { 'x-sop-actor-id': 'member-collision-attacker', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-collision-attacker' };
     const collisionOwnerCreate = await sopRepoPost(sopApiRequest(collisionOwnerHeaders, {
-        memberId: 'member-collision-owner', organizationId: 'org-collision-owner', document: { ...SAMPLE_SOP_DOCUMENT, id: 'collision-demo', title: '소유자만 볼 수 있어야 하는 제목' },
+        memberId: 'member-collision-owner', organizationId: 'org-collision-owner', document: documentForMember('collision-demo', 'member-collision-owner', { title: '소유자만 볼 수 있어야 하는 제목' }),
     }));
     assert(collisionOwnerCreate.status === 201, 'Fixture setup: the owner\'s initial create must succeed');
 
     const collisionAttackerCreate = await sopRepoPost(sopApiRequest(collisionAttackerHeaders, {
-        memberId: 'member-collision-attacker', organizationId: 'org-collision-attacker', document: { ...SAMPLE_SOP_DOCUMENT, id: 'collision-demo', title: '공격자가 시도한 다른 제목' },
+        memberId: 'member-collision-attacker', organizationId: 'org-collision-attacker', document: documentForMember('collision-demo', 'member-collision-attacker', { title: '공격자가 시도한 다른 제목' }),
     }));
     assert(collisionAttackerCreate.status === 409, 'A different member/organization attempting to create the same id must still get a 409');
     const collisionAttackerBody = await collisionAttackerCreate.json();
@@ -2247,15 +2458,18 @@ async function runAsyncTests() {
     //     drifts the OTHER envelope fields would not have been caught without this.
     // ---------------------------------------------------------
     console.log('Test 32: SopRecordSchema rejects a record whose envelope disagrees with its document...');
+    const envelopeDocument: SopDocument = {
+        ...SAMPLE_SOP_DOCUMENT,
+        member: { ...SAMPLE_SOP_DOCUMENT.member, id: 'envelope-member' },
+    };
     const envelopeBaseRecord: SopRecord = {
         id: SAMPLE_SOP_DOCUMENT.id,
         memberId: 'envelope-member',
         organizationId: 'envelope-org',
         taskId: SAMPLE_WORK_LIBRARY.taskId,
         taskName: SAMPLE_WORK_LIBRARY.taskName,
-        activityId: SAMPLE_WORK_LIBRARY.activityId,
-        activityName: SAMPLE_WORK_LIBRARY.activityName,
-        document: SAMPLE_SOP_DOCUMENT,
+        sourceType: 'task',
+        document: envelopeDocument,
         version: 1,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -2276,7 +2490,9 @@ async function runAsyncTests() {
 
     const mismatchedActivityNameResult = SopRecordSchema.safeParse({ ...envelopeBaseRecord, activityName: '다른 액티비티명' });
     assert(!mismatchedActivityNameResult.success && mismatchedActivityNameResult.error.issues.some((i) => i.path.join('.') === 'activityName'), 'A record whose activityName disagrees with document.workLibrary.activityName must fail SopRecordSchema');
-    console.log('  ✅ SopRecordSchema rejects a record whenever its envelope (id/taskId/taskName/activityId/activityName) disagrees with the document it wraps, naming the specific mismatched field.');
+    const mismatchedMemberIdResult = SopRecordSchema.safeParse({ ...envelopeBaseRecord, memberId: 'different-member' });
+    assert(!mismatchedMemberIdResult.success && mismatchedMemberIdResult.error.issues.some((i) => i.path.join('.') === 'memberId'), 'A record whose memberId disagrees with document.member.id must fail SopRecordSchema');
+    console.log('  ✅ SopRecordSchema rejects a record whenever its envelope (id/memberId/taskId/taskName/sourceType/activityId/activityName) disagrees with the document it wraps, naming the specific mismatched field.');
 
     // ---------------------------------------------------------
     // 33. respondValidated() — the exact function every /api/sop response goes through — converts

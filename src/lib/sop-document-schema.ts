@@ -63,7 +63,7 @@ const WorkLibraryTaskSchema = z.object({
     activities: z.array(WorkLibraryActivitySchema),
 });
 
-const WorkLibrarySelectionSchema = z.object({
+export const WorkLibrarySelectionSchema = z.object({
     taskId: z.string(),
     taskName: z.string().min(1),
     activityId: z.string().optional(),
@@ -72,10 +72,40 @@ const WorkLibrarySelectionSchema = z.object({
     skills: z.array(WorkLibrarySkillSchema),
     sourceType: z.enum(['task', 'activity']),
     confirmed: z.boolean(),
+}).superRefine((selection, ctx) => {
+    const selectedTask = selection.taskCatalog.find((task) => task.id === selection.taskId);
+    if (!selectedTask) {
+        ctx.addIssue({ code: 'custom', path: ['taskId'], message: 'Selected Task must exist in taskCatalog.' });
+        return;
+    }
+    if (selectedTask.name !== selection.taskName) {
+        ctx.addIssue({ code: 'custom', path: ['taskName'], message: 'taskName must match the selected Task.' });
+    }
+
+    const hasActivityReference = selection.activityId !== undefined || selection.activityName !== undefined;
+    if (selection.sourceType === 'activity' && !selection.activityId) {
+        ctx.addIssue({ code: 'custom', path: ['activityId'], message: 'Activity scope requires activityId.' });
+    }
+    if (selection.sourceType === 'activity' && !selection.activityName?.trim()) {
+        ctx.addIssue({ code: 'custom', path: ['activityName'], message: 'Activity scope requires activityName.' });
+    }
+    if (!hasActivityReference) return;
+
+    if (!selection.activityId || !selection.activityName?.trim()) {
+        ctx.addIssue({ code: 'custom', path: ['activityId'], message: 'Activity references require both id and name.' });
+        return;
+    }
+    const selectedActivity = selectedTask.activities.find((activity) => activity.id === selection.activityId);
+    if (!selectedActivity) {
+        ctx.addIssue({ code: 'custom', path: ['activityId'], message: 'Selected Activity must exist in the selected Task.' });
+        return;
+    }
+    if (selectedActivity.name !== selection.activityName) {
+        ctx.addIssue({ code: 'custom', path: ['activityName'], message: 'activityName must match the selected Activity.' });
+    }
 });
 
 const SopSetupConfigSchema = z.object({
-    sourceType: z.enum(['task', 'activity']),
     detailLevel: z.enum(SOP_DETAIL_LEVELS),
     minSteps: z.number().int(),
     maxSteps: z.number().int(),

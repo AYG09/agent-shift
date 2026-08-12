@@ -115,7 +115,6 @@ export interface SopEdge {
 }
 
 export interface SopSetupConfig {
-    sourceType: 'task' | 'activity';
     detailLevel: 'simple' | 'standard' | 'detailed';
     minSteps: number;
     maxSteps: number;

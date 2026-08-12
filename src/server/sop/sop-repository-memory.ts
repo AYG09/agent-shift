@@ -17,11 +17,16 @@ export class InMemorySopRepository implements SopRepository {
     private readonly records = new Map<string, SopRecord>();
 
     private toRecordFields(document: SopDocument) {
+        const isActivityScope = document.workLibrary.sourceType === 'activity';
         return {
             taskId: document.workLibrary.taskId,
             taskName: document.workLibrary.taskName,
-            activityId: document.workLibrary.activityId,
-            activityName: document.workLibrary.activityName,
+            sourceType: document.workLibrary.sourceType,
+            // A Task-wide SOP can retain an Activity as the editor's focus in the
+            // document, but it is not the generation scope. Listing metadata must
+            // not misrepresent that focus as an Activity-scoped SOP.
+            activityId: isActivityScope ? document.workLibrary.activityId : undefined,
+            activityName: isActivityScope ? document.workLibrary.activityName : undefined,
         };
     }
 

@@ -17,8 +17,7 @@ import {
     KeyRound,
 } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
-import { buildSopGenerationRequestBody } from '@/lib/sop-ai-request';
-import { generateSopViaApi } from '@/lib/sop-ai-generation';
+import { loadSampleSopFromSetup, runSopSetupGeneration } from '@/lib/sop-setup-actions';
 import { useSopAiSettings } from '@/hooks/useSopAiSettings';
 import { validateSopSetupConfig } from '@/lib/sop-setup-validation';
 import { REASONING_LEVEL_LABELS } from '@/lib/gemini-models';
@@ -48,6 +47,7 @@ export const SopSetupGate: React.FC = () => {
         setupConfig,
         generateFromSample,
         setDocument,
+        customerReviewMode,
     } = useSopPrototypeStore();
 
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -63,9 +63,8 @@ export const SopSetupGate: React.FC = () => {
         : selectedActivity
           ? [selectedActivity]
           : [];
-    const activitiesForGeneration: Array<{ name: string; description?: string; skills: WorkLibrarySkill[] }> = selectedActivities.length > 0
-        ? selectedActivities.map((activity) => ({ name: activity.name, description: activity.description, skills: activity.skills }))
-        : [{ name: workLibrary.activityName || '주요 Activity', skills: workLibrary.skills }];
+    const activitiesForGeneration: Array<{ name: string; description?: string; skills: WorkLibrarySkill[] }> = selectedActivities
+        .map((activity) => ({ name: activity.name, description: activity.description, skills: activity.skills }));
 
     // 워크플로우 구조 설정(4·5번 카드) 오류가 있으면 AI 생성 자체를 막는다 - 서버(app/api/ai/route.ts)도
     // 동일한 validateSopSetupConfig로 같은 조건을 다시 검사하므로, UI 검증만 신뢰하지 않는다.
@@ -85,8 +84,24 @@ export const SopSetupGate: React.FC = () => {
             setValidationError('2. Work Library의 Task를 선택해 주세요.');
             return false;
         }
-        if (workLibrary.sourceType === 'activity' && !workLibrary.activityName?.trim()) {
+        if (!selectedTask || selectedTask.name !== workLibrary.taskName) {
+            setValidationError('2. 선택한 Task가 Work Library Data에 존재하지 않습니다. 다시 선택해 주세요.');
+            return false;
+        }
+        if (workLibrary.sourceType === 'task' && activitiesForGeneration.length === 0) {
+            setValidationError('2. Task 전체 SOP 생성에는 선택한 Task의 Activity가 하나 이상 필요합니다.');
+            return false;
+        }
+        if (workLibrary.sourceType === 'activity' && (!workLibrary.activityId || !workLibrary.activityName?.trim() || !selectedActivity || selectedActivity.name !== workLibrary.activityName)) {
             setValidationError('2. Activity 단위 SOP 생성 시 Activity명이 필수입니다.');
+            return false;
+        }
+        if (activitiesForGeneration.some((activity) => !activity.name.trim())) {
+            setValidationError('2. SOP 생성 범위에 포함된 모든 Activity 이름을 입력해 주세요.');
+            return false;
+        }
+        if (activitiesForGeneration.some((activity) => activity.skills.some((skill) => !skill.name.trim())) || workLibrary.skills.some((skill) => !skill.name.trim())) {
+            setValidationError('2. SOP 생성 범위에 포함된 모든 SKILL 이름을 입력해 주세요.');
             return false;
         }
         if (!workLibrary.confirmed) {
@@ -104,55 +119,52 @@ export const SopSetupGate: React.FC = () => {
     };
 
     const handleExplicitLoadSample = () => {
-        generateFromSample();
-        router.push('/sop/workspace');
+        const outcome = loadSampleSopFromSetup({
+            customerReviewMode,
+            generateFromSample,
+            navigate: router.push,
+        });
+        if (!outcome.success) setValidationError(outcome.message);
     };
 
     const handleGenerateAiSop = async () => {
+        if (customerReviewMode) {
+            setValidationError('고객 검토 모드에서는 새 SOP를 생성할 수 없습니다. Workspace에서 검토 모드를 종료한 뒤 다시 시도해 주세요.');
+            return;
+        }
         if (!validateGate()) return;
 
-        setIsGenerating(true);
-        setValidationError(null);
-        setAiError(null);
-
-        const requestBody = buildSopGenerationRequestBody({
-            memberRole: memberInfo.jobRole,
-            taskName: workLibrary.taskName,
-            activityName: workLibrary.sourceType === 'activity' ? selectedActivity?.name || workLibrary.activityName : undefined,
-            activities: activitiesForGeneration,
-            skills: workLibrary.skills,
-            context,
-            detailLevel: setupConfig.detailLevel,
-            minSteps: setupConfig.minSteps,
-            maxSteps: setupConfig.maxSteps,
-            maxTotalNodes: setupConfig.maxTotalNodes,
-            branchPolicy: setupConfig.branchPolicy,
-            maxBranches: setupConfig.maxBranches,
-            allowRework: setupConfig.allowRework,
-            maxLoops: setupConfig.maxLoops,
-            splitComplexSteps: setupConfig.splitComplexSteps,
-            apiKey,
-            model,
-            reasoning,
+        // Request construction performs the shared Zod validation before any API call.
+        await runSopSetupGeneration({
+            customerReviewMode,
+            requestParams: {
+                    memberRole: memberInfo.jobRole,
+                    taskName: workLibrary.taskName,
+                    sourceType: workLibrary.sourceType,
+                    activityName: workLibrary.sourceType === 'activity' ? selectedActivity?.name || workLibrary.activityName : undefined,
+                    activities: activitiesForGeneration,
+                    skills: workLibrary.skills,
+                    context,
+                    detailLevel: setupConfig.detailLevel,
+                    minSteps: setupConfig.minSteps,
+                    maxSteps: setupConfig.maxSteps,
+                    maxTotalNodes: setupConfig.maxTotalNodes,
+                    branchPolicy: setupConfig.branchPolicy,
+                    maxBranches: setupConfig.maxBranches,
+                    allowRework: setupConfig.allowRework,
+                    maxLoops: setupConfig.maxLoops,
+                    splitComplexSteps: setupConfig.splitComplexSteps,
+                    apiKey,
+                    model,
+                    reasoning,
+            },
+            apiParams: { member: memberInfo, workLibrary, context, setupConfig },
+            setDocument,
+            navigate: router.push,
+            setIsGenerating,
+            setValidationError,
+            setAiError,
         });
-
-        // Strict Zod parsing & normalization은 generateSopViaApi 내부(sop-normalizer)에서 수행된다.
-        const result = await generateSopViaApi({
-            requestBody,
-            member: memberInfo,
-            workLibrary,
-            context,
-            setupConfig,
-        });
-
-        if (result.success) {
-            setDocument(result.document);
-            router.push('/sop/workspace');
-        } else {
-            console.error('AI Generation Failed:', result.error);
-            setAiError(result.error);
-        }
-        setIsGenerating(false);
     };
 
     return (

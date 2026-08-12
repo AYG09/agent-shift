@@ -4,6 +4,14 @@ import { SopRecordResponseSchema, SopRecordListResponseSchema, SopCreateConflict
 import { sopRepository } from '@/server/sop/sop-repository-memory';
 import { readSopActorContext } from '@/server/sop/sop-actor-context';
 import { respondValidated } from '@/server/sop/sop-response';
+import { validateSopDocumentOwner, validateSopPersistenceState } from '@/lib/sop-persistence-validation';
+
+function invalidSopStateResponse(errors: string[]) {
+    return NextResponse.json(
+        { error: `SOP 상태가 저장 조건을 충족하지 않습니다: ${errors.join(' / ')}`, issues: errors.map((message) => ({ field: 'document', message })) },
+        { status: 400 }
+    );
+}
 
 /**
  * SOP save/list boundary — separate from /api/ai's generation endpoint. Backed
@@ -43,6 +51,12 @@ export async function POST(request: NextRequest) {
             { status: 403 }
         );
     }
+
+    const stateErrors = [
+        ...validateSopDocumentOwner(parsed.data.document, actor.actorId),
+        ...validateSopPersistenceState(parsed.data.document),
+    ];
+    if (stateErrors.length > 0) return invalidSopStateResponse(stateErrors);
 
     const result = await sopRepository.create(parsed.data);
     if (!result.ok) {

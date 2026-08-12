@@ -84,7 +84,6 @@ export const SAMPLE_SOP_DOCUMENT: SopDocument = {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     setupConfig: {
-        sourceType: 'task',
         detailLevel: 'standard',
         minSteps: 6,
         maxSteps: 12,

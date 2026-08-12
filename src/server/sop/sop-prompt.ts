@@ -4,6 +4,7 @@ import { FULL_SHAPE_SELECTION_GUIDE, MULTI_MEANING_SPLIT_GUIDE, BRANCH_EDGE_GUID
 export function getSopPrompt(params: {
     memberRole?: string;
     taskName?: string;
+    sourceType?: 'task' | 'activity';
     activityName?: string;
     activities?: Array<{ name: string; description?: string; skills?: { name: string; description?: string }[] }>;
     skills?: { name: string; description?: string }[];
@@ -18,6 +19,7 @@ export function getSopPrompt(params: {
     maxLoops?: number;
     splitComplexSteps?: boolean;
 }) {
+    const sourceType = params.sourceType ?? 'task';
     const skillsList = (params.skills || []).map((s) => `- ${s.name}: ${s.description || ''}`).join('\n');
     const activitiesList = (params.activities || [])
         .map((activity, index) => {
@@ -42,8 +44,8 @@ export function getSopPrompt(params: {
 ## 입력 정보
 - 담당 직무: ${params.memberRole || '담당자'}
 - 대상 Task: ${params.taskName || '업무'}
-- SOP 생성 범위: ${params.activities && params.activities.length > 1 ? `Task 전체 (${params.activities.length}개 주요 Activity)` : '특정 Activity'}
-- 대상 Activity: ${params.activityName || '해당 Task의 전체 Activity'}
+- SOP 생성 범위: ${sourceType === 'task' ? `Task 전체 (${(params.activities || []).length}개 주요 Activity)` : '특정 Activity'}
+- 대상 Activity: ${sourceType === 'activity' ? params.activityName || '선택 Activity' : '해당 Task의 전체 Activity'}
 - 반영 Activity 목록:
 ${activitiesList || `1. ${params.activityName || '상세 업무'}`}
 - Work Library SKILL 목록:

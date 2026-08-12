@@ -84,12 +84,16 @@ interface SopPrototypeState {
     reopenWorkLibrary: () => void;
     setContext: (context: string) => void;
     setSetupConfig: (config: Partial<SopSetupConfig>) => void;
-    generateFromSample: () => SopDocument;
-    setDocument: (doc: SopDocument) => void;
+    /** Returns null when customer review mode keeps the current document read-only. */
+    generateFromSample: () => SopDocument | null;
+    /** Returns false when customer review mode keeps the current document read-only. */
+    setDocument: (doc: SopDocument) => boolean;
 
     // Actions - Workspace Navigation & Selection
     selectStep: (stepId: string | null) => void;
     selectEdge: (edgeId: string | null) => void;
+    /** Deterministic mode transition for cross-screen navigation. */
+    setCustomerReviewMode: (enabled: boolean) => void;
     toggleCustomerReviewMode: () => void;
     setAgentizationScope: (scope: SopAgentizationScope) => void;
     setAgentizationDefaultMode: (mode: SopAiApplicationMode) => void;
@@ -130,7 +134,6 @@ interface SopPrototypeState {
 }
 
 const DEFAULT_SETUP_CONFIG: SopSetupConfig = {
-    sourceType: 'task',
     detailLevel: 'standard',
     minSteps: 6,
     maxSteps: 8,
@@ -141,6 +144,34 @@ const DEFAULT_SETUP_CONFIG: SopSetupConfig = {
     maxLoops: 3,
     splitComplexSteps: true,
 };
+
+function removeLegacySetupSourceType(config: unknown): SopSetupConfig | undefined {
+    if (!config || typeof config !== 'object') return undefined;
+    const current = { ...(config as Record<string, unknown>) };
+    delete current.sourceType;
+    return { ...DEFAULT_SETUP_CONFIG, ...current } as SopSetupConfig;
+}
+
+/** Pure v2 -> v3 persistence migration; exported so legacy data remains regression-testable. */
+export function migrateSopPrototypePersistedState(persistedState: unknown): unknown {
+    if (!persistedState || typeof persistedState !== 'object') return persistedState;
+    const state = persistedState as Record<string, unknown>;
+    const workLibrary = withWorkLibraryCatalog(state.workLibrary);
+    const document = state.document && typeof state.document === 'object'
+        ? {
+            ...(state.document as SopDocument),
+            workLibrary: withWorkLibraryCatalog((state.document as SopDocument).workLibrary) || SAMPLE_WORK_LIBRARY,
+            setupConfig: removeLegacySetupSourceType((state.document as SopDocument).setupConfig),
+        }
+        : state.document;
+    return {
+        ...state,
+        workLibrary: workLibrary || SAMPLE_WORK_LIBRARY,
+        setupConfig: removeLegacySetupSourceType(state.setupConfig) || DEFAULT_SETUP_CONFIG,
+        document,
+        customerReviewMode: state.customerReviewMode || false,
+    };
+}
 
 export const useSopPrototypeStore = create<SopPrototypeState>()(
     persist(
@@ -239,6 +270,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                     set((state) => ({ setupConfig: { ...state.setupConfig, ...partial } })),
 
                 generateFromSample: () => {
+                    if (isCustomerReviewLocked()) return null;
                     const state = get();
                     const now = new Date().toISOString();
                     const layout = layoutSopGraph(SAMPLE_SOP_DOCUMENT.steps, SAMPLE_SOP_DOCUMENT.edges);
@@ -267,6 +299,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 },
 
                 setDocument: (doc) => {
+                    if (isCustomerReviewLocked()) return false;
                     const now = new Date().toISOString();
                     set({
                         document: { ...doc, updatedAt: now },
@@ -276,11 +309,14 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                         history: [],
                         future: [],
                     });
+                    return true;
                 },
 
                 // Mode and Selection
                 selectStep: (stepId) => set({ selectedStepId: stepId, selectedEdgeId: null }),
                 selectEdge: (edgeId) => set({ selectedEdgeId: edgeId, selectedStepId: null }),
+
+                setCustomerReviewMode: (enabled) => set({ customerReviewMode: enabled }),
 
                 toggleCustomerReviewMode: () =>
                     set((state) => ({ customerReviewMode: !state.customerReviewMode })),
@@ -510,6 +546,8 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                     });
                 },
 
+                // Reset is an explicit session exit: it intentionally clears customer review
+                // mode together with the document instead of behaving like an in-workspace edit.
                 resetStore: () =>
                     set({
                         memberInfo: SAMPLE_SOP_MEMBER,
@@ -528,21 +566,8 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
         },
         {
             name: SOP_DRAFT_STORAGE_KEY,
-            version: 2,
-            migrate: (persistedState: unknown) => {
-                if (!persistedState || typeof persistedState !== 'object') return persistedState;
-                const state = persistedState as Record<string, unknown>;
-                const workLibrary = withWorkLibraryCatalog(state.workLibrary);
-                const document = state.document && typeof state.document === 'object'
-                    ? { ...(state.document as SopDocument), workLibrary: withWorkLibraryCatalog((state.document as SopDocument).workLibrary) || SAMPLE_WORK_LIBRARY }
-                    : state.document;
-                return {
-                    ...state,
-                    workLibrary: workLibrary || SAMPLE_WORK_LIBRARY,
-                    document,
-                    customerReviewMode: state.customerReviewMode || false,
-                };
-            },
+            version: 3,
+            migrate: migrateSopPrototypePersistedState,
             storage: createJSONStorage(createBrowserSopDraftStorage),
             partialize: (state) => ({
                 memberInfo: state.memberInfo,

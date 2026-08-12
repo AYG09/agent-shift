@@ -25,8 +25,9 @@ export const SopGenerationRequestSchema = z
         action: z.literal('generateSop'),
         memberRole: z.string().min(1),
         taskName: z.string().min(1),
+        sourceType: z.enum(['task', 'activity']),
         activityName: z.string().optional(),
-        activities: z.array(SopActivityRefSchema).optional(),
+        activities: z.array(SopActivityRefSchema).min(1),
         skills: z.array(SopSkillRefSchema),
         context: z.string(),
         detailLevel: z.enum(SOP_DETAIL_LEVELS),
@@ -46,6 +47,19 @@ export const SopGenerationRequestSchema = z
     // range) to the same pure function the client (SopGenerationSettings) validates against
     // live, instead of re-encoding those rules a second time here.
     .superRefine((val, ctx) => {
+        if (val.sourceType === 'task' && val.activityName !== undefined) {
+            ctx.addIssue({ code: 'custom', path: ['activityName'], message: 'Task-scoped SOP requests cannot include activityName.' });
+        }
+        if (val.sourceType === 'activity') {
+            if (!val.activityName?.trim()) {
+                ctx.addIssue({ code: 'custom', path: ['activityName'], message: 'Activity-scoped SOP requests require activityName.' });
+            }
+            if (val.activities.length !== 1) {
+                ctx.addIssue({ code: 'custom', path: ['activities'], message: 'Activity-scoped SOP requests require exactly one Activity.' });
+            } else if (val.activityName !== val.activities[0].name) {
+                ctx.addIssue({ code: 'custom', path: ['activityName'], message: 'activityName must match the selected Activity.' });
+            }
+        }
         const issues = validateSopSetupConfig({
             minSteps: val.minSteps,
             maxSteps: val.maxSteps,
@@ -69,8 +83,9 @@ export type SopGenerationRequest = z.infer<typeof SopGenerationRequestSchema>;
 export interface SopGenerationRequestBodyParams {
     memberRole: string;
     taskName: string;
+    sourceType: 'task' | 'activity';
     activityName?: string;
-    activities?: Array<{
+    activities: Array<{
         name: string;
         description?: string;
         skills: Array<{ id?: string; name: string; description?: string }>;
@@ -92,11 +107,12 @@ export interface SopGenerationRequestBodyParams {
 }
 
 export function buildSopGenerationRequestBody(params: SopGenerationRequestBodyParams): SopGenerationRequest {
-    return {
+    const request = {
         action: 'generateSop' as const,
         memberRole: params.memberRole,
         taskName: params.taskName,
-        activityName: params.activityName,
+        sourceType: params.sourceType,
+        ...(params.activityName !== undefined ? { activityName: params.activityName } : {}),
         activities: params.activities,
         skills: params.skills,
         context: params.context,
@@ -113,4 +129,9 @@ export function buildSopGenerationRequestBody(params: SopGenerationRequestBodyPa
         ...(params.model ? { model: sanitizeModelId(params.model) } : {}),
         reasoning: sanitizeReasoningLevel(params.reasoning),
     };
+    const parsed = SopGenerationRequestSchema.safeParse(request);
+    if (!parsed.success) {
+        throw new Error(`Invalid SOP generation request: ${parsed.error.issues.map((issue) => issue.message).join(' / ')}`);
+    }
+    return parsed.data;
 }

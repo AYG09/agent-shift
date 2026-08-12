@@ -17,8 +17,9 @@ export const SopRecordSchema = z.object({
     organizationId: z.string().min(1),
     taskId: z.string(),
     taskName: z.string(),
-    activityId: z.string().optional(),
-    activityName: z.string().optional(),
+    sourceType: z.enum(['task', 'activity']),
+    activityId: z.string().min(1).optional(),
+    activityName: z.string().min(1).optional(),
     document: SopDocumentSchema,
     version: z.number().int().positive(),
     reviewDecision: z.enum(['approved', 'changes-requested']).optional(),
@@ -26,7 +27,7 @@ export const SopRecordSchema = z.object({
     createdAt: z.string(),
     updatedAt: z.string(),
 })
-    // The envelope (id/taskId/taskName/activityId/activityName) is a denormalized
+    // The envelope (id/memberId/taskId/taskName/sourceType/activityId/activityName) is a denormalized
     // summary of `document` kept for cheap listing without parsing every full
     // document. A repository that ever lets these drift apart (e.g. a future
     // adapter bug) is a real bug, not something the response schema should
@@ -42,11 +43,26 @@ export const SopRecordSchema = z.object({
         if (val.taskName !== val.document.workLibrary.taskName) {
             ctx.addIssue({ code: 'custom', path: ['taskName'], message: `record.taskName(${val.taskName})이 document.workLibrary.taskName(${val.document.workLibrary.taskName})과 일치하지 않습니다.` });
         }
-        if (val.activityId !== val.document.workLibrary.activityId) {
+        if (val.sourceType !== val.document.workLibrary.sourceType) {
+            ctx.addIssue({ code: 'custom', path: ['sourceType'], message: 'record.sourceType이 document.workLibrary.sourceType과 일치하지 않습니다.' });
+        }
+        const expectedActivityId = val.document.workLibrary.sourceType === 'activity'
+            ? val.document.workLibrary.activityId
+            : undefined;
+        const expectedActivityName = val.document.workLibrary.sourceType === 'activity'
+            ? val.document.workLibrary.activityName
+            : undefined;
+        if (val.sourceType === 'activity' && (!val.activityId || !val.activityName)) {
+            ctx.addIssue({ code: 'custom', path: ['activityId'], message: 'Activity-scoped records require Activity summary identifiers.' });
+        }
+        if (val.activityId !== expectedActivityId) {
             ctx.addIssue({ code: 'custom', path: ['activityId'], message: 'record.activityId가 document.workLibrary.activityId와 일치하지 않습니다.' });
         }
-        if (val.activityName !== val.document.workLibrary.activityName) {
+        if (val.activityName !== expectedActivityName) {
             ctx.addIssue({ code: 'custom', path: ['activityName'], message: 'record.activityName이 document.workLibrary.activityName과 일치하지 않습니다.' });
+        }
+        if (val.document.member.id !== undefined && val.memberId !== val.document.member.id) {
+            ctx.addIssue({ code: 'custom', path: ['memberId'], message: 'record.memberId와 document.member.id가 일치하지 않습니다.' });
         }
     });
 
