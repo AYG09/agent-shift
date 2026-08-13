@@ -57,7 +57,11 @@ function buildConfirmedScenarioDocument(id: string, member: SopMember, applyStep
         member,
         workLibrary,
         context: `${workLibrary.taskName} 업무에 대한 시나리오 데모 SOP입니다.`,
-        setupConfig: { detailLevel: 'standard', minSteps: 6, maxSteps: 20, branchPolicy: 'auto', maxBranches: 2, allowRework: true, maxTotalNodes: 24, maxLoops: 2, splitComplexSteps: true },
+        // Activity당 2개 Sub Action을 만드는 샘플 빌더(예: 14 Activity → 28 업무 단계 + 터미널)와
+        // 모순되지 않도록 상한을 capacity 정책(2~3개/Activity) 수준으로 잡는다. minSteps는
+        // Activity 수가 다른 여러 Task에 공용으로 쓰이는 seed라 낮게 두되, 실제 생성 시에는
+        // computeSubActionCapacity가 Task별 하한(2×Activity 수)으로 자동 상향한다.
+        setupConfig: { detailLevel: 'standard', minSteps: 6, maxSteps: 42, branchPolicy: 'auto', maxBranches: 2, allowRework: true, maxTotalNodes: 48, maxLoops: 2, splitComplexSteps: true },
     });
     if (!built.success) throw new Error(`시나리오 seed 문서 생성 실패 (${id}): ${built.reason}`);
 

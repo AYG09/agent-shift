@@ -166,7 +166,7 @@ Direct modifications under `src/app/flow/**` and `src/components/flow/**` are fo
 - Add a new-document discriminator for the Activity–Sub Action structure; migrate legacy documents without rewriting their graph meaning.
 - Treat each nonterminal business node in a new Task SOP as one Sub Action with an integer order and exactly one catalog-backed source Activity ID.
 - Represent Activity as grouping/navigation rather than a duplicate process node.
-- Require at least one Sub Action per selected Task Activity; reject unknown or cross-Task IDs.
+- Require at least one Sub Action per selected Task Activity; reject unknown or cross-Task IDs. The DEFAULT expectation is 2–3 Sub Actions per Activity (confirmed direction, 2026-08): generation capacity floors minSteps at 2× the Activity count on both client and server, and an Activity left with a single Sub Action triggers one repair round, then a surfaced warning — never a hard rejection, because genuinely atomic Activities must not be force-split.
 - Generate a separate AI-Agent applicability suggestion and rationale per Sub Action.
 - Keep the AI suggestion separate from the member's authoritative `agentizationReview.stepModes` and `confirmedAt`.
 - Do not add confidence scores or a human-only application mode.

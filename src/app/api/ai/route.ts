@@ -28,6 +28,7 @@ import { getSopPrompt } from '@/server/sop/sop-prompt';
 import { parseSopGenerationRequest } from '@/server/sop/sop-request';
 import type { SopGenerationRequest } from '@/lib/sop-ai-request';
 import { runSopGenerationPostProcessing } from '@/server/sop/sop-generation-runner';
+import { computeSubActionCapacity } from '@/lib/sop-subaction-capacity';
 
 // AI 응답의 숫자 필드를 정규화 (부동소수점 오버플로우 방지)
 function normalizeMetrics(obj: unknown): unknown {
@@ -844,6 +845,25 @@ export async function POST(request: NextRequest) {
                 // validated value instead of re-parsing/casting raw `body` fields.
                 sopRequest = parsedSopRequest.request;
 
+                // The server re-applies the SAME Sub Action capacity floor the Gate
+                // computes client-side (computeSubActionCapacity) — a stale or
+                // hand-crafted client must never shrink minSteps below the
+                // per-Activity decomposition floor (기본 2~3 Sub Action/Activity),
+                // or the prompt and the post-processing validator would both be
+                // built from numbers that force 1:1 Activity-copy nodes. The
+                // adjusted values feed BOTH the prompt below and the
+                // runSopGenerationPostProcessing constraints (same object).
+                if (sopRequest.structureVersion === 'activity-subaction-v1' && sopRequest.activities.length > 0) {
+                    const capacity = computeSubActionCapacity({
+                        activityCount: sopRequest.activities.length,
+                        minSteps: sopRequest.minSteps,
+                        maxSteps: sopRequest.maxSteps,
+                        maxTotalNodes: sopRequest.maxTotalNodes,
+                        detailLevel: sopRequest.detailLevel,
+                    });
+                    sopRequest = { ...sopRequest, minSteps: capacity.minSteps, maxSteps: capacity.maxSteps, maxTotalNodes: capacity.maxTotalNodes };
+                }
+
                 schema = SopGenerationResponseSchema;
                 prompt = getSopPrompt({
                     memberRole: sopRequest.memberRole,
@@ -884,11 +904,17 @@ export async function POST(request: NextRequest) {
         const resolvedSchema = schema;
         const resolvedPrompt = prompt;
 
+        // /flow류 그래프(~15노드)는 16384로 충분하지만("실제 필요량 6,000 + 여유분"),
+        // Activity–Sub Action Task 전체 SOP는 한국어 리치 필드를 가진 28~42+ 노드를
+        // 반환해야 하므로 같은 상한을 쓰면 JSON이 중간에 잘려 NoObjectGeneratedError
+        // ("AI 응답이 스키마와 일치하지 않습니다")로 끝난다. SOP 생성만 별도 상한을 쓴다.
+        const generationMaxOutputTokens = graphKind === 'sop' ? 65536 : 16384;
+
         const { object: firstObject } = await generateObject({
             model,
             schema: resolvedSchema,
             prompt: resolvedPrompt,
-            maxOutputTokens: 16384, // 실제 필요량 6,000 + 여유분
+            maxOutputTokens: generationMaxOutputTokens,
             ...(providerOptions ? { providerOptions } : {}),
         });
 
@@ -916,7 +942,8 @@ export async function POST(request: NextRequest) {
                         model,
                         schema: resolvedSchema,
                         prompt: repairPrompt,
-                        maxOutputTokens: 16384,
+                        // repair도 전체 SOP 그래프를 다시 반환하므로 본 생성과 동일한 상한이 필요하다.
+                        maxOutputTokens: generationMaxOutputTokens,
                         ...(providerOptions ? { providerOptions } : {}),
                     });
                     return repaired;

@@ -4,7 +4,7 @@ import {
     validateSubActionStructure,
     formatSubActionStructureErrors,
 } from '../src/lib/sop-activity-coverage';
-import { SopStepAiSchema } from '../src/lib/sop-schemas';
+import { SopStepAiSchema, normalizeSopGenerationObject } from '../src/lib/sop-schemas';
 import { SopAgentizationSuggestionSchema } from '../src/lib/sop-step-common-schema';
 import { SopDocumentSchema } from '../src/lib/sop-document-schema';
 import { createSopDocumentFromGeneration } from '../src/lib/sop-normalizer';
@@ -110,27 +110,36 @@ async function run() {
     check(formatSubActionStructureErrors(duplicateResult).some((m) => m.includes('순서')), 'Duplicate Sub Action order produces a human-readable Korean error message');
 
     // ---------------------------------------------------------
-    // Terminal steps never carry Activity mapping / Sub Action order / AI suggestion
+    // Wire tolerance + mechanical normalization: the AI wire schema no longer
+    // hard-kills an entire response over mechanically-fixable violations (that
+    // parse-time death was the production "AI 응답이 스키마와 일치하지 않습니다"
+    // failure — NoObjectGeneratedError never reaches the repair loop). The
+    // terminal/origin invariants are instead enforced by
+    // normalizeSopGenerationObject (mechanical strips) + the generation
+    // runner's repair loop (genuine quality gaps) + the confirm boundary.
     // ---------------------------------------------------------
-    console.log('Terminal exclusion...');
+    console.log('Wire tolerance + normalization (terminal/origin invariants preserved end-to-end)...');
 
-    const terminalWithMapping = SopStepAiSchema.safeParse({
+    const terminalWithStrayFields = SopStepAiSchema.safeParse({
         id: 't1', title: '시작', definition: '시작 단계입니다.', shape: 'terminal', terminalType: 'start',
-        sourceActivityIds: [actA.id],
-    });
-    check(!terminalWithMapping.success, 'SopStepAiSchema rejects a terminal step carrying sourceActivityIds');
-
-    const terminalWithOrder = SopStepAiSchema.safeParse({
-        id: 't2', title: '종료', definition: '종료 단계입니다.', shape: 'terminal', terminalType: 'end',
-        subActionOrder: 1,
-    });
-    check(!terminalWithOrder.success, 'SopStepAiSchema rejects a terminal step carrying subActionOrder');
-
-    const terminalWithSuggestion = SopStepAiSchema.safeParse({
-        id: 't3', title: '시작', definition: '시작 단계입니다.', shape: 'terminal', terminalType: 'start',
+        sourceActivityIds: [actA.id], subActionOrder: 1, subActionOrigin: 'activity-derived',
         agentizationSuggestion: { type: 'agent-candidate', rationale: 'x' },
     });
-    check(!terminalWithSuggestion.success, 'SopStepAiSchema rejects a terminal step carrying an agentizationSuggestion');
+    check(terminalWithStrayFields.success, 'The WIRE schema tolerates a terminal step carrying stray provenance fields — one mechanical violation must not kill the whole response at parse time');
+
+    const normalizedTerminal = (normalizeSopGenerationObject({
+        steps: [{
+            id: 't1', title: '시작', definition: '시작 단계입니다.', shape: 'terminal', terminalType: 'start',
+            sourceActivityIds: [actA.id], subActionOrder: 1, subActionOrigin: 'activity-derived',
+            subActionOriginRationale: '잔여', agentizationSuggestion: { type: 'agent-candidate', rationale: 'x' },
+        }],
+    }) as { steps: Record<string, unknown>[] }).steps[0];
+    check(
+        normalizedTerminal.sourceActivityIds === undefined && normalizedTerminal.subActionOrder === undefined &&
+        normalizedTerminal.subActionOrigin === undefined && normalizedTerminal.subActionOriginRationale === undefined &&
+        normalizedTerminal.agentizationSuggestion === undefined,
+        'normalizeSopGenerationObject strips ALL provenance/suggestion fields from a terminal step — the terminal-exclusion invariant holds after normalization'
+    );
 
     const businessStepWithAllThree = SopStepAiSchema.safeParse({
         id: 'b1', title: '업무', definition: '업무 수행 단계입니다.', shape: 'process',
@@ -144,11 +153,30 @@ async function run() {
     });
     check(activityDerivedStep.success && activityDerivedStep.data.subActionOrigin === 'activity-derived', 'AI response schema preserves an Activity-derived Sub Action origin');
 
+    // activity-derived + rationale (구조화 출력 모델이 optional 필드를 일괄로 채우는 전형):
+    // 와이어에서는 통과하고, 정규화가 rationale만 제거한다 — 응답 전체가 죽지 않는다.
+    const activityDerivedWithLeftoverRationale = SopStepAiSchema.safeParse({
+        id: 'origin-leftover', title: '우선순위 설정', definition: '근거에 따라 우선순위를 설정합니다.', shape: 'process',
+        sourceActivityIds: [actA.id], subActionOrder: 1, subActionOrigin: 'activity-derived', subActionOriginRationale: '',
+    });
+    check(activityDerivedWithLeftoverRationale.success, 'The WIRE schema tolerates an activity-derived step with a (useless) rationale string — including the empty string models emit mechanically');
+    const normalizedLeftover = (normalizeSopGenerationObject({
+        steps: [{ id: 'origin-leftover', subActionOrigin: 'activity-derived', subActionOriginRationale: '  잔여 근거  ' }],
+    }) as { steps: Record<string, unknown>[] }).steps[0];
+    check(normalizedLeftover.subActionOriginRationale === undefined, 'normalizeSopGenerationObject drops the leftover rationale from an activity-derived step — the origin invariant holds after normalization');
+    const normalizedEmptyRationale = (normalizeSopGenerationObject({
+        steps: [{ id: 'origin-empty', subActionOrigin: 'context-derived', subActionOriginRationale: '   ' }],
+    }) as { steps: Record<string, unknown>[] }).steps[0];
+    check(normalizedEmptyRationale.subActionOriginRationale === undefined, 'A whitespace-only rationale is normalized away (leaving a genuine missing-rationale gap for the repair loop, not a fake non-empty value)');
+
+    // context-derived without rationale: 와이어에서는 통과한다. 진짜 품질 결함이므로
+    // 정규화가 아니라 generation-runner의 검증·repair 루프가 처리한다 (확정 경계의
+    // 엄격한 규칙은 sop-review.ts에서 그대로 유지).
     const contextDerivedWithoutRationale = SopStepAiSchema.safeParse({
         id: 'origin-bad', title: '추가 기준 확인', definition: '구성원 맥락에 따른 추가 기준을 확인합니다.', shape: 'process',
         sourceActivityIds: [actA.id], subActionOrder: 2, subActionOrigin: 'context-derived',
     });
-    check(!contextDerivedWithoutRationale.success, 'A context-derived Sub Action without a rationale is rejected');
+    check(contextDerivedWithoutRationale.success, 'The WIRE schema tolerates a context-derived step without a rationale — the runner repair loop (not parse-time death) demands the missing rationale');
 
     const contextDerivedStep = SopStepAiSchema.safeParse({
         id: 'origin-context', title: '추가 기준 확인', definition: '구성원 맥락에 따른 추가 기준을 확인합니다.', shape: 'process',
@@ -156,12 +184,17 @@ async function run() {
         subActionOriginRationale: '구성원이 입력한 해외 고객 승인 조건을 반영한 추가 단계입니다.',
     });
     check(contextDerivedStep.success && Boolean(contextDerivedStep.data.subActionOriginRationale?.includes('해외 고객')), 'A context-derived Sub Action preserves its member-context rationale');
+    const normalizedContext = (normalizeSopGenerationObject({
+        steps: [{ id: 'origin-context', subActionOrigin: 'context-derived', subActionOriginRationale: ' 해외 고객 승인 조건 반영 ' }],
+    }) as { steps: Record<string, unknown>[] }).steps[0];
+    check(normalizedContext.subActionOriginRationale === '해외 고객 승인 조건 반영', 'Normalization only TRIMS a genuine context-derived rationale — it never deletes or rewrites real member-context provenance');
 
-    const terminalWithOrigin = SopStepAiSchema.safeParse({
-        id: 'origin-terminal', title: '시작', definition: '업무를 시작하는 단계입니다.', shape: 'terminal', terminalType: 'start',
-        subActionOrigin: 'activity-derived',
+    // terminal에 terminalType이 없는 것만은 여전히 파싱 거부다 — start인지 end인지
+    // 안전하게 추측할 수 없는, 정규화 불가능한 진짜 모호성이기 때문이다.
+    const terminalMissingType = SopStepAiSchema.safeParse({
+        id: 't-no-type', title: '시작', definition: '시작 단계입니다.', shape: 'terminal',
     });
-    check(!terminalWithOrigin.success, 'A terminal step cannot carry Sub Action origin metadata');
+    check(!terminalMissingType.success, 'A terminal step with NO terminalType is still rejected at parse time — the one genuinely un-normalizable ambiguity keeps its hard failure');
 
     // ---------------------------------------------------------
     // Customer semantics: action-only nodes, dependency-aware parallelism, no pseudo gateways
@@ -459,6 +492,95 @@ async function run() {
     check(originRepairPrompt.includes('subActionOrigin') && originRepairPrompt.includes('context-derived'), 'The repair prompt explicitly asks for origin and a rationale for context-derived additions');
 
     // ---------------------------------------------------------
+    // 과소분해(Activity당 Sub Action 1개): repair를 1회 요구하고, repair 후에도 남으면
+    // 400이 아니라 경고로 전달한다 — 진짜 원자적 Activity를 생성 실패로 만들지 않는다.
+    // 또한 파이프라인 진입 정규화(normalizeSopGenerationObject)가 terminal 잔여 필드와
+    // activity-derived의 잔여 rationale을 실제로 제거하는지 함께 검증한다.
+    // ---------------------------------------------------------
+    console.log('runSopGenerationPostProcessing: under-decomposition triggers repair, degrades to a warning, and entry normalization strips mechanical violations...');
+    const underDecomposedObject = {
+        title: '과소분해 SOP',
+        steps: [
+            // terminal이 잔여 provenance 필드를 들고 와도 응답 전체가 죽지 않고 정규화로 제거되어야 한다.
+            { id: 'start', title: '시작', definition: '시작 단계의 상세 정의입니다.', shape: 'terminal', terminalType: 'start', subActionOrder: 9, subActionOrigin: 'activity-derived' },
+            {
+                id: 'only-one', title: '단일 작업', definition: '이 Activity의 유일한 작업 단계입니다.', shape: 'process',
+                sourceActivityIds: [actA.id], subActionOrder: 1, subActionOrigin: 'activity-derived',
+                // 구조화 출력 모델이 기계적으로 채우는 잔여 rationale — 정규화로 제거되어야 한다.
+                subActionOriginRationale: '잔여 근거',
+                agentizationSuggestion: { type: 'ai-assist', rationale: '사람의 판단을 AI가 지원합니다.' },
+            },
+            { id: 'end', title: '종료', definition: '종료 단계의 상세 정의입니다.', shape: 'terminal', terminalType: 'end' },
+        ],
+        edges: [
+            { id: 'e1', source: 'start', target: 'only-one' },
+            { id: 'e2', source: 'only-one', target: 'end' },
+        ],
+    };
+    let decompositionRepairPrompt = '';
+    let decompositionRepairCalls = 0;
+    const stillUnderDecomposedResult = await runSopGenerationPostProcessing({
+        object: underDecomposedObject,
+        prompt: 'DECOMPOSITION PROMPT',
+        sopRequest: brokenSopRequest,
+        generateRepair: async (repairPrompt) => {
+            decompositionRepairCalls++;
+            decompositionRepairPrompt = repairPrompt;
+            return underDecomposedObject; // repair가 분해 수준을 높이지 못한 경우
+        },
+    });
+    check(decompositionRepairCalls === 1, 'An Activity with only ONE Sub Action triggers exactly one repair attempt (기본 2~3개/Activity)');
+    check(decompositionRepairPrompt.includes('Sub Action이 1개뿐인 Activity') && decompositionRepairPrompt.includes(actA.id), 'The repair prompt names the under-decomposed Activity and demands 2~3 Sub Actions');
+    check(stillUnderDecomposedResult.ok, 'Under-decomposition that survives repair returns ok:true — a genuinely atomic Activity must never brick generation with a 400');
+    check(
+        stillUnderDecomposedResult.ok && stillUnderDecomposedResult.warnings.some((w) => w.includes('Sub Action이 1개뿐인 Activity')),
+        'The surviving under-decomposition is surfaced as an explicit warning the member can review, never silently passed through'
+    );
+    if (stillUnderDecomposedResult.ok) {
+        const normalizedSteps = (stillUnderDecomposedResult.object as { steps: Record<string, unknown>[] }).steps;
+        const normalizedStart = normalizedSteps.find((s) => s.id === 'start')!;
+        const normalizedOnly = normalizedSteps.find((s) => s.id === 'only-one')!;
+        check(normalizedStart.subActionOrder === undefined && normalizedStart.subActionOrigin === undefined, 'Pipeline entry normalization stripped the stray provenance fields from the terminal step');
+        check(normalizedOnly.subActionOriginRationale === undefined, 'Pipeline entry normalization dropped the leftover rationale from the activity-derived step');
+    }
+
+    // repair가 실제로 분해 수준을 높이면: 경고 없이 통과한다.
+    const properlyDecomposedObject = {
+        ...underDecomposedObject,
+        title: '정상 분해 SOP',
+        steps: [
+            underDecomposedObject.steps[0],
+            {
+                id: 'sub-1', title: '기준 확인', definition: '수행 기준을 확인하는 단계입니다.', shape: 'process',
+                sourceActivityIds: [actA.id], subActionOrder: 1, subActionOrigin: 'activity-derived',
+                agentizationSuggestion: { type: 'ai-assist', rationale: '사람의 판단을 AI가 지원합니다.' },
+            },
+            {
+                id: 'sub-2', title: '실행 결과 정리', definition: '실행 결과를 정리해 기록하는 단계입니다.', shape: 'process',
+                sourceActivityIds: [actA.id], subActionOrder: 2, subActionOrigin: 'activity-derived',
+                agentizationSuggestion: { type: 'agent-candidate', rationale: '규칙 기반으로 자동화할 수 있습니다.' },
+            },
+            underDecomposedObject.steps[2],
+        ],
+        edges: [
+            { id: 'e1', source: 'start', target: 'sub-1' },
+            { id: 'e2', source: 'sub-1', target: 'sub-2' },
+            { id: 'e3', source: 'sub-2', target: 'end' },
+        ],
+    };
+    const repairedDecompositionResult = await runSopGenerationPostProcessing({
+        object: underDecomposedObject,
+        prompt: 'DECOMPOSITION PROMPT 2',
+        sopRequest: brokenSopRequest,
+        generateRepair: async () => properlyDecomposedObject,
+    });
+    check(repairedDecompositionResult.ok, 'A repair that genuinely decomposes the Activity into 2 Sub Actions is accepted');
+    check(
+        repairedDecompositionResult.ok && !repairedDecompositionResult.warnings.some((w) => w.includes('Sub Action이 1개뿐인 Activity')),
+        'After a successful decomposition repair there is NO leftover under-decomposition warning'
+    );
+
+    // ---------------------------------------------------------
     // Code review defect 2: minSteps/maxSteps are decoupled — Activity count alone
     // must never collapse maxSteps down to exactly minSteps (which would force
     // exactly one Sub Action per Activity, a rule the customer never confirmed).
@@ -476,10 +598,10 @@ async function run() {
         maxTotalNodes: 15,
         detailLevel: 'standard',
     });
-    check(capacityResult.minSteps === 14, 'minSteps is raised exactly to the Activity count so every Activity CAN be covered at least once');
-    check(capacityResult.maxSteps > capacityResult.minSteps, 'maxSteps is NOT collapsed to the same value as minSteps — 14 Activities must not force exactly 14 Sub Actions total');
-    check(capacityResult.maxSteps >= Math.ceil(14 * 1.5), 'maxSteps provides real headroom above the Activity count, not just Activity count + a token amount');
-    check(capacityResult.maxTotalNodes >= capacityResult.maxSteps + 4, 'maxTotalNodes leaves room for start/end/decision/loop nodes on top of the expanded maxSteps, not just on top of the raw Activity count');
+    check(capacityResult.minSteps === 28, 'minSteps is floored at 2× the Activity count (기본 2개/Activity) — 14 Activities can never produce a 1:1 Activity-copy graph of only 14 nodes');
+    check(capacityResult.maxSteps > capacityResult.minSteps, 'maxSteps is NOT collapsed to the same value as minSteps — the floor must not silently become a fixed per-Activity count');
+    check(capacityResult.maxSteps >= 42, 'maxSteps provides 3×-Activity headroom at standard detail (14 Activities → 42) so the 기본 2~3개/Activity band is actually reachable');
+    check(capacityResult.maxTotalNodes >= capacityResult.maxSteps + 6, 'maxTotalNodes leaves start/end/decision/loop overhead on top of the expanded maxSteps, not just on top of the raw Activity count');
     check(
         capacityResult.explanation !== null &&
             capacityResult.explanation.includes(String(capacityResult.minSteps)) &&
@@ -494,16 +616,16 @@ async function run() {
     const activities14 = representativeTaskEntry.task.activities;
     const allowedIds14 = activities14.map((a) => a.id);
     const multiSubActionSteps = activities14.flatMap((activity, index) => {
-        const countForThisActivity = index < 6 ? 2 : 1; // 6 of 14 Activities get a second Sub Action
+        const countForThisActivity = index < 4 ? 3 : 2; // 기본 2~3개/Activity 밴드: 4 Activities x3 + 10 Activities x2
         return Array.from({ length: countForThisActivity }, (_unused, subIndex) => ({
             id: `cap-step-${activity.id}-${subIndex}`,
             sourceActivityIds: [activity.id],
             subActionOrder: subIndex + 1,
         }));
     });
-    check(multiSubActionSteps.length === 20, 'Fixture sanity check: 6 Activities x2 + 8 Activities x1 = 20 Sub Actions total');
+    check(multiSubActionSteps.length === 32, 'Fixture sanity check: 4 Activities x3 + 10 Activities x2 = 32 Sub Actions total — inside the 28~42 default band for 14 Activities');
     const multiSubActionResult = validateSubActionStructure(multiSubActionSteps, allowedIds14);
-    check(multiSubActionResult.valid, 'A result where 6 of 14 Activities each have TWO Sub Actions (20 total) is genuinely valid, not just theoretically allowed');
+    check(multiSubActionResult.valid, 'A result where every Activity has 2~3 Sub Actions (32 total) is genuinely valid, not just theoretically allowed');
 
     const capacityGraphSteps = [
         { id: 'cap-start', shape: 'terminal', terminalType: 'start' as const },
@@ -526,7 +648,7 @@ async function run() {
         allowRework: true,
         maxLoops: 3,
     });
-    check(!hasBlockingSopIssues(capacityGraphIssues), 'A real 20-Sub-Action linear graph is NOT rejected by maxSteps/maxTotalNodes under the computed capacity — the capacity policy and the validator genuinely agree, not just look separately reasonable');
+    check(!hasBlockingSopIssues(capacityGraphIssues), 'A real 32-Sub-Action linear graph (2~3 per Activity) is NOT rejected by minSteps/maxSteps/maxTotalNodes under the computed capacity — the capacity policy and the validator genuinely agree, not just look separately reasonable');
 
     // ---------------------------------------------------------
     // Code review defect 3: the Task-Gate sample document follows the SAME
@@ -553,6 +675,10 @@ async function run() {
         check(sampleBusinessSteps.every((s) => Boolean(s.agentizationSuggestion)), 'Every non-terminal sample step carries an AI agentizationSuggestion');
         check(sampleDoc.agentizationReview === undefined, 'The Task-Gate sample has no agentizationReview/confirmedAt at all — only a member can create one');
         check(sampleAllowedIds.every((activityId) => sampleBusinessSteps.some((s) => s.sourceActivityIds?.includes(activityId))), 'Every selected Task Activity is covered by at least one Sub Action in the sample');
+        check(
+            sampleAllowedIds.every((activityId) => sampleBusinessSteps.filter((s) => s.sourceActivityIds?.includes(activityId)).length >= 2),
+            'Every selected Task Activity decomposes into AT LEAST TWO Sub Actions in the sample — the node unit is the Sub Action, never a 1:1 Activity-copy node'
+        );
     }
 
     // A DIFFERENT Task must produce content generic to THAT Task, never the old hardcoded recruitment step titles.

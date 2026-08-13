@@ -496,9 +496,10 @@ export type TaskGateSampleResult =
  * CUSTOMER_SOP_DOCUMENT are intentionally left untouched above: they remain
  * the legacy-structure fixtures existing migration/coverage tests exercise.
  *
- * Every selected Task Activity becomes exactly one Sub Action (order 1) —
- * satisfying "at least one Sub Action per Activity" without hard-coding a
- * customer-unconfirmed per-Activity count. Returns `{success:false}` (never a
+ * Every selected Task Activity becomes TWO Sub Actions (order 1·2, a fixed
+ * 준비→실행 phase pattern) — the node unit is the Sub Action, and the default
+ * decomposition expectation is 2~3 Sub Actions per Activity (confirmed project
+ * direction; see computeSubActionCapacity). Returns `{success:false}` (never a
  * silently-produced legacy document) only when the selection genuinely has no
  * Activity data to build from.
  */
@@ -541,54 +542,70 @@ export function buildTaskGateSampleDocument(params: {
         reviewStatus: 'ai-draft',
     };
 
-    const businessSteps: SopStepData[] = activities.map((activity, index) => ({
-        id: `sample-sub-${index}`,
-        // A Sub Action title must read as an execution action, not a re-statement of the
-        // Activity group name it belongs to — Activity stays the Sidebar/navigation group
-        // label (see the "Activity별 Sub Action" panel, which shows activity.name as-is);
-        // reusing that same string as the node title made the canvas look like Activity was
-        // duplicated as a process node instead of grouping Sub Actions under it. The customer
-        // has not confirmed any specific Sub Action naming convention, so this is a plain,
-        // deterministic PROTOTYPE PLACEHOLDER pattern (not derived from real AI analysis of
-        // activity.description — that would risk fabricating action detail no one confirmed),
-        // used identically for every Task so no Task-specific wording leaks across Tasks.
-        title: `${activity.name} 수행 및 결과 기록`,
-        definition: `${activity.description || `${activity.name}을(를) 수행합니다.`} 관련 기준에 따라 진행하고 결과를 기록합니다.`,
-        responsibleRole: params.member.jobRole,
-        requiredSkills: [
-            ...activity.skills.map((skill) => ({
-                skillId: skill.id,
-                name: skill.name,
-                requiredLevel: 'basic' as const,
-                reason: 'Task Library 표준 역량',
-                source: 'work-library' as const,
-                accepted: true,
-            })),
-            // 첫 Sub Action에만 미수락 AI 제안 SKILL 예시를 하나 포함한다 - "AI 제안 SKILL
-            // 수락/거절" UI 흐름을 실제 AI 생성 없이도 샘플에서 그대로 확인할 수 있게 한다.
-            ...(index === 0
-                ? [{
-                    name: '추가 역량 제안 (샘플)',
-                    requiredLevel: 'basic' as const,
-                    reason: '(샘플) 예시로 추가된 AI 제안 역량이며 실제 AI 분석 결과가 아닙니다.',
-                    source: 'ai-suggested' as const,
-                    accepted: false,
-                }]
-                : []),
-        ],
-        estimatedDuration: { value: 1, unit: 'days' as const },
-        type: 'process',
-        shape: 'process',
-        sourceActivityIds: [activity.id],
-        subActionOrder: 1,
-        subActionOrigin: 'activity-derived',
-        agentizationSuggestion: {
-            type: TASK_GATE_SAMPLE_SUGGESTION_CYCLE[index % TASK_GATE_SAMPLE_SUGGESTION_CYCLE.length],
-            rationale: `(샘플) ${activity.name}에 대한 예시 제안이며 실제 AI 분석 결과가 아닙니다.`,
-        },
-        position: { x: 0, y: 0 },
-        reviewStatus: 'ai-draft',
-    }));
+    // The node unit is the Sub Action, NEVER a 1:1 Activity copy — each Activity
+    // decomposes into TWO Sub Actions here (the confirmed default expectation is
+    // 2~3 per Activity; see computeSubActionCapacity / subaction-semantics-contract
+    // §4). A Sub Action title must read as an execution action, not a re-statement
+    // of the Activity group name — Activity stays the Sidebar/navigation group
+    // label. Real semantic decomposition of activity.description is an AI-time
+    // concern; a deterministic sample must not fabricate action detail no one
+    // confirmed, so the two steps use a fixed, honest PROTOTYPE PLACEHOLDER
+    // phase pattern (준비·기준 확인 → 실행·결과 정리) applied identically to every
+    // Activity of every Task.
+    const businessSteps: SopStepData[] = activities.flatMap((activity, index) => {
+        const workLibrarySkills = activity.skills.map((skill) => ({
+            skillId: skill.id,
+            name: skill.name,
+            requiredLevel: 'basic' as const,
+            reason: 'Task Library 표준 역량',
+            source: 'work-library' as const,
+            accepted: true,
+        }));
+        const phases = [
+            {
+                idSuffix: '1',
+                title: `${activity.name} 실행 준비 및 기준 확인`,
+                definition: `${activity.description || `${activity.name} 업무입니다.`} 이 단계에서는 필요한 입력과 수행 기준을 확인해 실행을 준비합니다.`,
+            },
+            {
+                idSuffix: '2',
+                title: `${activity.name} 실행 및 결과 정리`,
+                definition: `확인된 기준에 따라 ${activity.name} 업무를 실행하고, 산출물과 결과를 정리해 기록합니다.`,
+            },
+        ];
+        return phases.map((phase, phaseIndex) => ({
+            id: `sample-sub-${index}-${phase.idSuffix}`,
+            title: phase.title,
+            definition: phase.definition,
+            responsibleRole: params.member.jobRole,
+            requiredSkills: [
+                ...workLibrarySkills,
+                // 첫 Sub Action에만 미수락 AI 제안 SKILL 예시를 하나 포함한다 - "AI 제안 SKILL
+                // 수락/거절" UI 흐름을 실제 AI 생성 없이도 샘플에서 그대로 확인할 수 있게 한다.
+                ...(index === 0 && phaseIndex === 0
+                    ? [{
+                        name: '추가 역량 제안 (샘플)',
+                        requiredLevel: 'basic' as const,
+                        reason: '(샘플) 예시로 추가된 AI 제안 역량이며 실제 AI 분석 결과가 아닙니다.',
+                        source: 'ai-suggested' as const,
+                        accepted: false,
+                    }]
+                    : []),
+            ],
+            estimatedDuration: { value: 1, unit: 'days' as const },
+            type: 'process',
+            shape: 'process',
+            sourceActivityIds: [activity.id],
+            subActionOrder: phaseIndex + 1,
+            subActionOrigin: 'activity-derived' as const,
+            agentizationSuggestion: {
+                type: TASK_GATE_SAMPLE_SUGGESTION_CYCLE[(index * phases.length + phaseIndex) % TASK_GATE_SAMPLE_SUGGESTION_CYCLE.length],
+                rationale: `(샘플) ${activity.name}에 대한 예시 제안이며 실제 AI 분석 결과가 아닙니다.`,
+            },
+            position: { x: 0, y: 0 },
+            reviewStatus: 'ai-draft' as const,
+        }));
+    });
 
     const steps: SopStepData[] = [startStep, ...businessSteps, endStep];
     const edges: SopEdge[] = [];

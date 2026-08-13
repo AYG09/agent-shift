@@ -79,7 +79,9 @@ Do not begin with a broad UI rewrite while the data contract is unsettled.
 - Keep Task-wide generation inclusive of every selected Task Activity in source order.
 - Validate Activity coverage by ID, not by labels or array length.
 - For newly generated member Task SOPs, require one source Activity per Sub Action and at least one Sub Action per Activity. Preserve legacy multi-Activity steps through a discriminator/migration.
+- The node unit is the Sub Action, never a 1:1 Activity copy: the DEFAULT decomposition expectation is 2–3 Sub Actions per Activity (confirmed direction, 2026-08 — a 14-Activity Task ≈ 28–42 business nodes). Capacity floors minSteps at 2× Activity count (client AND server); under-decomposition triggers one repair, then degrades to a warning — never a 400 or a confirm rule.
 - Treat a Sub Action as a minimum useful executable action, not an input, purpose, deliverable noun, or pure graph connector. Follow `subaction-semantics-contract.md` for decomposition.
+- Keep the SOP generation wire schema tolerant of mechanically-normalizable violations (normalize after parse; repair genuine gaps) and keep its output-token budget sized for 28–42+ node responses, separate from /flow's budget — a parse-time death never reaches the repair loop.
 - Keep Activity-description-derived baseline steps distinguishable from member-context-derived additions.
 - Never force a context-derived action into an unrelated Activity. Propose a missing Activity in Work Map and require explicit member acceptance before generation.
 - Keep AI-generated Agentization suggestions separate from member-confirmed `stepModes` and `confirmedAt`.

@@ -35,8 +35,10 @@ Activity 설명을 먼저 다음 다섯 범주로 분류한 뒤 흐름을 생성
 
 ## 4. 분해 깊이와 순차·병렬 판단
 
+- 노드의 단위는 Activity가 아니라 Sub Action이다. **기본 분해 기대치는 Activity당 2~3개의 Sub Action**이다 (확정 방향, 2026-08): 14개 Activity를 가진 Task라면 기본적으로 28~42개 가량의 업무 노드가 나와야 한다. Activity 이름에 "수행"류 접미사만 붙인 요약 1노드는 §1이 금지하는 Activity 복사이다.
+- 생성 capacity(`computeSubActionCapacity`)는 minSteps를 Activity 수의 2배로 하한 고정하고 maxSteps에 3배 밴드의 여유를 준다. 생성 후처리(runner)는 Sub Action이 1개뿐인 Activity에 대해 repair를 1회 요구하고, 그래도 남으면 경고로만 전달한다 — 진짜 원자적 Activity를 400이나 확정 차단으로 만들지 않는다.
 - 서로 다른 실행 동사가 있고 각각 독립적인 수행 기준·도구·중간 산출물·Agent화 판단을 가진다면 분리한다.
-- 여러 목적어가 하나의 통합 판단 또는 협상 행위 안에서 동시에 처리된다면 억지로 분리하지 않는다.
+- 여러 목적어가 하나의 통합 판단 또는 협상 행위 안에서 동시에 처리된다면 억지로 분리하지 않는다 (위 기본 기대치의 예외 사유).
 - 두 행동 사이에 결과 의존성이 있으면 순차 edge를 만든다.
 - 서로의 결과를 기다리지 않고 수행할 수 있고 후속 행동이 두 결과를 모두 필요로 하면 병렬 edge와 합류를 만든다.
 - 병렬 분기와 합류 자체는 Sub Action 수에 포함하지 않는다.
@@ -123,6 +125,8 @@ outputs?: string[]
 ## 8. 검증과 테스트
 
 - 구조 검증은 Activity ID, coverage, 순서, terminal 제외를 계속 수행한다.
+- 와이어(AI 응답) 스키마는 기계적으로 정답이 자명한 위반(빈 rationale 문자열, terminal의 잔여 provenance 필드, activity-derived의 잔여 rationale)을 파싱 거부로 죽이지 않는다 — 파싱 실패(NoObjectGeneratedError)는 repair 루프에 도달하지 못하기 때문이다. 그런 위반은 파싱 직후 정규화(`normalizeSopGenerationObject`)로 제거하고, 진짜 품질 결함(출처 누락, context-derived의 근거 누락, Activity당 1개 과소분해)은 생성 후처리의 검증·repair 루프가 처리한다. 확정 경계의 엄격한 규칙은 그대로 유지된다.
+- SOP 생성의 출력 토큰 상한은 /flow류(≈15노드)와 분리해 별도로 관리한다 — Activity–Sub Action Task 전체 SOP는 28~42+ 노드를 반환해야 하므로 같은 상한을 쓰면 JSON 절단으로 생성 전체가 실패한다.
 - 자연어 의미를 단순 정규식으로 “검증 완료” 처리하지 않는다.
 - 프롬프트 계약 테스트는 이 문서의 분류·순차·병렬·출처 규칙이 실제 생성 프롬프트에 포함되는지 확인한다.
 - 예문 fixture 또는 orchestration 테스트는 위 두 문장에서 입력·목적·산출물이 불필요한 노드가 되지 않는지 확인한다.

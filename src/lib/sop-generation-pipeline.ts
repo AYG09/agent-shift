@@ -10,6 +10,7 @@ import {
     type GraphValidationIssue,
     type SopStructuralConstraints,
 } from './graph-validation';
+import { normalizeSopGenerationObject } from './sop-schemas';
 
 export interface SopPipelineSuccess {
     ok: true;
@@ -45,7 +46,11 @@ export async function runSopValidationPipeline(
     generate: (repairPrompt: string) => Promise<unknown>,
     constraints: SopStructuralConstraints
 ): Promise<SopPipelineResult> {
-    let object: unknown = initialObject;
+    // 파이프라인 진입점이 정규화의 단일 관문이다: 최초 생성 결과와 (runner가 다시 이
+    // 함수로 넘기는) coverage-repair 결과 모두 여기를 지나므로, 기계적으로 정답이
+    // 자명한 위반(빈 rationale, terminal의 잔여 provenance 필드 등)은 어느 경로로
+    // 들어와도 검증 전에 정규화된다 - normalizeSopGenerationObject docstring 참고.
+    let object: unknown = normalizeSopGenerationObject(initialObject);
     const warnings: string[] = [];
 
     const rec = object as { steps?: ValidatableSopStep[]; edges?: ValidatableEdge[] };
@@ -55,7 +60,7 @@ export async function runSopValidationPipeline(
         console.log('[SOP Pipeline] SOP 그래프 검증 실패, 1회 repair 시도:', issues.map((i) => i.type));
         try {
             const repairPrompt = `${prompt}\n\n${buildRepairInstruction(issues)}\n\n## 직전 응답 (참고용 - 문제 있는 부분만 고치세요)\n${JSON.stringify(object)}`;
-            object = await generate(repairPrompt);
+            object = normalizeSopGenerationObject(await generate(repairPrompt));
             const repairedRec = object as { steps?: ValidatableSopStep[]; edges?: ValidatableEdge[] };
             issues = validateSopFull(repairedRec.steps || [], repairedRec.edges || [], constraints);
         } catch (repairError) {

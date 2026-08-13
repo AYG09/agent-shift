@@ -37,6 +37,26 @@ function findInvalidOriginStepIds(steps: GeneratedStep[]): string[] {
         .map((step) => step.id);
 }
 
+/**
+ * Activities decomposed into only ONE Sub Action — the node unit is the Sub
+ * Action, and the default expectation is 2~3 per Activity (see
+ * computeSubActionCapacity / subaction-semantics-contract.md §4). This is a
+ * GENERATION-time repair trigger and, if repair still leaves some, a warning —
+ * never a hard 400 and never a confirm-boundary rule, because a genuinely
+ * atomic Activity may legitimately stay at 1 (the semantic contract forbids
+ * force-splitting unified actions).
+ */
+function findUnderDecomposedActivityIds(steps: GeneratedStep[], allowedIds: string[]): string[] {
+    const counts = new Map<string, number>();
+    steps.forEach((step) => {
+        if (step.terminalType) return;
+        const activityId = step.sourceActivityIds?.[0];
+        if (activityId) counts.set(activityId, (counts.get(activityId) ?? 0) + 1);
+    });
+    // 0개는 coverage 오류(별도 차단)이므로 여기서는 정확히 1개인 Activity만 본다.
+    return allowedIds.filter((id) => (counts.get(id) ?? 0) === 1);
+}
+
 function checkCoverage(steps: GeneratedStep[], allowedIds: string[], structureVersion: SopGenerationRequest['structureVersion']): SopActivityCoverageResult | SopSubActionStructureResult {
     return structureVersion === 'activity-subaction-v1'
         ? validateSubActionStructure(steps, allowedIds)
@@ -96,7 +116,8 @@ export async function runSopGenerationPostProcessing(params: {
     const coverage = checkCoverage(readSteps(pipelineResult.object), sourceActivityIds, structureVersion);
     const missingSuggestions = structureVersion === 'activity-subaction-v1' ? findMissingSuggestionStepIds(readSteps(pipelineResult.object)) : [];
     const invalidOrigins = structureVersion === 'activity-subaction-v1' ? findInvalidOriginStepIds(readSteps(pipelineResult.object)) : [];
-    const needsCoverageRepair = sourceActivityIds.length > 0 && (!coverage.valid || missingSuggestions.length > 0 || invalidOrigins.length > 0);
+    const underDecomposed = structureVersion === 'activity-subaction-v1' ? findUnderDecomposedActivityIds(readSteps(pipelineResult.object), sourceActivityIds) : [];
+    const needsCoverageRepair = sourceActivityIds.length > 0 && (!coverage.valid || missingSuggestions.length > 0 || invalidOrigins.length > 0 || underDecomposed.length > 0);
     if (needsCoverageRepair) {
         const suggestionGuidance = missingSuggestions.length
             ? `\nAgent화 제안(agentizationSuggestion)이 누락된 단계: ${missingSuggestions.join(', ')} — 모든 비-terminal 단계에 type과 rationale을 채워 넣으세요.`
@@ -104,8 +125,11 @@ export async function runSopGenerationPostProcessing(params: {
         const originGuidance = invalidOrigins.length
             ? `\nSub Action 출처가 없거나 불완전한 단계: ${invalidOrigins.join(', ')} — 모든 비-terminal 단계에 subActionOrigin을 넣고, context-derived에는 구체적인 subActionOriginRationale을 추가하세요.`
             : '';
+        const decompositionGuidance = underDecomposed.length
+            ? `\nSub Action이 1개뿐인 Activity: ${underDecomposed.join(', ')} — 각 Activity는 기본적으로 2~3개의 Sub Action으로 분해해야 합니다. 해당 Activity 설명을 실행 행동 단위로 다시 분해하세요 (하나의 통합 행동으로만 성립하는 경우에만 1개 유지).`
+            : '';
         const repairGuidance = structureVersion === 'activity-subaction-v1'
-            ? `${formatCoverageErrors(coverage).join('\n')}\n각 업무 단계(시작/종료 제외)는 정확히 1개의 sourceActivityIds를 가져야 하며, 같은 Activity 안에서 subActionOrder가 겹치면 안 됩니다. 선택된 모든 Activity ID를 빠짐없이 한 번 이상 Sub Action으로 반영하세요.${suggestionGuidance}${originGuidance}`
+            ? `${formatCoverageErrors(coverage).join('\n')}\n각 업무 단계(시작/종료 제외)는 정확히 1개의 sourceActivityIds를 가져야 하며, 같은 Activity 안에서 subActionOrder가 겹치면 안 됩니다. 선택된 모든 Activity ID를 빠짐없이 한 번 이상 Sub Action으로 반영하세요.${suggestionGuidance}${originGuidance}${decompositionGuidance}`
             : `${formatCoverageErrors(coverage).join('\n')}\n각 업무 단계의 sourceActivityIds를 수정하고, 선택된 모든 Activity ID를 빠짐없이 한 번 이상 반영하세요.`;
         try {
             const repaired = await generateRepair(`${prompt}\n\n## Activity 연결 보정\n${repairGuidance}`);
@@ -128,5 +152,16 @@ export async function runSopGenerationPostProcessing(params: {
             };
         }
     }
-    return { ok: true, object: pipelineResult.object, warnings: pipelineResult.warnings };
+
+    // 과소분해(Activity당 Sub Action 1개)는 repair까지 요구한 뒤에도 남아 있으면
+    // 경고로만 전달한다 — 진짜 원자적 Activity를 400으로 막으면 의미 계약("통합
+    // 행동은 억지로 쪼개지 않는다")을 어기게 된다. 경고는 _graphWarnings로 클라이언트에
+    // 노출되어 구성원이 해당 Activity의 분해 수준을 직접 검토할 수 있다.
+    const finalUnderDecomposed = structureVersion === 'activity-subaction-v1' && sourceActivityIds.length > 0
+        ? findUnderDecomposedActivityIds(readSteps(pipelineResult.object), sourceActivityIds)
+        : [];
+    const warnings = finalUnderDecomposed.length > 0
+        ? [...pipelineResult.warnings, `Sub Action이 1개뿐인 Activity가 ${finalUnderDecomposed.length}개 있습니다 (${finalUnderDecomposed.join(', ')}). 기본 기대치는 Activity당 2~3개입니다 — 해당 Activity가 실제로 하나의 통합 행동인지 검토해 주세요.`]
+        : pipelineResult.warnings;
+    return { ok: true, object: pipelineResult.object, warnings };
 }

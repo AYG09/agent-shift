@@ -61,10 +61,11 @@ export function getSopPrompt(params: {
 
     const activityTrackingPrinciple = isSubActionStructure
         ? `3. **Activity → Sub Action 매핑 원칙 (필수)**:
-   - 이 SOP는 Activity–Sub Action 구조입니다. 시작/종료 terminal을 제외한 모든 업무 단계는 정확히 하나의 Sub Action이며, 정확히 하나의 Activity에만 속합니다.
-   - 절대로 하나의 단계에 여러 Activity ID를 함께 넣지 마세요. 하나의 Activity가 여러 단계(Sub Action)로 나뉘는 것은 허용되고 오히려 권장되지만, 그 반대(한 단계가 여러 Activity를 대표)는 금지입니다.
+   - 이 SOP는 Activity–Sub Action 구조입니다. 시작/종료 terminal을 제외한 모든 업무 단계는 정확히 하나의 Sub Action이며, 정확히 하나의 Activity에만 속합니다. 노드의 단위는 Activity가 아니라 Sub Action입니다.
+   - 절대로 하나의 단계에 여러 Activity ID를 함께 넣지 마세요. 하나의 Activity가 여러 단계(Sub Action)로 나뉘는 것이 기본이며, 그 반대(한 단계가 여러 Activity를 대표)는 금지입니다.
    - sourceActivityIds에는 정확히 1개의 ID만 넣으세요 (위 반영 Activity 목록의 ID만 사용, 다른 Task의 ID나 존재하지 않는 ID는 절대 넣지 마세요).
-   - 위 반영 Activity 목록의 모든 Activity가 최소 1개의 Sub Action으로 반영되어야 합니다. 절대 누락하지 마세요.
+   - 위 반영 Activity 목록의 모든 Activity는 **기본적으로 2~3개의 Sub Action으로 분해**해야 합니다. Activity 설명이 하나의 통합 행동으로만 성립하는 예외적인 경우에만 1개를 허용하며, 어떤 Activity도 절대 누락하지 마세요.
+   - Activity 이름에 "수행"·"진행"·"실시"·"및 결과 기록" 등을 붙인 요약 1노드로 Activity 전체를 대표하는 것은 금지입니다. 각 Sub Action은 그 Activity 설명 안의 서로 다른 실행 행동이어야 합니다.
    - subActionOrder에는 같은 Activity 안에서 1부터 시작하는 고유한 양의 정수를 넣어 그 Activity 내부의 실행 순서를 표시하세요 (Activity가 다르면 값이 겹쳐도 됩니다).
    - 각 Sub Action(시작/종료 제외)마다 agentizationSuggestion을 반드시 생성하세요: type은 'agent-candidate'(정해진 규칙 안에서 AI가 주도할 수 있는 후보), 'ai-assist'(사람이 수행하고 AI가 초안·검색·분석을 지원), 'not-recommended'(사람 판단·대면 소통·예외 처리 등으로 AI 적용을 권장하지 않음) 중 하나이며, rationale은 왜 그렇게 판단했는지 1문장의 구체적 근거입니다. 확률/신뢰도 수치는 절대 만들지 마세요 — 이 값은 구성원이 검토할 제안일 뿐, 확정된 판단이 아닙니다.`
         : `3. **Task Library Activity 추적 원칙**:
@@ -90,7 +91,7 @@ ${params.context || '없음'}
 
 ## 설정 조건
 - 업무 분해 수준: ${params.detailLevel || 'standard'} — ${(SOP_DETAIL_LEVEL_GUIDE[params.detailLevel || 'standard'] || SOP_DETAIL_LEVEL_GUIDE.standard).promptGuide}
-- 주요 단계 수 범위: ${minSteps} ~ ${maxSteps}단계 (시작·종료 노드는 제외한 개수입니다)${isSubActionStructure ? '\n  이 범위는 모든 Activity를 최소 1개씩 Sub Action으로 반영할 수 있도록 이미 넉넉하게 설정되었습니다. 단계 수를 줄이려고 여러 Activity를 하나의 단계에 합치지 마세요.' : ''}
+- 주요 단계 수 범위: ${minSteps} ~ ${maxSteps}단계 (시작·종료 노드는 제외한 개수입니다)${isSubActionStructure ? '\n  이 범위는 Activity당 기본 2~3개의 Sub Action 분해를 전제로 산정되었습니다. 단계 수를 줄이려고 여러 Activity를 하나의 단계에 합치거나 Activity를 요약 1노드로 축약하지 마세요.' : ''}
 - 전체 노드 수 상한: ${maxTotalNodes}개 (시작·종료·decision·loopLimit을 모두 포함한 개수입니다)
 ${(SOP_BRANCH_POLICY_GUIDE[branchPolicy] || SOP_BRANCH_POLICY_GUIDE.auto).promptGuide(maxBranches)}
 - 재작업/되돌아가는 경로: ${allowRework ? `허용 (정적 그래프 내 재작업 루프는 최대 ${maxLoops}개까지)` : '금지 (되돌아가는 edge를 만들지 마세요)'}
