@@ -884,6 +884,26 @@ async function run() {
             buildSopActivityGroupNodes({ ...sampleDoc, structureVersion: undefined }).length === 0,
             'A legacy (non Activity–Sub Action) document renders NO group containers — the grouping visual never fabricates Activity structure that the document does not declare'
         );
+        // Activity-block-aware row wrapping: layoutSopGraph moves a whole
+        // Activity block to the next row instead of splitting it mid-row, so a
+        // freshly generated document draws exactly ONE container per Activity —
+        // no "(계속)" continuation segments.
+        const groupCountByActivity = new Map<string, number>();
+        groupNodes.forEach((n) => {
+            const activityId = n.id.split(':')[1];
+            groupCountByActivity.set(activityId, (groupCountByActivity.get(activityId) ?? 0) + 1);
+        });
+        check(
+            [...groupCountByActivity.values()].every((count) => count === 1),
+            'Every Activity of a freshly generated document renders exactly ONE group container — Activity-aware row wrapping keeps a group from ever spanning two layout rows'
+        );
+        check(
+            sampleAllowedIds.every((activityId) => {
+                const ys = sampleDoc.steps.filter((s) => !s.terminalType && s.sourceActivityIds?.[0] === activityId).map((s) => s.position.y);
+                return new Set(ys).size === 1;
+            }),
+            'All Sub Actions of one Activity share the same layout row (identical y) after layoutSopGraph'
+        );
     }
 
     // A DIFFERENT Task must produce content generic to THAT Task, never the old hardcoded recruitment step titles.

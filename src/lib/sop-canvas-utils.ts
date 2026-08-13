@@ -55,10 +55,13 @@ export interface SopActivityGroupNodeData {
  * shows Sub Actions grouped inside their parent Activity section. Groups are
  * computed from CONTIGUOUS runs of steps sharing the same primary Activity
  * (generation orders Sub Actions per Activity, so runs are contiguous along
- * the reading path), then split per layout row so a group that wraps across
- * the serpentine rows renders as tight per-row containers instead of one huge
- * box covering unrelated nodes. Terminals and unmapped steps never join a
- * group. Pure function of the document — canvas and tests run the same code.
+ * the reading path). layoutSopGraph wraps rows at Activity-block boundaries,
+ * so a generated document renders ONE container per Activity; the per-row
+ * split below is only a safety net for hand-dragged nodes or an Activity
+ * longer than a full layout row — without it, a single box would have to
+ * cover unrelated nodes from other rows. Terminals and unmapped steps never
+ * join a group. Pure function of the document — canvas and tests run the
+ * same code.
  */
 export function buildSopActivityGroupNodes(doc: SopDocument | null): Node[] {
     if (!doc || doc.structureVersion !== 'activity-subaction-v1') return [];

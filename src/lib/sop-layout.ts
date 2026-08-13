@@ -9,6 +9,12 @@ type Point = { x: number; y: number };
  * AI supplies sequence and branch semantics; this deterministic pass owns the
  * visual coordinates so a plausible-looking AI coordinate never creates an
  * unreadable single-line diagram.
+ *
+ * Row wrapping is Activity-block-aware: consecutive steps sharing the same
+ * primary Activity never split across a row wrap (the whole block moves to
+ * the next row instead), so the canvas can draw one Activity = one group
+ * container without per-row segmentation. Steps without an Activity mapping
+ * pack exactly like the previous plain serpentine fill.
  */
 export function layoutSopGraph(steps: SopStepData[], edges: SopEdge[]): { steps: SopStepData[]; edges: SopEdge[] } {
     if (steps.length === 0) return { steps, edges };
@@ -42,21 +48,50 @@ export function layoutSopGraph(steps: SopStepData[], edges: SopEdge[]): { steps:
         if (!visited.has(step.id)) primary.push(step.id);
     });
 
-    const rowCount = Math.min(3, Math.max(1, Math.ceil(primary.length / 4)));
-    const columns = Math.max(3, Math.ceil(primary.length / rowCount));
+    const rowCountTarget = Math.min(3, Math.max(1, Math.ceil(primary.length / 4)));
+    const columns = Math.max(3, Math.ceil(primary.length / rowCountTarget));
     const columnSpacing = 270;
     const rowSpacing = 210;
     const anchor: Point = { x: 100, y: 110 };
     const positionById = new Map<string, Point>();
     const occupied = new Set<string>();
 
-    primary.forEach((id, index) => {
-        const row = Math.floor(index / columns);
-        const rawColumn = index % columns;
-        const column = row % 2 === 0 ? rawColumn : columns - 1 - rawColumn;
-        positionById.set(id, { x: anchor.x + column * columnSpacing, y: anchor.y + row * rowSpacing });
-        occupied.add(`${row}:${column}`);
+    // Activity 블록 단위 줄바꿈: 주 경로를 "같은 primary Activity를 공유하는 연속
+    // 구간(블록)"으로 묶고, 행에 남은 칸이 블록 전체를 담기에 부족하면 블록을 통째로
+    // 다음 행으로 내린다. 그래야 캔버스의 Activity 그룹 컨테이너가 행을 넘어
+    // 쪼개지지 않고("(계속)" 세그먼트 없이) 한 Activity = 한 박스로 그려진다.
+    // terminal과 Activity 미매핑 단계는 1칸짜리 블록이므로, 매핑이 없는 레거시
+    // 문서에서는 이 패킹이 기존의 단순 serpentine 채우기와 동일하게 동작한다.
+    // 한 행(columns)보다 긴 블록만 예외적으로 행을 넘어간다(그 경우에만 그룹
+    // 컨테이너의 행별 분할이 안전망으로 남는다).
+    const blocks: { key: string | undefined; ids: string[] }[] = [];
+    primary.forEach((id) => {
+        const step = byId.get(id);
+        const key = step && !step.terminalType ? step.sourceActivityIds?.[0] : undefined;
+        const last = blocks[blocks.length - 1];
+        if (last && key !== undefined && last.key === key) last.ids.push(id);
+        else blocks.push({ key, ids: [id] });
     });
+
+    let packRow = 0;
+    let packCol = 0;
+    blocks.forEach((block) => {
+        if (packCol > 0 && packCol + block.ids.length > columns && block.ids.length <= columns) {
+            packRow += 1;
+            packCol = 0;
+        }
+        block.ids.forEach((id) => {
+            if (packCol >= columns) {
+                packRow += 1;
+                packCol = 0;
+            }
+            const column = packRow % 2 === 0 ? packCol : columns - 1 - packCol;
+            positionById.set(id, { x: anchor.x + column * columnSpacing, y: anchor.y + packRow * rowSpacing });
+            occupied.add(`${packRow}:${column}`);
+            packCol += 1;
+        });
+    });
+    const rowCount = packRow + 1;
 
     // Keep secondary branches near the decision that created them, in a free
     // lane. This prevents branch nodes from covering the main reading path.
