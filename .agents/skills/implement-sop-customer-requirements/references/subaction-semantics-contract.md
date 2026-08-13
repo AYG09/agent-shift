@@ -125,7 +125,7 @@ outputs?: string[]
 ## 8. 검증과 테스트
 
 - 구조 검증은 Activity ID, coverage, 순서, terminal 제외를 계속 수행한다.
-- 와이어(AI 응답) 스키마는 기계적으로 정답이 자명한 위반(빈 rationale 문자열, terminal의 잔여 provenance 필드, activity-derived의 잔여 rationale)을 파싱 거부로 죽이지 않는다 — 파싱 실패(NoObjectGeneratedError)는 repair 루프에 도달하지 못하기 때문이다. 그런 위반은 파싱 직후 정규화(`normalizeSopGenerationObject`)로 제거하고, 진짜 품질 결함(출처 누락, context-derived의 근거 누락, Activity당 1개 과소분해)은 생성 후처리의 검증·repair 루프가 처리한다. 확정 경계의 엄격한 규칙은 그대로 유지된다.
+- 와이어(generateObject) 스키마와 게이트(클라이언트 문서 생성) 스키마는 분리한다. 구조화 출력은 enum/타입만 강제하고 superRefine·min-length·positive()는 강제하지 못하므로, 그 규칙이 와이어 스키마에 남아 있으면 단계 하나의 기계적 위반(빈 rationale — `subActionOriginRationale`와 `agentizationSuggestion.rationale` 모두, terminal의 잔여 provenance 필드, subActionOrder 0, 빈 Activity ID 문자열, 5자 미만 definition, 중복 step/edge ID, terminalType 누락)이 응답 전체를 파싱 시점에 죽인다 — 파싱 실패(NoObjectGeneratedError)는 repair 루프에 도달하지 못한다. 기계적으로 정답이 자명한 위반은 파이프라인 진입 정규화(`normalizeSopGenerationObject`)가 고친다(빈 rationale 제거, 순서 반올림/삭제, 빈 ID 제거, definition 백필, 중복 edge ID 개명, start/end 집합 완성에 의한 유일한 무타입 terminal 보완 — 배열 위치 추정은 여전히 금지). 기계적으로 고칠 수 없는 결함(중복 step ID, 모호한 terminalType, coverage/제안 누락, context-derived의 근거 누락, Activity당 1개 과소분해)은 그래프 검증의 blocking issue → 생성 후처리의 검증·repair 루프 → 400이 처리한다. 게이트 스키마(`SopGenerationResponseSchema`)와 확정 경계의 엄격한 규칙은 그대로 유지되어 이중 방어로 남는다.
 - SOP 생성의 출력 토큰 상한은 /flow류(≈15노드)와 분리해 별도로 관리한다 — Activity–Sub Action Task 전체 SOP는 28~42+ 노드를 반환해야 하므로 같은 상한을 쓰면 JSON 절단으로 생성 전체가 실패한다.
 - 자연어 의미를 단순 정규식으로 “검증 완료” 처리하지 않는다.
 - 프롬프트 계약 테스트는 이 문서의 분류·순차·병렬·출처 규칙이 실제 생성 프롬프트에 포함되는지 확인한다.

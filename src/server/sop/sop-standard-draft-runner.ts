@@ -1,7 +1,11 @@
 import { google, createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
-import { SopGenerationResponseSchema } from '@/lib/sop-schemas';
+// generateObject에는 관대한 와이어 스키마를 쓴다 — 엄격한 게이트 규칙(superRefine,
+// min-length)은 Gemini가 강제하지 못해 파싱 즉사(NoObjectGeneratedError)만 만든다.
+// 이 초안도 파이프라인 정규화를 거친 뒤 createSopDocumentFromGeneration의 엄격한
+// 게이트(SopGenerationResponseSchema)를 통과해야 문서가 된다. sop-schemas.ts 참고.
+import { SopGenerationWireSchema } from '@/lib/sop-schemas';
 import { runSopValidationPipeline } from '@/lib/sop-generation-pipeline';
 import { createSopDocumentFromGeneration } from '@/lib/sop-normalizer';
 import { getStandardDraftPrompt, type SopStandardDraftSourceSummary } from './sop-prompt';
@@ -65,7 +69,7 @@ export async function generateStandardDraftDocument(params: {
     try {
         const result = await generateObject({
             model,
-            schema: SopGenerationResponseSchema,
+            schema: SopGenerationWireSchema,
             prompt,
             maxOutputTokens: 16384,
             ...(providerOptions ? { providerOptions } : {}),
@@ -79,7 +83,7 @@ export async function generateStandardDraftDocument(params: {
         firstObject,
         prompt,
         async (repairPrompt) => {
-            const repaired = await generateObject({ model, schema: SopGenerationResponseSchema, prompt: repairPrompt, maxOutputTokens: 16384, ...(providerOptions ? { providerOptions } : {}) });
+            const repaired = await generateObject({ model, schema: SopGenerationWireSchema, prompt: repairPrompt, maxOutputTokens: 16384, ...(providerOptions ? { providerOptions } : {}) });
             return repaired.object;
         },
         STANDARD_DRAFT_CONSTRAINTS

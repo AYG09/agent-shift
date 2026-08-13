@@ -4,7 +4,7 @@ import {
     validateSubActionStructure,
     formatSubActionStructureErrors,
 } from '../src/lib/sop-activity-coverage';
-import { SopStepAiSchema, normalizeSopGenerationObject } from '../src/lib/sop-schemas';
+import { SopStepAiSchema, SopGenerationWireSchema, SopGenerationResponseSchema, normalizeSopGenerationObject } from '../src/lib/sop-schemas';
 import { SopAgentizationSuggestionSchema } from '../src/lib/sop-step-common-schema';
 import { SopDocumentSchema } from '../src/lib/sop-document-schema';
 import { createSopDocumentFromGeneration } from '../src/lib/sop-normalizer';
@@ -24,7 +24,7 @@ import { GET as sopTemplatesGet } from '../src/app/api/sop/templates/route';
 import { POST as sopTemplateClonePost } from '../src/app/api/sop/templates/[id]/clone/route';
 import { SAMPLE_SOP_DOCUMENT, SAMPLE_WORK_LIBRARY, buildTaskGateSampleDocument } from '../src/lib/sop-sample-data';
 import { computeSubActionCapacity } from '../src/lib/sop-subaction-capacity';
-import { validateSopFull, hasBlockingSopIssues } from '../src/lib/graph-validation';
+import { validateSopFull, validateSopGraph, hasBlockingSopIssues } from '../src/lib/graph-validation';
 import { SOP_TASK_LIBRARY_FIXTURE, createWorkLibrarySelection, getScopedActivities, createTaskLibrarySelectionForRole } from '../src/lib/sop-task-library';
 import type { SopDocument, SopStepData } from '../src/lib/sop-types';
 import type { SopGenerationRequest } from '../src/lib/sop-ai-request';
@@ -189,12 +189,87 @@ async function run() {
     }) as { steps: Record<string, unknown>[] }).steps[0];
     check(normalizedContext.subActionOriginRationale === '해외 고객 승인 조건 반영', 'Normalization only TRIMS a genuine context-derived rationale — it never deletes or rewrites real member-context provenance');
 
-    // terminal에 terminalType이 없는 것만은 여전히 파싱 거부다 — start인지 end인지
-    // 안전하게 추측할 수 없는, 정규화 불가능한 진짜 모호성이기 때문이다.
+    // 게이트(문서 생성) 스키마에서 terminal에 terminalType이 없는 것은 여전히 거부다 —
+    // start인지 end인지 안전하게 추측할 수 없는 모호성이기 때문이다. (와이어에서는
+    // 통과시키고, 정규화의 집합 완성 또는 validateSopGraph → repair 루프가 처리한다.)
     const terminalMissingType = SopStepAiSchema.safeParse({
         id: 't-no-type', title: '시작', definition: '시작 단계입니다.', shape: 'terminal',
     });
-    check(!terminalMissingType.success, 'A terminal step with NO terminalType is still rejected at parse time — the one genuinely un-normalizable ambiguity keeps its hard failure');
+    check(!terminalMissingType.success, 'A terminal step with NO terminalType is still rejected at the document GATE — the genuinely ambiguous case never silently enters a document');
+
+    // ---------------------------------------------------------
+    // Wire schema (generateObject) vs gate schema split: the production 500
+    // ("AI 응답이 스키마와 일치하지 않습니다") was generateObject dying at parse
+    // time on violations Gemini's constrained decoding cannot prevent
+    // (superRefine duplicates/terminal checks, min-length, positive()).
+    // The wire schema must survive ALL of them; normalization + the pipeline
+    // must then produce a gate-valid object or route to repair/400.
+    // ---------------------------------------------------------
+    console.log('Wire/gate schema split (parse-time death classes eliminated)...');
+
+    const productionDeathResponse = {
+        title: '테스트 SOP',
+        steps: [
+            { id: 't-start', title: '시작', definition: '시작 단계입니다.', shape: 'terminal', terminalType: 'start' },
+            {
+                id: 'w1', title: '조건 협상', definition: '고객사와 공급 조건을 협상하여 합의안을 만듭니다.', shape: 'process',
+                sourceActivityIds: [actA.id, ''], subActionOrder: 0, subActionOrigin: 'activity-derived',
+                agentizationSuggestion: { type: 'ai-assist', rationale: '' },
+            },
+            { id: 'w2', title: '계약 추진', definition: '추진', shape: 'process', sourceActivityIds: [actA.id], subActionOrder: 2.4, subActionOrigin: 'activity-derived', agentizationSuggestion: { type: 'agent-candidate', rationale: ' 반복적 문서 작업 ' } },
+            // terminal missing terminalType — the OTHER terminal is typed 'start', so set-completion resolves this to 'end'.
+            { id: 't-end', title: '종료', definition: '종료 단계입니다.', shape: 'terminal' },
+        ],
+        edges: [
+            { id: 'e1', source: 't-start', target: 'w1' },
+            { id: 'e1', source: 'w1', target: 'w2' },
+            { id: 'e2', source: 'w2', target: 't-end' },
+        ],
+    };
+    const wireParsed = SopGenerationWireSchema.safeParse(productionDeathResponse);
+    check(wireParsed.success, 'The WIRE schema parses a response carrying every production parse-death class at once (duplicate edge IDs, untyped terminal, empty suggestion rationale, subActionOrder 0/float, empty activity-ID string, <5-char definition) — none of them can kill the response before the repair loop anymore');
+
+    const revived = normalizeSopGenerationObject(productionDeathResponse) as {
+        steps: Record<string, unknown>[];
+        edges: { id: string }[];
+    };
+    check(revived.steps[3].terminalType === 'end', 'Set-completion assigns the single untyped terminal the one missing type (start present → end) — this is set arithmetic, not array-position guessing');
+    check(revived.steps[1].agentizationSuggestion === undefined, 'An empty-rationale agentization suggestion is dropped (the runner repair loop demands it back) instead of killing the parse');
+    check(revived.steps[1].subActionOrder === undefined, 'subActionOrder 0 is deleted (invalid order) rather than parse-fatal');
+    check((revived.steps[2].agentizationSuggestion as { rationale: string }).rationale === '반복적 문서 작업', 'A genuine suggestion rationale is only trimmed, never dropped');
+    check(revived.steps[2].subActionOrder === 2, 'A float subActionOrder is rounded to the nearest integer');
+    check(JSON.stringify(revived.steps[1].sourceActivityIds) === JSON.stringify([actA.id]), 'Empty-string activity IDs are filtered out, keeping the genuine mapping');
+    check(typeof revived.steps[2].definition === 'string' && (revived.steps[2].definition as string).length >= 5, 'A <5-char definition is backfilled from the title so one terse step cannot kill 40 good ones');
+    check(new Set(revived.edges.map((e) => e.id)).size === revived.edges.length, 'Duplicate edge IDs are mechanically renamed to be unique (edge IDs are pure identity)');
+    const gateParsed = SopGenerationResponseSchema.safeParse(revived);
+    check(gateParsed.success, 'After normalization the SAME response passes the strict gate schema — tolerance exists only on the wire, never in what reaches the Store');
+
+    // Edge rename must not collide with a pre-existing id.
+    const collisionNormalized = normalizeSopGenerationObject({
+        steps: [{ id: 's1', title: 'x', definition: '단계입니다.' }],
+        edges: [
+            { id: 'e1', source: 'a', target: 'b' },
+            { id: 'e1', source: 'b', target: 'c' },
+            { id: 'e1-dup2', source: 'c', target: 'd' },
+        ],
+    }) as { edges: { id: string }[] };
+    check(new Set(collisionNormalized.edges.map((e) => e.id)).size === 3 && collisionNormalized.edges.some((e) => e.id === 'e1-dup3'), 'Edge-ID dedup skips suffixes that already exist in the response');
+
+    // Genuinely ambiguous terminals (BOTH untyped) are NOT guessed: normalization
+    // leaves them, the gate still rejects, and validateSopGraph routes them to the
+    // repair loop as terminal-missing-type blocking issues.
+    const ambiguousTerminals = normalizeSopGenerationObject({
+        title: '모호 터미널',
+        steps: [
+            { id: 'ta', title: '터미널 A', definition: '터미널 단계입니다.', shape: 'terminal' },
+            { id: 'tb', title: '터미널 B', definition: '터미널 단계입니다.', shape: 'terminal' },
+        ],
+        edges: [{ id: 'e1', source: 'ta', target: 'tb' }],
+    }) as { steps: { id: string; shape: string; terminalType?: 'start' | 'end' }[]; edges: { id: string; source: string; target: string }[] };
+    check(ambiguousTerminals.steps.every((s) => s.terminalType === undefined), 'With BOTH terminals untyped, normalization refuses to guess — ambiguity is preserved for the repair loop');
+    check(!SopGenerationResponseSchema.safeParse(ambiguousTerminals).success, 'The gate schema still rejects the ambiguous-terminal response');
+    const ambiguousIssues = validateSopGraph(ambiguousTerminals.steps, ambiguousTerminals.edges);
+    check(ambiguousIssues.some((i) => i.type === 'terminal-missing-type'), 'validateSopGraph reports terminal-missing-type for the ambiguous case, giving the LLM repair loop (not a parse death) the chance to fix it');
 
     // ---------------------------------------------------------
     // Customer semantics: action-only nodes, dependency-aware parallelism, no pseudo gateways

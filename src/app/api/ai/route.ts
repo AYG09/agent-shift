@@ -11,7 +11,7 @@ import {
     AgentDrilldownResponseSchema,
     NodeSplitResponseSchema,
 } from '@/lib/ai-schemas';
-import { SopGenerationResponseSchema } from '@/lib/sop-schemas';
+import { SopGenerationWireSchema } from '@/lib/sop-schemas';
 import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
 import { normalizeFlowShape } from '@/lib/flow-shapes';
 import { FULL_SHAPE_SELECTION_GUIDE, MULTI_MEANING_SPLIT_GUIDE, BRANCH_EDGE_GUIDE } from '@/lib/ai-shape-guide';
@@ -864,7 +864,13 @@ export async function POST(request: NextRequest) {
                     sopRequest = { ...sopRequest, minSteps: capacity.minSteps, maxSteps: capacity.maxSteps, maxTotalNodes: capacity.maxTotalNodes };
                 }
 
-                schema = SopGenerationResponseSchema;
+                // 와이어 스키마는 게이트(SopGenerationResponseSchema)보다 의도적으로
+                // 관대하다 — Gemini가 강제하지 못하는 superRefine/min-length 위반이
+                // generateObject 파싱 시점에 응답 전체를 죽이면(NoObjectGeneratedError)
+                // repair 루프에 영영 도달하지 못하기 때문이다. 기계적 위반은 파이프라인
+                // 진입 정규화가, 품질 결함은 repair 루프가, 최종 이중 방어는 클라이언트
+                // 문서 게이트가 처리한다. sop-schemas.ts의 SopGenerationWireSchema 참고.
+                schema = SopGenerationWireSchema;
                 prompt = getSopPrompt({
                     memberRole: sopRequest.memberRole,
                     sourceJobId: sopRequest.sourceJobId,
@@ -1036,6 +1042,15 @@ export async function POST(request: NextRequest) {
         // 스키마 검증 실패: 길이 초과만 잘라 내고 재검증해 살릴 수 있으면 살린다.
         // 검증을 통과하지 못한 응답은 절대 반환하지 않는다.
         if (NoObjectGeneratedError.isInstance(error)) {
+            // 어떤 위반이 파싱을 죽였는지 서버 로그에 남긴다 — "스키마와 일치하지
+            // 않습니다"만으로는 재발 시 원인 분석이 불가능하다. finishReason이
+            // 'length'면 스키마 위반이 아니라 출력 토큰 절단이 원인이다.
+            console.error(
+                '[API Route] NoObjectGeneratedError:',
+                'finishReason=', error.finishReason,
+                '| cause=', error.cause instanceof Error ? error.cause.message : String(error.cause ?? 'unknown'),
+                '| text length=', error.text?.length ?? 0
+            );
             const salvaged = schema ? salvageFromError(error, schema) : null;
             if (salvaged) {
                 return NextResponse.json(normalizeMetrics(sanitizeResponseShapes(salvaged)));
