@@ -38,6 +38,27 @@ export const SopStepAiSchema = SopStepCommonFieldsSchema.extend({
                 message: `터미널 단계(id: ${val.id})는 terminalType("start" 또는 "end")이 필수입니다.`,
             });
         }
+        if (val.terminalType && (val.sourceActivityIds?.length || val.subActionOrder !== undefined || val.subActionOrigin || val.subActionOriginRationale || val.agentizationSuggestion)) {
+            ctx.addIssue({
+                code: 'custom',
+                path: ['terminalType'],
+                message: `터미널 단계(id: ${val.id})에는 Activity 매핑, Sub Action 순서·출처, Agent화 제안을 넣을 수 없습니다.`,
+            });
+        }
+        if (val.subActionOrigin === 'context-derived' && !val.subActionOriginRationale?.trim()) {
+            ctx.addIssue({
+                code: 'custom',
+                path: ['subActionOriginRationale'],
+                message: '직무 맥락에서 추가된 Sub Action에는 추가 근거가 필요합니다.',
+            });
+        }
+        if (val.subActionOrigin === 'activity-derived' && val.subActionOriginRationale !== undefined) {
+            ctx.addIssue({
+                code: 'custom',
+                path: ['subActionOriginRationale'],
+                message: 'Activity 기본 분해 단계에는 직무 맥락 추가 근거를 넣지 않습니다.',
+            });
+        }
     });
 
 export const SopEdgeAiSchema = SopEdgeCommonFieldsSchema;

@@ -12,8 +12,8 @@ import {
     SopAgentizationScope,
     SopAiApplicationMode,
 } from './sop-types';
-import { SAMPLE_SOP_DOCUMENT, SAMPLE_SOP_MEMBER, SAMPLE_WORK_LIBRARY } from './sop-sample-data';
-import { layoutSopGraph } from './sop-layout';
+import { CUSTOMER_SOP_MEMBER, CUSTOMER_WORK_LIBRARY, buildTaskGateSampleDocument } from './sop-sample-data';
+import { createTaskLibrarySelectionForRole, getScopedSkills, withCatalogActivityOrders } from './sop-task-library';
 import {
     resetAgentizationConfirmation,
     withAgentizationScope,
@@ -30,9 +30,12 @@ import { createBrowserSopDraftStorage, SOP_DRAFT_STORAGE_KEY } from './sop-draft
 function withWorkLibraryCatalog(library: unknown): WorkLibrarySelection | undefined {
     if (!library || typeof library !== 'object') return undefined;
     const current = library as Partial<WorkLibrarySelection>;
-    if (current.taskCatalog?.length) return current as WorkLibrarySelection;
+    if (current.taskCatalog?.length) {
+        const selection = { ...current, taskCatalog: withCatalogActivityOrders(current.taskCatalog) } as WorkLibrarySelection;
+        return { ...selection, skills: getScopedSkills(selection) };
+    }
 
-    const sampleTask = SAMPLE_WORK_LIBRARY.taskCatalog[0];
+    const sampleTask = CUSTOMER_WORK_LIBRARY.taskCatalog[0];
     const currentSkills = Array.isArray(current.skills) && current.skills.length ? current.skills : sampleTask.activities[0].skills;
     const firstActivity = {
         ...sampleTask.activities[0],
@@ -42,7 +45,7 @@ function withWorkLibraryCatalog(library: unknown): WorkLibrarySelection | undefi
     };
 
     return {
-        ...SAMPLE_WORK_LIBRARY,
+        ...CUSTOMER_WORK_LIBRARY,
         ...current,
         taskId: current.taskId || sampleTask.id,
         taskName: current.taskName || sampleTask.name,
@@ -65,11 +68,13 @@ interface SopPrototypeState {
     workLibrary: WorkLibrarySelection;
     context: string;
     setupConfig: SopSetupConfig;
+    taskRecommendationInput: string;
 
     // Workspace Active Document
     document: SopDocument | null;
     selectedStepId: string | null;
     selectedEdgeId: string | null;
+    selectedSourceActivityId: string | null;
     customerReviewMode: boolean;
     lastSavedTimestamp: string | null;
 
@@ -79,11 +84,14 @@ interface SopPrototypeState {
 
     // Actions - Setup Gate & Work Library
     setMemberInfo: (member: Partial<SopMember>) => void;
+    /** Prototype-only persona switch; production login integration is intentionally not implemented. */
+    useSamplePersona: (member: SopMember) => void;
     setWorkLibrary: (library: Partial<WorkLibrarySelection>) => void;
     confirmWorkLibrary: () => void;
     reopenWorkLibrary: () => void;
     setContext: (context: string) => void;
     setSetupConfig: (config: Partial<SopSetupConfig>) => void;
+    setTaskRecommendationInput: (input: string) => void;
     /** Returns null when customer review mode keeps the current document read-only. */
     generateFromSample: () => SopDocument | null;
     /** Returns false when customer review mode keeps the current document read-only. */
@@ -92,6 +100,9 @@ interface SopPrototypeState {
     // Actions - Workspace Navigation & Selection
     selectStep: (stepId: string | null) => void;
     selectEdge: (edgeId: string | null) => void;
+    selectSourceActivity: (activityId: string | null) => void;
+    setStepSourceActivities: (stepId: string, activityIds: string[]) => void;
+    setStepSubActionOrder: (stepId: string, order: number) => void;
     /** Deterministic mode transition for cross-screen navigation. */
     setCustomerReviewMode: (enabled: boolean) => void;
     toggleCustomerReviewMode: () => void;
@@ -152,7 +163,18 @@ function removeLegacySetupSourceType(config: unknown): SopSetupConfig | undefine
     return { ...DEFAULT_SETUP_CONFIG, ...current } as SopSetupConfig;
 }
 
-/** Pure v2 -> v3 persistence migration; exported so legacy data remains regression-testable. */
+/**
+ * Pure legacy -> v5 persistence migration.
+ * v4: removes obsolete scope state and derives missing Activity order.
+ * v5: introduces `memberInfo.grade` and `SopDocument.structureVersion` /
+ * per-step `subActionOrder`/`agentizationSuggestion` — all additive-optional
+ * fields, so no persisted value needs to change shape. The one real invariant
+ * this migration enforces: a persisted `document` that predates this version
+ * must NOT be stamped with `structureVersion` here — that discriminator may
+ * only ever be set by an actual Activity–Sub Action generation/clone, never by
+ * a migration pass, or a legacy document would be silently disguised as the
+ * newer structure (see member-home-subaction-contract.md §2.4).
+ */
 export function migrateSopPrototypePersistedState(persistedState: unknown): unknown {
     if (!persistedState || typeof persistedState !== 'object') return persistedState;
     const state = persistedState as Record<string, unknown>;
@@ -160,13 +182,13 @@ export function migrateSopPrototypePersistedState(persistedState: unknown): unkn
     const document = state.document && typeof state.document === 'object'
         ? {
             ...(state.document as SopDocument),
-            workLibrary: withWorkLibraryCatalog((state.document as SopDocument).workLibrary) || SAMPLE_WORK_LIBRARY,
+            workLibrary: withWorkLibraryCatalog((state.document as SopDocument).workLibrary) || CUSTOMER_WORK_LIBRARY,
             setupConfig: removeLegacySetupSourceType((state.document as SopDocument).setupConfig),
         }
         : state.document;
     return {
         ...state,
-        workLibrary: workLibrary || SAMPLE_WORK_LIBRARY,
+        workLibrary: workLibrary || CUSTOMER_WORK_LIBRARY,
         setupConfig: removeLegacySetupSourceType(state.setupConfig) || DEFAULT_SETUP_CONFIG,
         document,
         customerReviewMode: state.customerReviewMode || false,
@@ -222,15 +244,17 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
             };
 
             return {
-                memberInfo: SAMPLE_SOP_MEMBER,
-                workLibrary: SAMPLE_WORK_LIBRARY,
+                memberInfo: CUSTOMER_SOP_MEMBER,
+                workLibrary: CUSTOMER_WORK_LIBRARY,
                 context:
                     '실제 업무 순서, 승인 조건, 예외 상황, 사용 시스템, 반드시 지켜야 할 기준, 협업 방식과 자주 되돌아가는 단계를 검토하여 SOP를 구체화합니다.',
                 setupConfig: DEFAULT_SETUP_CONFIG,
+                taskRecommendationInput: '',
 
                 document: null,
                 selectedStepId: null,
                 selectedEdgeId: null,
+                selectedSourceActivityId: null,
                 customerReviewMode: false,
                 lastSavedTimestamp: null,
 
@@ -241,6 +265,8 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 setMemberInfo: (partial) =>
                     set((state) => ({ memberInfo: { ...state.memberInfo, ...partial } })),
 
+                useSamplePersona: (member) => set({ memberInfo: member, workLibrary: createTaskLibrarySelectionForRole(member.jobRole) }),
+
                 setWorkLibrary: (partial) =>
                     set((state) => {
                         const updated = { ...state.workLibrary, ...partial };
@@ -248,7 +274,12 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                             updated.confirmed = partial.confirmed!;
                         } else if (
                             partial.taskName !== undefined ||
+                            partial.taskId !== undefined ||
                             partial.activityName !== undefined ||
+                            partial.activityId !== undefined ||
+                            partial.jobId !== undefined ||
+                            partial.sourceJobId !== undefined ||
+                            partial.jobName !== undefined ||
                             partial.taskCatalog !== undefined ||
                             partial.skills !== undefined ||
                             partial.sourceType !== undefined
@@ -269,24 +300,29 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 setSetupConfig: (partial) =>
                     set((state) => ({ setupConfig: { ...state.setupConfig, ...partial } })),
 
+                setTaskRecommendationInput: (taskRecommendationInput) => set({ taskRecommendationInput }),
+
+                // 구성원 Task 기반 Gate 전용 샘플이다 - 선택된 Task/Activity로부터 매번 새로
+                // Activity-Sub Action 구조를 만든다(고정 채용 콘텐츠를 다른 Task의 Activity에
+                // 억지로 매핑하지 않는다). Activity 데이터가 없는 등 만들 수 없는 선택 상태라면
+                // 조용히 legacy 문서를 만드는 대신 null을 반환한다 - 호출부(loadSampleSopFromSetup)가
+                // 그 사실을 명확한 안내 메시지로 보여준다.
                 generateFromSample: () => {
                     if (isCustomerReviewLocked()) return null;
                     const state = get();
                     const now = new Date().toISOString();
-                    const layout = layoutSopGraph(SAMPLE_SOP_DOCUMENT.steps, SAMPLE_SOP_DOCUMENT.edges);
-                    const doc: SopDocument = {
-                        ...SAMPLE_SOP_DOCUMENT,
+                    const result = buildTaskGateSampleDocument({
                         id: `sop-sample-${Date.now()}`,
                         member: { ...state.memberInfo },
-                        workLibrary: { ...state.workLibrary, confirmed: true },
-                        context: state.context || SAMPLE_SOP_DOCUMENT.context,
-                        reviewStatus: 'ai-draft',
-                        steps: layout.steps.map((s) => ({ ...s, reviewStatus: 'ai-draft' as const })),
-                        edges: layout.edges,
-                        createdAt: now,
-                        updatedAt: now,
-                        isSampleData: true,
-                    };
+                        workLibrary: state.workLibrary,
+                        context: state.context,
+                        setupConfig: state.setupConfig,
+                    });
+                    if (!result.success) {
+                        console.warn(`[generateFromSample] ${result.reason}`);
+                        return null;
+                    }
+                    const doc = result.document;
                     set({
                         document: doc,
                         selectedStepId: doc.steps[0]?.id || null,
@@ -315,6 +351,30 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 // Mode and Selection
                 selectStep: (stepId) => set({ selectedStepId: stepId, selectedEdgeId: null }),
                 selectEdge: (edgeId) => set({ selectedEdgeId: edgeId, selectedStepId: null }),
+                selectSourceActivity: (selectedSourceActivityId) => set({ selectedSourceActivityId }),
+
+                setStepSourceActivities: (stepId, activityIds) => {
+                    const doc = get().document;
+                    if (!doc || isCustomerReviewLocked()) return;
+                    const task = doc.workLibrary.taskCatalog.find((item) => item.id === doc.workLibrary.taskId);
+                    const allowedIds = new Set(task?.activities.map((activity) => activity.id) ?? []);
+                    const uniqueIds = [...new Set(activityIds)];
+                    const step = doc.steps.find((item) => item.id === stepId);
+                    if (!step || step.terminalType || uniqueIds.some((id) => !allowedIds.has(id))) return;
+                    applyDocumentMutation(doc, {
+                        steps: doc.steps.map((item) => item.id === stepId ? { ...item, sourceActivityIds: uniqueIds } : item),
+                    });
+                },
+
+                setStepSubActionOrder: (stepId, order) => {
+                    const doc = get().document;
+                    if (!doc || isCustomerReviewLocked()) return;
+                    const step = doc.steps.find((item) => item.id === stepId);
+                    if (!step || step.terminalType || !Number.isInteger(order) || order < 1) return;
+                    applyDocumentMutation(doc, {
+                        steps: doc.steps.map((item) => item.id === stepId ? { ...item, subActionOrder: order } : item),
+                    });
+                },
 
                 setCustomerReviewMode: (enabled) => set({ customerReviewMode: enabled }),
 
@@ -550,13 +610,15 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 // mode together with the document instead of behaving like an in-workspace edit.
                 resetStore: () =>
                     set({
-                        memberInfo: SAMPLE_SOP_MEMBER,
-                        workLibrary: SAMPLE_WORK_LIBRARY,
+                        memberInfo: CUSTOMER_SOP_MEMBER,
+                        workLibrary: CUSTOMER_WORK_LIBRARY,
                         context: '',
                         setupConfig: DEFAULT_SETUP_CONFIG,
+                        taskRecommendationInput: '',
                         document: null,
                         selectedStepId: null,
                         selectedEdgeId: null,
+                        selectedSourceActivityId: null,
                         customerReviewMode: false,
                         lastSavedTimestamp: null,
                         history: [],
@@ -566,7 +628,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
         },
         {
             name: SOP_DRAFT_STORAGE_KEY,
-            version: 3,
+            version: 5,
             migrate: migrateSopPrototypePersistedState,
             storage: createJSONStorage(createBrowserSopDraftStorage),
             partialize: (state) => ({
@@ -574,6 +636,7 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 workLibrary: state.workLibrary,
                 context: state.context,
                 setupConfig: state.setupConfig,
+                taskRecommendationInput: state.taskRecommendationInput,
                 document: state.document,
                 customerReviewMode: state.customerReviewMode,
                 lastSavedTimestamp: state.lastSavedTimestamp,

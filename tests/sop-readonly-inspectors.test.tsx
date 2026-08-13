@@ -6,6 +6,8 @@ import { SopSkillEditor } from '../src/components/sop/SopSkillEditor';
 import { SopExecutionEditor } from '../src/components/sop/SopExecutionEditor';
 import { SopEdgeInspector } from '../src/components/sop/SopEdgeInspector';
 import type { SopStepData } from '../src/lib/sop-types';
+import { buildTaskGateSampleDocument } from '../src/lib/sop-sample-data';
+import { createTaskLibrarySelectionForRole } from '../src/lib/sop-task-library';
 
 // react-test-renderer의 act() 경고 억제 (jsdom 없이 순수 JS 트리로 렌더링하는 테스트 환경임을 명시)
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -276,6 +278,66 @@ let selectedEdgeIdForTest: string;
     act(() => {
         renderer.unmount();
     });
+}
+
+// ---------------------------------------------------------
+// 9. SopStepCoreEditor: the Sub Action origin selector (activity-subaction-v1 only) —
+//    unset shows the "미지정 · SOP 확정 차단" badge, is disabled under customer review
+//    mode, and the rationale textarea only appears for context-derived.
+// ---------------------------------------------------------
+{
+    const originWorkLibrary = createTaskLibrarySelectionForRole('Talent Acquisition');
+    const originBuild = buildTaskGateSampleDocument({
+        id: 'origin-ui-doc',
+        member: { name: 'Origin UI 테스트', jobRole: 'Talent Acquisition' },
+        workLibrary: originWorkLibrary,
+        context: 'origin selector 테스트',
+        setupConfig: { detailLevel: 'standard', minSteps: 4, maxSteps: 20, branchPolicy: 'auto', maxBranches: 2, allowRework: true, maxTotalNodes: 24, maxLoops: 2, splitComplexSteps: true },
+    });
+    if (!originBuild.success) throw new Error(`origin UI fixture failed: ${originBuild.reason}`);
+    const originDoc = { ...originBuild.document, steps: originBuild.document.steps.map((s) => (s.terminalType ? s : { ...s, subActionOrigin: undefined })) };
+    setReadOnly(false);
+    useSopPrototypeStore.getState().setDocument(originDoc);
+    const originStepIndex = originDoc.steps.findIndex((s) => !s.terminalType);
+    const originStep = useSopPrototypeStore.getState().document!.steps[originStepIndex];
+
+    setReadOnly(true);
+    const lockedRenderer = renderComponent(
+        <SopStepCoreEditor step={originStep} stepIndex={originStepIndex} allSteps={useSopPrototypeStore.getState().document!.steps} onOpenAgentization={() => {}} />
+    );
+    const lockedText = JSON.stringify(lockedRenderer.toJSON());
+    check(lockedText.includes('미지정'), 'SopStepCoreEditor: an unset Sub Action origin shows the "미지정" badge');
+    const lockedSelect = lockedRenderer.root.findAllByType('select').find((s) => s.props.value === '');
+    check(lockedSelect?.props.disabled === true, 'SopStepCoreEditor: the Sub Action origin selector is disabled in customer review mode');
+    act(() => lockedRenderer.unmount());
+
+    setReadOnly(false);
+    const editableRenderer = renderComponent(
+        <SopStepCoreEditor step={originStep} stepIndex={originStepIndex} allSteps={useSopPrototypeStore.getState().document!.steps} onOpenAgentization={() => {}} />
+    );
+    const editableSelect = editableRenderer.root.findAllByType('select').find((s) => s.props.value === '');
+    check(editableSelect?.props.disabled !== true, 'SopStepCoreEditor: the origin selector is enabled when customer review mode is off');
+    check(editableRenderer.root.findAllByType('textarea').every((t) => t.props.placeholder?.includes('직무 맥락') !== true), 'SopStepCoreEditor: no rationale textarea is shown while origin is unset');
+
+    act(() => {
+        editableSelect!.props.onChange({ target: { value: 'context-derived' } });
+    });
+    check(useSopPrototypeStore.getState().document!.steps[originStepIndex].subActionOrigin === 'context-derived', 'SopStepCoreEditor: choosing "직무 맥락 보강" updates the step\'s subActionOrigin through the real Store action');
+    const afterContextRenderer = renderComponent(
+        <SopStepCoreEditor step={useSopPrototypeStore.getState().document!.steps[originStepIndex]} stepIndex={originStepIndex} allSteps={useSopPrototypeStore.getState().document!.steps} onOpenAgentization={() => {}} />
+    );
+    const rationaleTextarea = afterContextRenderer.root.findAllByType('textarea').find((t) => t.props.placeholder?.includes('직무 맥락'));
+    check(Boolean(rationaleTextarea), 'SopStepCoreEditor: selecting context-derived reveals the required rationale textarea');
+    act(() => {
+        rationaleTextarea!.props.onChange({ target: { value: '테스트용 근거 텍스트' } });
+    });
+    check(useSopPrototypeStore.getState().document!.steps[originStepIndex].subActionOriginRationale === '테스트용 근거 텍스트', 'SopStepCoreEditor: typing a rationale updates the step through the real Store action');
+
+    act(() => {
+        editableRenderer.unmount();
+        afterContextRenderer.unmount();
+    });
+    useSopPrototypeStore.getState().resetStore();
 }
 
 setReadOnly(false);

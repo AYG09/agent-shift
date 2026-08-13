@@ -1,195 +1,109 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Briefcase, CheckCircle2, Edit3, Layers, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, CheckCircle2, Layers, Search, Trash2 } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
-import { SAMPLE_WORK_LIBRARY } from '@/lib/sop-sample-data';
-import { WorkLibraryActivity, WorkLibrarySkill, WorkLibraryTask } from '@/lib/sop-types';
+import { CUSTOMER_WORK_LIBRARY } from '@/lib/sop-sample-data';
+import { getScopedSkills } from '@/lib/sop-task-library';
+import type { WorkLibraryActivity, WorkLibrarySelection, WorkLibrarySkill, WorkLibraryTask } from '@/lib/sop-types';
 
-const uniqueSkills = (skills: WorkLibrarySkill[]) =>
-    Array.from(new Map(skills.map((skill) => [skill.name.trim().toLowerCase(), skill])).values());
+const ordered = (activities: WorkLibraryActivity[]) => [...activities].sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
+const renumber = (activities: WorkLibraryActivity[]) => ordered(activities).map((activity, index) => ({ ...activity, order: index + 1 }));
 
-const scopeSkills = (task: WorkLibraryTask, activity: WorkLibraryActivity | undefined, sourceType: 'task' | 'activity') =>
-    sourceType === 'task' ? uniqueSkills(task.activities.flatMap((item) => item.skills)) : activity?.skills || [];
+export function WorkLibrarySelector() {
+    const { workLibrary, setWorkLibrary: updateWorkLibrary, confirmWorkLibrary, reopenWorkLibrary } = useSopPrototypeStore();
+    const [taskSearch, setTaskSearch] = useState('');
+    const [selectedActivityId, setSelectedActivityId] = useState(workLibrary.activityId);
+    const taskCatalog = workLibrary.taskCatalog.length ? workLibrary.taskCatalog : CUSTOMER_WORK_LIBRARY.taskCatalog;
+    const selectedTask = taskCatalog.find((task) => task.id === workLibrary.taskId) ?? taskCatalog[0];
+    const activities = ordered(selectedTask.activities);
+    const selectedActivity = activities.find((activity) => activity.id === selectedActivityId) ?? activities.find((activity) => activity.id === workLibrary.activityId) ?? activities[0];
+    const visibleTasks = useMemo(() => taskCatalog.filter((task) => task.name.toLowerCase().includes(taskSearch.trim().toLowerCase())), [taskCatalog, taskSearch]);
 
-export const WorkLibrarySelector: React.FC = () => {
-    const { workLibrary, setWorkLibrary, confirmWorkLibrary, reopenWorkLibrary } = useSopPrototypeStore();
-    const [isEditingTask, setIsEditingTask] = useState(false);
-    const [isEditingActivity, setIsEditingActivity] = useState(false);
-    const [newSkillName, setNewSkillName] = useState('');
-    const [newSkillDesc, setNewSkillDesc] = useState('');
-    const [showAddSkill, setShowAddSkill] = useState(false);
+    const setWorkLibrary = (patch: Partial<WorkLibrarySelection>) => updateWorkLibrary(patch);
 
-    const fallbackCatalog = useMemo<WorkLibraryTask[]>(
-        () => [
-            {
-                id: workLibrary.taskId || SAMPLE_WORK_LIBRARY.taskId,
-                name: workLibrary.taskName || SAMPLE_WORK_LIBRARY.taskName,
-                activities: [
-                    {
-                        id: workLibrary.activityId || SAMPLE_WORK_LIBRARY.activityId || 'activity-1',
-                        name: workLibrary.activityName || SAMPLE_WORK_LIBRARY.activityName || '주요 Activity',
-                        skills: workLibrary.skills.length ? workLibrary.skills : SAMPLE_WORK_LIBRARY.taskCatalog[0].activities[0].skills,
-                    },
-                    ...SAMPLE_WORK_LIBRARY.taskCatalog[0].activities.slice(1),
-                ],
-            },
-        ],
-        [workLibrary.activityId, workLibrary.activityName, workLibrary.skills, workLibrary.taskId, workLibrary.taskName]
-    );
-    const taskCatalog = workLibrary.taskCatalog?.length ? workLibrary.taskCatalog : fallbackCatalog;
-    const selectedTask = taskCatalog.find((task) => task.id === workLibrary.taskId) || taskCatalog[0];
-    const selectedActivity = selectedTask.activities.find((activity) => activity.id === workLibrary.activityId) || selectedTask.activities[0];
-
-    useEffect(() => {
-        if (!workLibrary.taskCatalog?.length) {
-            setWorkLibrary({
-                taskCatalog: fallbackCatalog,
-                taskId: selectedTask.id,
-                taskName: selectedTask.name,
-                activityId: selectedActivity.id,
-                activityName: selectedActivity.name,
-                skills: scopeSkills(selectedTask, selectedActivity, workLibrary.sourceType),
-            });
-        }
-    }, [fallbackCatalog, selectedActivity, selectedTask, setWorkLibrary, workLibrary.sourceType, workLibrary.taskCatalog]);
-
-    const commitCatalog = (catalog: WorkLibraryTask[], taskId = selectedTask.id, activityId = selectedActivity.id) => {
-        const nextTask = catalog.find((task) => task.id === taskId) || catalog[0];
-        const nextActivity = nextTask.activities.find((activity) => activity.id === activityId) || nextTask.activities[0];
-        setWorkLibrary({
-            taskCatalog: catalog,
-            taskId: nextTask.id,
-            taskName: nextTask.name,
-            activityId: nextActivity.id,
-            activityName: nextActivity.name,
-            skills: scopeSkills(nextTask, nextActivity, workLibrary.sourceType),
-        });
+    // 구성원 Task 기반 생성 경로는 항상 Task 전체를 대상으로 한다 — sourceType은 여기서
+    // 항상 'task'로 고정한다. getScopedSkills가 'task' 범위를 기준으로 SKILL을 계산하므로
+    // (Activity 범위였던 과거 세션 상태가 남아있더라도) 이 화면에서 편집을 시작하는 순간
+    // Task 전체 기준으로 정규화된다.
+    const commit = (catalog: WorkLibraryTask[], taskId = selectedTask.id, activityId = selectedActivity?.id) => {
+        const task = catalog.find((item) => item.id === taskId) ?? catalog[0];
+        const activity = ordered(task.activities).find((item) => item.id === activityId) ?? ordered(task.activities)[0];
+        const base: WorkLibrarySelection = {
+            ...workLibrary,
+            sourceType: 'task',
+            taskCatalog: catalog.map((item) => ({ ...item, activities: renumber(item.activities) })),
+            taskId: task.id,
+            taskName: task.name,
+            activityId: activity?.id,
+            activityName: activity?.name,
+        };
+        setSelectedActivityId(activity?.id);
+        setWorkLibrary({ ...base, skills: getScopedSkills(base) });
     };
 
-    const updateSelectedActivity = (update: (activity: WorkLibraryActivity) => WorkLibraryActivity) => {
-        commitCatalog(
-            taskCatalog.map((task) =>
-                task.id === selectedTask.id
-                    ? { ...task, activities: task.activities.map((activity) => (activity.id === selectedActivity.id ? update(activity) : activity)) }
-                    : task
-            )
-        );
+    const updateTask = (patch: Partial<WorkLibraryTask>) => commit(taskCatalog.map((task) => task.id === selectedTask.id ? { ...task, ...patch } : task));
+    const updateActivity = (patch: Partial<WorkLibraryActivity>) => commit(taskCatalog.map((task) => task.id === selectedTask.id ? { ...task, activities: task.activities.map((activity) => activity.id === selectedActivity.id ? { ...activity, ...patch } : activity) } : task));
+    const updateSkills = (skills: WorkLibrarySkill[]) => updateActivity({ skills });
+
+    const selectTask = (taskId: string) => {
+        const task = taskCatalog.find((item) => item.id === taskId);
+        if (task) commit(taskCatalog, task.id, ordered(task.activities)[0]?.id);
     };
-
-    const setScope = (sourceType: 'task' | 'activity') =>
-        setWorkLibrary({ sourceType, skills: scopeSkills(selectedTask, selectedActivity, sourceType) });
-
     const addTask = () => {
-        const id = `task-${Date.now()}`;
-        const activity: WorkLibraryActivity = { id: `activity-${Date.now()}`, name: '새 주요 Activity', skills: [] };
-        commitCatalog([...taskCatalog, { id, name: '새 Task', activities: [activity] }], id, activity.id);
-        setIsEditingTask(true);
+        const id = `member-task-${Date.now()}`;
+        const activity: WorkLibraryActivity = { id: `member-activity-${Date.now()}`, order: 1, name: '새 Activity', description: '', skills: [] };
+        commit([...taskCatalog, { id, name: '새 Task', description: '', activities: [activity] }], id, activity.id);
     };
-
-    const deleteTask = () => {
+    const removeTask = () => {
         if (taskCatalog.length <= 1) return;
-        const catalog = taskCatalog.filter((task) => task.id !== selectedTask.id);
-        commitCatalog(catalog, catalog[0].id, catalog[0].activities[0].id);
+        const next = taskCatalog.filter((task) => task.id !== selectedTask.id);
+        commit(next, next[0].id, ordered(next[0].activities)[0]?.id);
     };
-
     const addActivity = () => {
-        const activity: WorkLibraryActivity = { id: `activity-${Date.now()}`, name: '새 주요 Activity', skills: [] };
-        commitCatalog(
-            taskCatalog.map((task) => (task.id === selectedTask.id ? { ...task, activities: [...task.activities, activity] } : task)),
-            selectedTask.id,
-            activity.id
-        );
-        setIsEditingActivity(true);
+        const activity: WorkLibraryActivity = { id: `member-activity-${Date.now()}`, order: activities.length + 1, name: '새 Activity', description: '', skills: [] };
+        commit(taskCatalog.map((task) => task.id === selectedTask.id ? { ...task, activities: [...task.activities, activity] } : task), selectedTask.id, activity.id);
     };
-
-    const deleteActivity = () => {
-        if (selectedTask.activities.length <= 1) return;
-        const activities = selectedTask.activities.filter((activity) => activity.id !== selectedActivity.id);
-        commitCatalog(
-            taskCatalog.map((task) => (task.id === selectedTask.id ? { ...task, activities } : task)),
-            selectedTask.id,
-            activities[0].id
-        );
+    const removeActivity = () => {
+        if (activities.length <= 1) return;
+        const nextActivities = selectedTask.activities.filter((activity) => activity.id !== selectedActivity.id);
+        commit(taskCatalog.map((task) => task.id === selectedTask.id ? { ...task, activities: nextActivities } : task), selectedTask.id, ordered(nextActivities)[0]?.id);
     };
-
-    const addSkill = () => {
-        if (!newSkillName.trim()) return;
-        updateSelectedActivity((activity) => ({
-            ...activity,
-            skills: [...activity.skills, { id: `skill-${Date.now()}`, name: newSkillName.trim(), description: newSkillDesc.trim() }],
-        }));
-        setNewSkillName('');
-        setNewSkillDesc('');
-        setShowAddSkill(false);
+    const moveActivity = (direction: -1 | 1) => {
+        const index = activities.findIndex((activity) => activity.id === selectedActivity.id);
+        const destination = index + direction;
+        if (destination < 0 || destination >= activities.length) return;
+        const next = [...activities];
+        [next[index], next[destination]] = [next[destination], next[index]];
+        commit(taskCatalog.map((task) => task.id === selectedTask.id ? { ...task, activities: renumber(next) } : task), selectedTask.id, selectedActivity.id);
     };
+    const addSkill = () => updateSkills([...selectedActivity.skills, { id: `member-skill-${Date.now()}`, name: '새 SKILL', description: '' }]);
 
-    return (
-        <div className={`rounded-2xl border p-6 transition-all ${workLibrary.confirmed ? 'border-emerald-200 bg-emerald-50/40 shadow-sm' : 'border-zinc-200/80 bg-white shadow-sm'}`}>
-            <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                <div className="flex items-center gap-3">
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl text-white ${workLibrary.confirmed ? 'bg-emerald-500' : 'bg-indigo-600'}`}><Layers className="h-5 w-5" /></div>
-                    <div>
-                        <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
-                            2. Work Library Data 검토 및 확정
-                            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${workLibrary.confirmed ? 'border-emerald-200 bg-emerald-100 text-emerald-800' : 'border-amber-200 bg-amber-100 text-amber-800'}`}>
-                                {workLibrary.confirmed ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
-                                {workLibrary.confirmed ? '확정됨' : '검토 및 확정 필요'}
-                            </span>
-                        </h2>
-                        <p className="mt-0.5 text-xs text-zinc-500">Task를 구성하는 복수의 주요 Activity와 Activity별 유관 SKILL을 직접 수정하고, SOP 생성 범위를 선택합니다.</p>
-                    </div>
-                </div>
-                <button type="button" onClick={workLibrary.confirmed ? reopenWorkLibrary : confirmWorkLibrary} className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold shadow-sm ${workLibrary.confirmed ? 'border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
-                    <CheckCircle2 className="h-4 w-4" /> {workLibrary.confirmed ? '검토 다시 열기' : '검토 완료 · 확정'}
-                </button>
-            </div>
+    return <section className={`rounded-2xl border bg-white p-4 shadow-sm ${workLibrary.confirmed ? 'border-emerald-300' : 'border-zinc-200'}`}>
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-100 pb-3">
+            <div className="flex gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white"><Layers className="h-5 w-5" /></div><div><h2 className="text-base font-bold text-zinc-900">2. Task Library 검토 및 확정</h2><p className="mt-0.5 text-xs text-zinc-600">Job › Task › 순서가 있는 Activity › Activity별 SKILL을 직접 검토·편집합니다.</p></div></div>
+            <button type="button" onClick={workLibrary.confirmed ? reopenWorkLibrary : confirmWorkLibrary} className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold ${workLibrary.confirmed ? 'border border-emerald-300 bg-white text-emerald-700' : 'bg-emerald-600 text-white'}`}><CheckCircle2 className="h-4 w-4" />{workLibrary.confirmed ? '검토 다시 열기' : '검토 완료 · 확정'}</button>
+        </div>
 
-            <div className="mb-5 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                    <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-700"><Sparkles className="h-4 w-4 text-indigo-600" /> SOP 생성 기준 단위</span>
-                    <div className="inline-flex rounded-lg bg-zinc-200/80 p-1">
-                        <button type="button" onClick={() => setScope('task')} className={`rounded-md px-4 py-1.5 text-xs font-semibold ${workLibrary.sourceType === 'task' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600'}`}>Task 전체</button>
-                        <button type="button" onClick={() => setScope('activity')} className={`rounded-md px-4 py-1.5 text-xs font-semibold ${workLibrary.sourceType === 'activity' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600'}`}>선택 Activity</button>
-                    </div>
-                </div>
-                <p className="mt-2 text-xs text-zinc-500">{workLibrary.sourceType === 'task' ? '선택한 Task의 모든 Activity와 유관 SKILL을 반영해 End-to-End SOP를 생성합니다.' : '선택한 Activity와 해당 SKILL만 반영해 상세 SOP를 생성합니다.'}</p>
-            </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+            <p className="text-xs text-zinc-700"><strong>{workLibrary.jobName || 'Job 미지정'}</strong>{workLibrary.sourceJobId ? ` · ${workLibrary.sourceJobId}` : ''}</p>
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 border border-indigo-200">Task 전체 생성</span>
+        </div>
 
-            <div className="mb-5 rounded-xl border border-zinc-200 bg-zinc-50/70 p-4">
-                <div className="mb-2 flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-xs font-semibold uppercase text-zinc-500"><Briefcase className="h-3.5 w-3.5 text-indigo-500" /> Task</span>
-                    <div className="flex gap-2 text-xs">
-                        <button type="button" onClick={addTask} className="flex items-center gap-1 text-indigo-600 hover:text-indigo-700"><Plus className="h-3.5 w-3.5" /> Task 추가</button>
-                        <button type="button" onClick={deleteTask} disabled={taskCatalog.length <= 1} className="text-rose-500 disabled:text-zinc-300">삭제</button>
-                    </div>
+        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(260px,.78fr)_minmax(0,1.22fr)]">
+            <aside className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                <div className="flex items-center justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wide text-zinc-700">Task ({taskSearch.trim() ? `검색 결과 ${visibleTasks.length} / 전체 ${taskCatalog.length}` : taskCatalog.length})</p><div className="flex gap-2"><button type="button" onClick={addTask} className="text-xs font-semibold text-indigo-600">+ Task</button><button type="button" onClick={removeTask} disabled={taskCatalog.length <= 1} className="text-xs text-rose-600 disabled:opacity-40">삭제</button></div></div>
+                <label className="mt-2 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2 py-1.5"><Search className="h-3.5 w-3.5 text-zinc-400"/><input value={taskSearch} onChange={(event) => setTaskSearch(event.target.value)} placeholder="Task 검색" className="min-w-0 flex-1 bg-transparent text-xs outline-none" /></label>
+                <div className="mt-2 max-h-[270px] space-y-1 overflow-y-auto pr-1">{visibleTasks.map((task) => <button key={task.id} type="button" onClick={() => selectTask(task.id)} className={`w-full rounded-lg border px-3 py-2 text-left ${task.id === selectedTask.id ? 'border-indigo-400 bg-indigo-50' : 'border-transparent hover:bg-white'}`}><p className="truncate text-sm font-semibold text-zinc-900">{task.name}</p><p className="mt-0.5 text-[11px] text-zinc-500">{task.activities.length}개 Activity</p></button>)}</div>
+            </aside>
+            <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-3">
+                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]"><div><label className="text-[11px] font-bold text-zinc-500">TASK 명</label><input value={selectedTask.name} onChange={(event) => updateTask({ name: event.target.value })} className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold" /><label className="mt-2 block text-[11px] font-bold text-zinc-500">TASK 정의</label><textarea value={selectedTask.description || ''} onChange={(event) => updateTask({ description: event.target.value })} rows={2} className="mt-1 w-full resize-none rounded-lg border border-zinc-300 px-3 py-2 text-xs" /></div><div className="flex items-end gap-1"><button type="button" onClick={addActivity} className="rounded-lg border border-indigo-200 px-2 py-2 text-xs font-semibold text-indigo-600">+ Activity</button><button type="button" onClick={removeActivity} disabled={activities.length <= 1} className="rounded-lg border border-rose-200 px-2 py-2 text-xs text-rose-600 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5"/></button></div></div>
+                <div className="mt-3 grid gap-3 md:grid-cols-[minmax(210px,.74fr)_minmax(0,1.26fr)]">
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2"><p className="mb-2 text-xs font-bold text-zinc-700">Activity 목록 · {activities.length}개</p><div className="max-h-[310px] space-y-1 overflow-y-auto pr-1">{activities.map((activity) => <button key={activity.id} type="button" onClick={() => { setSelectedActivityId(activity.id); setWorkLibrary({ activityId: activity.id, activityName: activity.name, skills: getScopedSkills({ ...workLibrary, sourceType: 'task' }) }); }} className={`w-full rounded-lg border px-2.5 py-2 text-left ${activity.id === selectedActivity.id ? 'border-indigo-400 bg-white shadow-sm' : 'border-transparent'}`}><span className="text-[10px] font-bold text-indigo-600">A{String(activity.order ?? 0).padStart(2, '0')}</span><p className="mt-0.5 truncate text-xs font-semibold text-zinc-900">{activity.name}</p><p className="mt-0.5 text-[10px] text-zinc-500">SKILL {activity.skills.length}개</p></button>)}</div></div>
+                    <div className="max-h-[350px] overflow-y-auto pr-1"><div className="flex items-center justify-between"><p className="text-xs font-bold text-zinc-700">선택 Activity 상세</p><div className="flex gap-1"><button type="button" onClick={() => moveActivity(-1)} title="위로" className="rounded border p-1 text-zinc-600"><ArrowUp className="h-3.5 w-3.5"/></button><button type="button" onClick={() => moveActivity(1)} title="아래로" className="rounded border p-1 text-zinc-600"><ArrowDown className="h-3.5 w-3.5"/></button></div></div><div className="mt-2 grid grid-cols-[78px_1fr] gap-2"><label className="text-xs font-semibold text-zinc-600">순서<input type="number" min={1} value={selectedActivity.order ?? 1} onChange={(event) => updateActivity({ order: Number(event.target.value) || 1 })} className="mt-1 w-full rounded border px-2 py-1.5 text-xs" /></label><label className="text-xs font-semibold text-zinc-600">Activity 명<input value={selectedActivity.name} onChange={(event) => updateActivity({ name: event.target.value })} className="mt-1 w-full rounded border px-2 py-1.5 text-xs" /></label></div><label className="mt-2 block text-xs font-semibold text-zinc-600">Activity 설명<textarea value={selectedActivity.description || ''} onChange={(event) => updateActivity({ description: event.target.value })} rows={2} className="mt-1 w-full resize-none rounded border px-2 py-1.5 text-xs" /></label><div className="mt-3 border-t pt-3"><div className="flex items-center justify-between"><p className="text-xs font-bold text-zinc-700">유관 SKILL · {selectedActivity.skills.length}개</p><button type="button" onClick={addSkill} className="text-xs font-semibold text-indigo-600">+ SKILL</button></div><div className="mt-2 space-y-2">{selectedActivity.skills.map((skill) => <div key={skill.id} className="grid grid-cols-[minmax(0,1fr)_26px] gap-2 rounded-lg border border-zinc-200 p-2"><div><input value={skill.name} onChange={(event) => updateSkills(selectedActivity.skills.map((item) => item.id === skill.id ? { ...item, name: event.target.value } : item))} className="w-full border-b border-zinc-200 py-1 text-xs font-semibold outline-none focus:border-indigo-500" /><textarea value={skill.description || ''} onChange={(event) => updateSkills(selectedActivity.skills.map((item) => item.id === skill.id ? { ...item, description: event.target.value } : item))} rows={2} placeholder="SKILL 설명" className="mt-1 w-full resize-none text-[11px] text-zinc-600 outline-none" /></div><button type="button" onClick={() => updateSkills(selectedActivity.skills.filter((item) => item.id !== skill.id))} className="self-start p-1 text-zinc-400 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5"/></button></div>)}</div></div></div>
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                    <select value={selectedTask.id} onChange={(event) => { const task = taskCatalog.find((item) => item.id === event.target.value)!; commitCatalog(taskCatalog, task.id, task.activities[0].id); }} className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-900">
-                        {taskCatalog.map((task) => <option key={task.id} value={task.id}>{task.name} · {task.activities.length}개 Activity</option>)}
-                    </select>
-                    <button type="button" onClick={() => setIsEditingTask((value) => !value)} className="flex items-center justify-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-600 hover:text-indigo-600"><Edit3 className="h-3.5 w-3.5" /> {isEditingTask ? '완료' : '수정'}</button>
-                </div>
-                {isEditingTask && <input value={selectedTask.name} onChange={(event) => commitCatalog(taskCatalog.map((task) => task.id === selectedTask.id ? { ...task, name: event.target.value } : task))} className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900" aria-label="Task 이름" />}
-            </div>
-
-            <div className="mb-5">
-                <div className="mb-3 flex items-center justify-between">
-                    <div><p className="text-xs font-semibold uppercase tracking-wider text-zinc-700">주요 Activity ({selectedTask.activities.length})</p><p className="mt-0.5 text-xs text-zinc-500">Task는 통상 4~5개의 주요 Activity로 관리합니다. 카드를 선택해 내용과 SKILL을 수정하세요.</p></div>
-                    <button type="button" onClick={addActivity} className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700"><Plus className="h-3.5 w-3.5" /> Activity 추가</button>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {selectedTask.activities.map((activity, index) => <button key={activity.id} type="button" onClick={() => commitCatalog(taskCatalog, selectedTask.id, activity.id)} className={`rounded-xl border p-3 text-left transition-all ${activity.id === selectedActivity.id ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200' : 'border-zinc-200 bg-white hover:border-zinc-300'}`}><span className="text-[10px] font-bold text-indigo-600">ACTIVITY {String(index + 1).padStart(2, '0')}</span><p className="mt-1 text-sm font-semibold text-zinc-900">{activity.name}</p><p className="mt-1 text-[11px] text-zinc-500">유관 SKILL {activity.skills.length}개</p></button>)}
-                </div>
-            </div>
-
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4">
-                <div className="mb-3 flex items-center justify-between"><span className="flex items-center gap-1 text-xs font-semibold uppercase text-zinc-500"><Layers className="h-3.5 w-3.5 text-emerald-500" /> 선택한 Activity</span><div className="flex gap-2"><button type="button" onClick={() => setIsEditingActivity((value) => !value)} className="flex items-center gap-1 text-xs text-zinc-600 hover:text-indigo-600"><Edit3 className="h-3 w-3" /> {isEditingActivity ? '완료' : '수정'}</button><button type="button" onClick={deleteActivity} disabled={selectedTask.activities.length <= 1} className="text-xs text-rose-500 disabled:text-zinc-300"><Trash2 className="h-3.5 w-3.5" /></button></div></div>
-                {isEditingActivity ? <><input value={selectedActivity.name} onChange={(event) => updateSelectedActivity((activity) => ({ ...activity, name: event.target.value }))} className="mb-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-900" aria-label="Activity 이름" /><textarea value={selectedActivity.description || ''} onChange={(event) => updateSelectedActivity((activity) => ({ ...activity, description: event.target.value }))} className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-700" rows={2} aria-label="Activity 설명" /></> : <><p className="text-sm font-semibold text-zinc-900">{selectedActivity.name}</p><p className="mt-1 text-xs text-zinc-500">{selectedActivity.description || 'Activity 설명을 입력하세요.'}</p></>}
-
-                <div className="mt-4 border-t border-zinc-200 pt-4"><div className="mb-3 flex items-center justify-between"><p className="text-xs font-semibold uppercase tracking-wider text-zinc-700">이 Activity의 유관 SKILL ({selectedActivity.skills.length})</p><button type="button" onClick={() => setShowAddSkill(true)} className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700"><Plus className="h-3.5 w-3.5" /> SKILL 추가</button></div><div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{selectedActivity.skills.map((skill) => <div key={skill.id} className="flex gap-2 rounded-lg border border-zinc-200 bg-white p-2.5"><div className="min-w-0 flex-1"><input value={skill.name} onChange={(event) => updateSelectedActivity((activity) => ({ ...activity, skills: activity.skills.map((item) => item.id === skill.id ? { ...item, name: event.target.value } : item) }))} className="w-full border-b border-transparent bg-transparent text-xs font-semibold text-zinc-900 hover:border-zinc-300 focus:border-indigo-500 focus:outline-none" /><input value={skill.description || ''} onChange={(event) => updateSelectedActivity((activity) => ({ ...activity, skills: activity.skills.map((item) => item.id === skill.id ? { ...item, description: event.target.value } : item) }))} placeholder="SKILL 설명" className="mt-1 w-full border-b border-transparent bg-transparent text-[11px] text-zinc-500 hover:border-zinc-300 focus:border-indigo-500 focus:outline-none" /></div><button type="button" onClick={() => updateSelectedActivity((activity) => ({ ...activity, skills: activity.skills.filter((item) => item.id !== skill.id) }))} className="self-start p-1 text-zinc-400 hover:text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button></div>)}</div>
-                {showAddSkill && <div className="mt-3 flex flex-col gap-2 rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 sm:flex-row"><input value={newSkillName} onChange={(event) => setNewSkillName(event.target.value)} placeholder="SKILL 이름" className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-900" /><input value={newSkillDesc} onChange={(event) => setNewSkillDesc(event.target.value)} placeholder="SKILL 설명 (선택)" className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-900" /><button type="button" onClick={addSkill} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white">추가</button><button type="button" onClick={() => setShowAddSkill(false)} className="px-2 py-1.5 text-xs text-zinc-600">취소</button></div>}</div>
             </div>
         </div>
-    );
-};
+        <p className="mt-3 text-xs text-zinc-500">Task 전체 생성: {activities.length}개 Activity를 순서대로 반영하며, Activity마다 1개 이상의 Sub Action으로 SOP가 생성됩니다.</p>
+    </section>;
+}

@@ -23,6 +23,7 @@ import { returnSopWorkspaceToSetup } from '@/lib/sop-setup-actions';
 import { SopSidebar } from './SopSidebar';
 import { SopCanvas } from './SopCanvas';
 import { SopStepInspector } from './SopStepInspector';
+import { SopServerSaveControl } from './SopServerSaveControl';
 import { SopStepData } from '@/lib/sop-types';
 import { SOP_REVIEW_STATUS_BADGE_CLASS } from '@/lib/sop-review-status-meta';
 
@@ -262,6 +263,8 @@ export const SopWorkspace: React.FC = () => {
                         <span className="sm:hidden">저장</span>
                     </button>
 
+                    <SopServerSaveControl />
+
                     <button
                         type="button"
                         onClick={handleConfirmSop}
@@ -348,7 +351,7 @@ export const SopWorkspace: React.FC = () => {
                                 {document.member.name} ({document.member.jobRole} / {document.member.organization || '팀'})
                             </div>
                             <div>
-                                <span className="font-semibold text-zinc-900 block">Work Library:</span>
+                                <span className="font-semibold text-zinc-900 block">Task Library:</span>
                                 Task: {document.workLibrary.taskName} | Activity:{' '}
                                 {document.workLibrary.activityName || '전체'}
                             </div>

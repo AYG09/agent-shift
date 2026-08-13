@@ -1,5 +1,12 @@
 import type { SopDocument, SopReviewStatus, SopStepData } from './sop-types';
 import { validateSopGraph } from './graph-validation';
+import {
+    validateSubActionOrigins,
+    formatSubActionOriginErrors,
+    validateSubActionStructure,
+    formatSubActionStructureErrors,
+} from './sop-activity-coverage';
+import { getScopedActivities } from './sop-task-library';
 
 /** Step-level edits/UI updates can only ever produce 'reviewed', never 'confirmed'. */
 export function computeDocumentReviewStatus(steps: SopStepData[]): SopReviewStatus {
@@ -68,6 +75,26 @@ export function validateFullSopConfirmation(doc: SopDocument): { success: true; 
 
     const graphIssues = validateSopGraph(doc.steps, doc.edges);
     graphIssues.forEach((issue) => errors.push(issue.message));
+
+    // Confirm-boundary-only: a newer Activity–Sub Action document must satisfy the full
+    // Sub Action contract before it can claim 'confirmed' — (1) structure: every Sub
+    // Action maps to exactly one in-scope Activity, carries a positive subActionOrder
+    // unique within that Activity, and every scoped Activity is covered; (2) origin:
+    // every Sub Action traces where it came from (Activity 기본 분해 vs 직무 맥락 보강,
+    // the latter with a rationale). Gated on structureVersion so a legacy
+    // (structureVersion-less) document is never retroactively held to either rule.
+    // Deliberately checked here (not at save/draft time) so this single function stays
+    // the one shared confirm authority both confirmFullSop() (client) and
+    // validateSopPersistenceState (server, which calls this function) enforce
+    // identically — the client must never locally "confirm" a document the server
+    // would then reject.
+    if (doc.structureVersion === 'activity-subaction-v1') {
+        const allowedActivityIds = getScopedActivities(doc.workLibrary).map((activity) => activity.id);
+        const structure = validateSubActionStructure(doc.steps, allowedActivityIds);
+        if (!structure.valid) errors.push(...formatSubActionStructureErrors(structure));
+        const originResult = validateSubActionOrigins(doc.steps);
+        if (!originResult.valid) errors.push(...formatSubActionOriginErrors(originResult));
+    }
 
     if (errors.length > 0) {
         return { success: false, errors };

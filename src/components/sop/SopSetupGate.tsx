@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     UserCheck,
@@ -17,14 +17,16 @@ import {
     KeyRound,
 } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
-import { loadSampleSopFromSetup, runSopSetupGeneration } from '@/lib/sop-setup-actions';
+import { enterTaskCreationPath, loadSampleSopFromSetup, runSopSetupGeneration } from '@/lib/sop-setup-actions';
 import { useSopAiSettings } from '@/hooks/useSopAiSettings';
 import { validateSopSetupConfig } from '@/lib/sop-setup-validation';
+import { computeSubActionCapacity } from '@/lib/sop-subaction-capacity';
 import { REASONING_LEVEL_LABELS } from '@/lib/gemini-models';
 import { WorkLibrarySelector } from './WorkLibrarySelector';
 import { SopGenerationSettings } from './SopGenerationSettings';
+import { SopTaskRecommendationPanel } from './SopTaskRecommendationPanel';
+import { SopActivityProposalPanel } from './SopActivityProposalPanel';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
-import type { WorkLibrarySkill } from '@/lib/sop-types';
 
 const CONTEXT_TOPICS = [
     { label: '선행 조건', snippet: '\n[선행 조건]\n- 필수 제출 서류 및 사전에 완료되어야 하는 작업' },
@@ -40,8 +42,8 @@ export const SopSetupGate: React.FC = () => {
     const router = useRouter();
     const {
         memberInfo,
-        setMemberInfo,
         workLibrary,
+        setWorkLibrary,
         context,
         setContext,
         setupConfig,
@@ -55,21 +57,42 @@ export const SopSetupGate: React.FC = () => {
     const [validationError, setValidationError] = useState<string | null>(null);
     const [aiError, setAiError] = useState<string | null>(null);
 
+    // Direct /sop/setup entry (bookmark, refresh, back-button) must normalize the
+    // generation scope exactly like Home's "Task 기반 생성" card click does — this
+    // is the SAME enterTaskCreationPath function, not a second implementation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => enterTaskCreationPath({ workLibrary, setWorkLibrary }), []);
+
     const { apiKey, model, reasoning } = useSopAiSettings();
     const selectedTask = workLibrary.taskCatalog?.find((task) => task.id === workLibrary.taskId);
-    const selectedActivity = selectedTask?.activities.find((activity) => activity.id === workLibrary.activityId);
-    const selectedActivities = workLibrary.sourceType === 'task'
-        ? selectedTask?.activities || []
-        : selectedActivity
-          ? [selectedActivity]
-          : [];
-    const activitiesForGeneration: Array<{ name: string; description?: string; skills: WorkLibrarySkill[] }> = selectedActivities
-        .map((activity) => ({ name: activity.name, description: activity.description, skills: activity.skills }));
+    // 구성원 Task 기반 생성 경로는 항상 Task 전체를 대상으로 한다 — "선택 Activity" 생성
+    // 토글은 이 화면에서 제거되었다(고객 확정: Task 단위 생성이 기본 경로). workLibrary.sourceType이
+    // 과거 세션에서 'activity'로 남아있더라도 이 Gate의 생성 요청은 항상 Task 전체를 사용한다.
+    const selectedActivities = [...(selectedTask?.activities || [])].sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
+    const activitiesForGeneration = selectedActivities
+        .map((activity) => ({ id: activity.id, order: activity.order ?? selectedTask!.activities.indexOf(activity) + 1, name: activity.name, description: activity.description, skills: activity.skills }));
 
     // 워크플로우 구조 설정(4·5번 카드) 오류가 있으면 AI 생성 자체를 막는다 - 서버(app/api/ai/route.ts)도
     // 동일한 validateSopSetupConfig로 같은 조건을 다시 검사하므로, UI 검증만 신뢰하지 않는다.
     const setupConfigIssues = validateSopSetupConfig(setupConfig);
     const hasSetupConfigError = setupConfigIssues.length > 0;
+
+    // Activity–Sub Action 구조는 Activity당 최소 1개의 Sub Action을 요구하므로, 주요 단계 수
+    // 상한이 선택 Task의 Activity 수보다 작으면 AI가 여러 Activity를 하나의 단계로 조용히
+    // 합칠 수밖에 없다(무음 truncation). 반대로 상한을 Activity 수와 동일하게 고정하면 이번엔
+    // Activity당 정확히 1개의 Sub Action만 허용하는 것과 같아져, "한 Activity에 여러 Sub Action
+    // 허용"이라는 계약을 어긴다. computeSubActionCapacity가 최소값과 상한을 분리해 계산한다 -
+    // 생성 요청·프롬프트·후처리 검증이 모두 이 함수가 만든 동일한 값을 사용한다.
+    const activityCount = selectedActivities.length;
+    const capacity = computeSubActionCapacity({
+        activityCount,
+        minSteps: setupConfig.minSteps,
+        maxSteps: setupConfig.maxSteps,
+        maxTotalNodes: setupConfig.maxTotalNodes,
+        detailLevel: setupConfig.detailLevel,
+    });
+    const { minSteps: effectiveMinSteps, maxSteps: effectiveMaxSteps, maxTotalNodes: effectiveMaxTotalNodes } = capacity;
+    const activityCoverageWarning = capacity.explanation;
 
     const handleTopicClick = (snippet: string) => {
         setContext((context ? context.trim() + '\n' : '') + snippet);
@@ -81,19 +104,15 @@ export const SopSetupGate: React.FC = () => {
             return false;
         }
         if (!workLibrary.taskName.trim()) {
-            setValidationError('2. Work Library의 Task를 선택해 주세요.');
+            setValidationError('2. Task Library의 Task를 선택해 주세요.');
             return false;
         }
         if (!selectedTask || selectedTask.name !== workLibrary.taskName) {
-            setValidationError('2. 선택한 Task가 Work Library Data에 존재하지 않습니다. 다시 선택해 주세요.');
+            setValidationError('2. 선택한 Task가 Task Library에 존재하지 않습니다. 다시 선택해 주세요.');
             return false;
         }
-        if (workLibrary.sourceType === 'task' && activitiesForGeneration.length === 0) {
+        if (activitiesForGeneration.length === 0) {
             setValidationError('2. Task 전체 SOP 생성에는 선택한 Task의 Activity가 하나 이상 필요합니다.');
-            return false;
-        }
-        if (workLibrary.sourceType === 'activity' && (!workLibrary.activityId || !workLibrary.activityName?.trim() || !selectedActivity || selectedActivity.name !== workLibrary.activityName)) {
-            setValidationError('2. Activity 단위 SOP 생성 시 Activity명이 필수입니다.');
             return false;
         }
         if (activitiesForGeneration.some((activity) => !activity.name.trim())) {
@@ -105,7 +124,7 @@ export const SopSetupGate: React.FC = () => {
             return false;
         }
         if (!workLibrary.confirmed) {
-            setValidationError('2. Work Library Data 카드에서 "검토 완료 · 확정" 버튼을 클릭해 주세요.');
+            setValidationError('2. Task Library 카드에서 "검토 완료 · 확정" 버튼을 클릭해 주세요.');
             return false;
         }
         if (hasSetupConfigError) {
@@ -135,20 +154,31 @@ export const SopSetupGate: React.FC = () => {
         if (!validateGate()) return;
 
         // Request construction performs the shared Zod validation before any API call.
+        // sourceType is read from workLibrary — the single source of truth for generation
+        // scope (see withTaskScope/enterTaskCreationPath) — never hard-coded as a separate
+        // literal here. The mount effect below normalizes it to 'task' on every entry to
+        // this Gate, so by the time a member can click "AI SOP 생성" it is already 'task';
+        // reading it here (instead of a literal) is what makes that normalization the real
+        // source of truth rather than a redundant no-op. structureVersion stays a Gate-level
+        // constant: this screen is exclusively the Activity–Sub Action creation path.
         await runSopSetupGeneration({
             customerReviewMode,
             requestParams: {
                     memberRole: memberInfo.jobRole,
+                    sourceJobId: workLibrary.sourceJobId || 'legacy-job',
+                    jobName: workLibrary.jobName || memberInfo.jobRole,
+                    taskId: workLibrary.taskId,
                     taskName: workLibrary.taskName,
+                    taskDefinition: selectedTask?.description || '구성원이 정의한 Task',
                     sourceType: workLibrary.sourceType,
-                    activityName: workLibrary.sourceType === 'activity' ? selectedActivity?.name || workLibrary.activityName : undefined,
+                    structureVersion: 'activity-subaction-v1',
                     activities: activitiesForGeneration,
                     skills: workLibrary.skills,
                     context,
                     detailLevel: setupConfig.detailLevel,
-                    minSteps: setupConfig.minSteps,
-                    maxSteps: setupConfig.maxSteps,
-                    maxTotalNodes: setupConfig.maxTotalNodes,
+                    minSteps: effectiveMinSteps,
+                    maxSteps: effectiveMaxSteps,
+                    maxTotalNodes: effectiveMaxTotalNodes,
                     branchPolicy: setupConfig.branchPolicy,
                     maxBranches: setupConfig.maxBranches,
                     allowRework: setupConfig.allowRework,
@@ -158,7 +188,7 @@ export const SopSetupGate: React.FC = () => {
                     model,
                     reasoning,
             },
-            apiParams: { member: memberInfo, workLibrary, context, setupConfig },
+            apiParams: { member: memberInfo, workLibrary, context, setupConfig, structureVersion: 'activity-subaction-v1' },
             setDocument,
             navigate: router.push,
             setIsGenerating,
@@ -290,56 +320,48 @@ export const SopSetupGate: React.FC = () => {
                         <div>
                             <h2 className="text-lg font-semibold text-zinc-900">1. 구성원 정보</h2>
                             <p className="text-xs text-zinc-500">
-                                SOP를 적용하고 검토할 담당 구성원의 인적사항 및 담당 직무를 확인합니다.
+                                프로토타입 로그인으로 식별된 구성원 정보입니다. 실제 인증 연동은 이 범위에 포함하지 않습니다.
                             </p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                         <div>
-                            <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">
-                                구성원 이름 <span className="text-rose-500">*</span>
-                            </label>
-                            <input
-                                type="text"
-                                value={memberInfo.name}
-                                onChange={(e) => setMemberInfo({ name: e.target.value })}
-                                placeholder="예: 김민지"
-                                className="w-full px-3 py-1.5 bg-zinc-50 border border-zinc-300 rounded-lg text-sm font-semibold text-zinc-900 focus:bg-white focus:ring-2 focus:ring-indigo-500"
-                            />
+                            <span className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">사번</span>
+                            <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm font-semibold text-zinc-900">{memberInfo.employeeId || memberInfo.id || '프로토타입 계정'}</p>
                         </div>
 
                         <div>
-                            <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">
-                                담당 직무 <span className="text-rose-500">*</span>
-                            </label>
-                            <input
-                                type="text"
-                                value={memberInfo.jobRole}
-                                onChange={(e) => setMemberInfo({ jobRole: e.target.value })}
-                                placeholder="예: 채용담당자"
-                                className="w-full px-3 py-1.5 bg-zinc-50 border border-zinc-300 rounded-lg text-sm font-semibold text-zinc-900 focus:bg-white focus:ring-2 focus:ring-indigo-500"
-                            />
+                            <span className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">구성원 이름</span>
+                            <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm font-semibold text-zinc-900">{memberInfo.name}</p>
                         </div>
 
                         <div>
-                            <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">
-                                소속 조직 (선택)
-                            </label>
-                            <input
-                                type="text"
-                                value={memberInfo.organization || ''}
-                                onChange={(e) => setMemberInfo({ organization: e.target.value })}
-                                placeholder="예: People & Culture팀"
-                                className="w-full px-3 py-1.5 bg-zinc-50 border border-zinc-300 rounded-lg text-sm font-medium text-zinc-900 focus:bg-white focus:ring-2 focus:ring-indigo-500"
-                            />
+                            <span className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">담당 직무</span>
+                            <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm font-semibold text-zinc-900">{memberInfo.jobRole}</p>
+                        </div>
+                        <div>
+                            <span className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">소속 조직</span>
+                            <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm font-semibold text-zinc-900">{memberInfo.organization || '미지정'}</p>
                         </div>
                     </div>
                 </section>
 
-                {/* 2. Work Library Data Card */}
-                <section className="min-h-0 flex-1 overflow-y-auto pr-1">
+                {/* 2. Task Library Card */}
+                <section className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                    <SopTaskRecommendationPanel />
                     <WorkLibrarySelector />
+                    {workLibrary.taskId && <SopActivityProposalPanel />}
+                    {activityCoverageWarning && (
+                        <p
+                            className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800"
+                            title={activityCoverageWarning}
+                        >
+                            <AlertCircle className="mr-1 inline h-3.5 w-3.5" />
+                            <strong>실제 적용 범위 {effectiveMinSteps}~{effectiveMaxSteps}단계 (노드 상한 {effectiveMaxTotalNodes}개)</strong>
+                            {' '}— Activity {activityCount}개 반영을 위해 자동 확장됨. 자세한 내용은 오른쪽 &apos;워크플로우 구조 설정&apos; 참고 (프로토타입 구현 가정, 마우스를 올리면 전체 설명이 보입니다).
+                        </p>
+                    )}
                 </section>
 
                 </div>
@@ -389,7 +411,7 @@ export const SopSetupGate: React.FC = () => {
 
                 {/* 4. SOP 콘텐츠 수준 & 5. 워크플로우 구조 설정 */}
                 <section>
-                    <SopGenerationSettings />
+                    <SopGenerationSettings activityCount={activityCount} />
                 </section>
                 </aside>
             </main>
@@ -400,11 +422,11 @@ export const SopSetupGate: React.FC = () => {
                     <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
                         {workLibrary.confirmed ? (
                             <span className="flex items-center gap-1 text-emerald-600 font-semibold">
-                                <CheckCircle2 className="w-4 h-4" /> Work Library 검토 완료
+                                <CheckCircle2 className="w-4 h-4" /> Task Library 검토 완료
                             </span>
                         ) : (
                             <span className="flex items-center gap-1 text-amber-600 font-semibold">
-                                <AlertCircle className="w-4 h-4" /> Work Library 검토 · 확정 필요
+                                <AlertCircle className="w-4 h-4" /> Task Library 검토 · 확정 필요
                             </span>
                         )}
                         {hasSetupConfigError && (
@@ -479,10 +501,10 @@ export const SopSetupGate: React.FC = () => {
                             </div>
 
                             <div>
-                                <strong className="text-zinc-900 block mb-1">2. Work Library Selection:</strong>
+                                <strong className="text-zinc-900 block mb-1">2. Task Library 선택:</strong>
                                 <p className="bg-zinc-50 p-2.5 rounded-lg">
-                                    기준: {workLibrary.sourceType === 'task' ? 'Task 전체' : '특정 Activity'} | Task:{' '}
-                                    {workLibrary.taskName} | {workLibrary.sourceType === 'task' ? `Activity ${activitiesForGeneration.length}개 전체` : `Activity: ${activitiesForGeneration[0].name}`} | 상태:{' '}
+                                    기준: Task 전체 | Task:{' '}
+                                    {workLibrary.taskName} | Activity {activitiesForGeneration.length}개 전체 | 상태:{' '}
                                     {workLibrary.confirmed ? '확정됨' : '미확정'}
                                 </p>
                             </div>

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SopRecordUpdateRequestSchema } from '@/lib/sop-record-schema';
-import { SopRecordResponseSchema, SopUpdateConflictResponseSchema } from '@/lib/sop-response-schemas';
+import { SopRecordResponseSchema, SopUpdateConflictResponseSchema, SopLifecycleLockedResponseSchema } from '@/lib/sop-response-schemas';
 import { scopeSopRecordsForActor } from '@/lib/sop-actor';
+import { SOP_LIFECYCLE_STATUS_META } from '@/lib/sop-lifecycle';
 import { sopRepository } from '@/server/sop/sop-repository-memory';
 import { readSopActorContext } from '@/server/sop/sop-actor-context';
 import { respondValidated } from '@/server/sop/sop-response';
@@ -85,6 +86,18 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         }
         if (result.reason === 'not-found') {
             return NextResponse.json({ error: 'SOP 기록을 찾을 수 없습니다.' }, { status: 404 });
+        }
+        if (result.reason === 'locked-lifecycle') {
+            // 'rejected'는 더 이상 이 분기에 도달하지 않는다 — isMemberEditableLifecycleStatus가
+            // 'draft'와 함께 'rejected'도 편집 가능으로 취급하므로, 여기 남는 상태는
+            // leader-review/sme-review/approved뿐이다 (작업 E: 반려된 SOP는 "수정하기"로
+            // 편집 가능한 상태로 되돌아간다).
+            const statusLabel = SOP_LIFECYCLE_STATUS_META[result.current.lifecycleStatus].label;
+            return respondValidated(
+                SopLifecycleLockedResponseSchema,
+                { error: `'${statusLabel}' 상태의 SOP는 내용을 수정할 수 없습니다.`, current: result.current },
+                409
+            );
         }
         // Safe to include `current` here (unlike the POST create-conflict path):
         // the ownership check above already guarantees this requester IS the

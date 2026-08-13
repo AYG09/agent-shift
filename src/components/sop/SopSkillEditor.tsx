@@ -85,7 +85,7 @@ export const SopSkillEditor: React.FC<SopSkillEditorProps> = ({ step }) => {
                                     </span>
                                 ) : (
                                     <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800">
-                                        Work Library
+                                        Task Library
                                     </span>
                                 )}
                                 <span className="text-[9px] font-medium text-zinc-500 uppercase">
@@ -132,7 +132,7 @@ export const SopSkillEditor: React.FC<SopSkillEditorProps> = ({ step }) => {
 
                 {showAddSkill && (
                     <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
-                        <div className="font-semibold text-zinc-900 text-xs">Work Library SKILL에서 선택:</div>
+                        <div className="font-semibold text-zinc-900 text-xs">Task Library SKILL에서 선택:</div>
                         <div className="flex flex-wrap gap-1 mb-2">
                             {workLibrary.skills.map((wsk) => (
                                 <button

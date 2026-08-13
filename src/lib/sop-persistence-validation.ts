@@ -11,6 +11,12 @@ export function validateSopPersistenceState(document: SopDocument): string[] {
     const errors: string[] = [];
 
     if (document.reviewStatus === 'confirmed') {
+        // validateFullSopConfirmation is the single shared confirm authority: it covers
+        // content completeness, review status, AI SKILL handling, graph validity, AND
+        // (for structureVersion 'activity-subaction-v1') the full Sub Action contract —
+        // structure (exactly-one Activity mapping, unique positive subActionOrder,
+        // Activity coverage) and origin tracing. No second, divergent check is kept
+        // here: the server rejects exactly what the client's confirm flow rejects.
         const confirmation = validateFullSopConfirmation(document);
         if (!confirmation.success) errors.push(...confirmation.errors);
         if (document.steps.some((step) => step.reviewStatus !== 'confirmed')) {

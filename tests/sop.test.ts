@@ -1871,6 +1871,7 @@ async function runAsyncTests() {
     const makeRecord = (overrides: Partial<SopRecord>): SopRecord => ({
         id: 'r', memberId: 'm', organizationId: 'o', taskId: 't', taskName: 'T', sourceType: 'task',
         document: SAMPLE_SOP_DOCUMENT, version: 1, createdAt: now, updatedAt: now,
+        lifecycleStatus: 'draft', templateEligible: false, creationSource: 'task',
         ...overrides,
     });
     const multiOrgRecords: SopRecord[] = [
@@ -2471,10 +2472,25 @@ async function runAsyncTests() {
         sourceType: 'task',
         document: envelopeDocument,
         version: 1,
+        lifecycleStatus: 'draft',
+        templateEligible: false,
+        creationSource: 'task',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
     };
     assert(SopRecordSchema.safeParse(envelopeBaseRecord).success, 'Fixture sanity check: a genuinely-consistent record must parse successfully');
+
+    const mismatchedCreationSourceResult = SopRecordSchema.safeParse({ ...envelopeBaseRecord, creationSource: 'own-prior' });
+    assert(!mismatchedCreationSourceResult.success && mismatchedCreationSourceResult.error.issues.some((i) => i.path.join('.') === 'creationSource'), 'A record whose creationSource disagrees with the document-derived value must fail SopRecordSchema');
+
+    const bothSourceIdsResult = SopRecordSchema.safeParse({ ...envelopeBaseRecord, sourceTemplateId: 'tpl-1', sourceRecordId: 'rec-1', document: { ...envelopeDocument, sourceTemplateId: 'tpl-1', sourceRecordId: 'rec-1' } });
+    assert(!bothSourceIdsResult.success && bothSourceIdsResult.error.issues.some((i) => i.path.join('.') === 'sourceRecordId'), 'A record with both sourceTemplateId and sourceRecordId set must fail SopRecordSchema — the two provenance paths are mutually exclusive');
+
+    const rejectionWithoutRejectedStatusResult = SopRecordSchema.safeParse({
+        ...envelopeBaseRecord,
+        rejection: { rejectedAtStage: 'leader-review', reasonCode: 'x', feedback: 'y', reviewedByRole: 'leader', reviewedAt: new Date().toISOString() },
+    });
+    assert(!rejectionWithoutRejectedStatusResult.success && rejectionWithoutRejectedStatusResult.error.issues.some((i) => i.path.join('.') === 'rejection'), "A record carrying rejection metadata while lifecycleStatus !== 'rejected' must fail SopRecordSchema");
 
     const mismatchedIdResult = SopRecordSchema.safeParse({ ...envelopeBaseRecord, id: 'a-totally-different-id' });
     assert(!mismatchedIdResult.success && mismatchedIdResult.error.issues.some((i) => i.path.join('.') === 'id'), 'A record whose id disagrees with document.id must fail SopRecordSchema, with the error pointing at the id field');

@@ -1,4 +1,6 @@
-import { SopDocument, SopMember, WorkLibrarySelection } from './sop-types';
+import { SopDocument, SopMember, SopStepData, SopEdge, SopAgentizationSuggestionType, WorkLibrarySelection } from './sop-types';
+import { createTaskLibrarySelectionForRole, getScopedActivities } from './sop-task-library';
+import { layoutSopGraph } from './sop-layout';
 
 export const SAMPLE_SOP_MEMBER: SopMember = {
     id: 'member-001',
@@ -426,3 +428,196 @@ export const SAMPLE_SOP_DOCUMENT: SopDocument = {
         { id: 'e11-12', source: 'step-11', target: 'step-12', label: '계약 체결' },
     ],
 };
+
+/** Runtime prototype sample; derived from the customer fixture, not the legacy demo fixture above. */
+export const CUSTOMER_SOP_MEMBER: SopMember = {
+    id: 'member-001',
+    employeeId: '50100245-0001',
+    name: '김민지',
+    jobRole: 'Talent Acquisition',
+    organization: 'People & Culture팀',
+};
+
+export const CUSTOMER_WORK_LIBRARY = createTaskLibrarySelectionForRole(CUSTOMER_SOP_MEMBER.jobRole);
+
+const CUSTOMER_SOURCE_ACTIVITIES = getScopedActivities(CUSTOMER_WORK_LIBRARY);
+const CUSTOMER_BUSINESS_STEPS = SAMPLE_SOP_DOCUMENT.steps.filter((step) => !step.terminalType);
+
+export const CUSTOMER_SOP_DOCUMENT: SopDocument = {
+    ...SAMPLE_SOP_DOCUMENT,
+    id: 'sop-sample-talent-acquisition-2026',
+    title: `${CUSTOMER_WORK_LIBRARY.taskName} Standard Operating Procedure`,
+    member: CUSTOMER_SOP_MEMBER,
+    workLibrary: CUSTOMER_WORK_LIBRARY,
+    steps: SAMPLE_SOP_DOCUMENT.steps.map((step) => {
+        if (step.terminalType) return step;
+        const businessIndex = CUSTOMER_BUSINESS_STEPS.findIndex((item) => item.id === step.id);
+        const mapped = CUSTOMER_SOURCE_ACTIVITIES.filter((_, activityIndex) => activityIndex % CUSTOMER_BUSINESS_STEPS.length === businessIndex).map((activity) => activity.id);
+        return { ...step, sourceActivityIds: mapped };
+    }),
+};
+
+/** Keeps the sample workflow usable after a member selects a different fixture Task or Activity. */
+export function mapSampleStepsToWorkLibraryScope(
+    steps: SopDocument['steps'],
+    workLibrary: WorkLibrarySelection,
+): SopDocument['steps'] {
+    const sourceActivities = getScopedActivities(workLibrary);
+    const businessSteps = steps.filter((step) => !step.terminalType);
+
+    return steps.map((step) => {
+        if (step.terminalType) return { ...step, sourceActivityIds: undefined };
+        const businessIndex = businessSteps.findIndex((item) => item.id === step.id);
+        return {
+            ...step,
+            sourceActivityIds: sourceActivities
+                .filter((_, activityIndex) => activityIndex % businessSteps.length === businessIndex)
+                .map((activity) => activity.id),
+        };
+    });
+}
+
+const TASK_GATE_SAMPLE_SUGGESTION_CYCLE: SopAgentizationSuggestionType[] = ['agent-candidate', 'ai-assist', 'not-recommended'];
+
+export type TaskGateSampleResult =
+    | { success: true; document: SopDocument }
+    | { success: false; reason: string };
+
+/**
+ * Builds the "샘플 SOP 데이터로 열기" document for the Task-based member Gate,
+ * generically from whatever Task/Activities are CURRENTLY selected in
+ * `workLibrary` — never the fixed recruitment content above via
+ * `mapSampleStepsToWorkLibraryScope`. That older helper keeps its original
+ * legacy step titles/count and only remaps `sourceActivityIds` by index
+ * modulo, so selecting an unrelated Task (e.g. a Marketing Task) still showed
+ * hardcoded recruitment step titles mapped onto that Task's Activities, and
+ * could assign more than one Activity id to a single step — both violate the
+ * newer Activity–Sub Action contract. `mapSampleStepsToWorkLibraryScope` and
+ * CUSTOMER_SOP_DOCUMENT are intentionally left untouched above: they remain
+ * the legacy-structure fixtures existing migration/coverage tests exercise.
+ *
+ * Every selected Task Activity becomes exactly one Sub Action (order 1) —
+ * satisfying "at least one Sub Action per Activity" without hard-coding a
+ * customer-unconfirmed per-Activity count. Returns `{success:false}` (never a
+ * silently-produced legacy document) only when the selection genuinely has no
+ * Activity data to build from.
+ */
+export function buildTaskGateSampleDocument(params: {
+    id: string;
+    member: SopMember;
+    workLibrary: WorkLibrarySelection;
+    context: string;
+    setupConfig: SopDocument['setupConfig'];
+}): TaskGateSampleResult {
+    const activities = getScopedActivities(params.workLibrary);
+    if (activities.length === 0) {
+        return {
+            success: false,
+            reason: '선택한 Task Library 항목에 Activity 데이터가 없어 샘플 SOP를 만들 수 없습니다. Task Library에서 Activity가 있는 Task를 선택한 뒤 다시 시도해 주세요.',
+        };
+    }
+
+    const now = new Date().toISOString();
+    const startStep: SopStepData = {
+        id: 'sample-start',
+        title: '시작',
+        definition: `${params.workLibrary.taskName} 업무의 시작 지점입니다.`,
+        requiredSkills: [],
+        type: 'terminal',
+        shape: 'terminal',
+        terminalType: 'start',
+        position: { x: 0, y: 0 },
+        reviewStatus: 'ai-draft',
+    };
+    const endStep: SopStepData = {
+        id: 'sample-end',
+        title: '종료',
+        definition: `${params.workLibrary.taskName} 업무의 종료 지점입니다.`,
+        requiredSkills: [],
+        type: 'terminal',
+        shape: 'terminal',
+        terminalType: 'end',
+        position: { x: 0, y: 0 },
+        reviewStatus: 'ai-draft',
+    };
+
+    const businessSteps: SopStepData[] = activities.map((activity, index) => ({
+        id: `sample-sub-${index}`,
+        // A Sub Action title must read as an execution action, not a re-statement of the
+        // Activity group name it belongs to — Activity stays the Sidebar/navigation group
+        // label (see the "Activity별 Sub Action" panel, which shows activity.name as-is);
+        // reusing that same string as the node title made the canvas look like Activity was
+        // duplicated as a process node instead of grouping Sub Actions under it. The customer
+        // has not confirmed any specific Sub Action naming convention, so this is a plain,
+        // deterministic PROTOTYPE PLACEHOLDER pattern (not derived from real AI analysis of
+        // activity.description — that would risk fabricating action detail no one confirmed),
+        // used identically for every Task so no Task-specific wording leaks across Tasks.
+        title: `${activity.name} 수행 및 결과 기록`,
+        definition: `${activity.description || `${activity.name}을(를) 수행합니다.`} 관련 기준에 따라 진행하고 결과를 기록합니다.`,
+        responsibleRole: params.member.jobRole,
+        requiredSkills: [
+            ...activity.skills.map((skill) => ({
+                skillId: skill.id,
+                name: skill.name,
+                requiredLevel: 'basic' as const,
+                reason: 'Task Library 표준 역량',
+                source: 'work-library' as const,
+                accepted: true,
+            })),
+            // 첫 Sub Action에만 미수락 AI 제안 SKILL 예시를 하나 포함한다 - "AI 제안 SKILL
+            // 수락/거절" UI 흐름을 실제 AI 생성 없이도 샘플에서 그대로 확인할 수 있게 한다.
+            ...(index === 0
+                ? [{
+                    name: '추가 역량 제안 (샘플)',
+                    requiredLevel: 'basic' as const,
+                    reason: '(샘플) 예시로 추가된 AI 제안 역량이며 실제 AI 분석 결과가 아닙니다.',
+                    source: 'ai-suggested' as const,
+                    accepted: false,
+                }]
+                : []),
+        ],
+        estimatedDuration: { value: 1, unit: 'days' as const },
+        type: 'process',
+        shape: 'process',
+        sourceActivityIds: [activity.id],
+        subActionOrder: 1,
+        subActionOrigin: 'activity-derived',
+        agentizationSuggestion: {
+            type: TASK_GATE_SAMPLE_SUGGESTION_CYCLE[index % TASK_GATE_SAMPLE_SUGGESTION_CYCLE.length],
+            rationale: `(샘플) ${activity.name}에 대한 예시 제안이며 실제 AI 분석 결과가 아닙니다.`,
+        },
+        position: { x: 0, y: 0 },
+        reviewStatus: 'ai-draft',
+    }));
+
+    const steps: SopStepData[] = [startStep, ...businessSteps, endStep];
+    const edges: SopEdge[] = [];
+    let previousId: string = startStep.id;
+    businessSteps.forEach((step) => {
+        edges.push({ id: `e-${previousId}-${step.id}`, source: previousId, target: step.id, branchType: 'default' });
+        previousId = step.id;
+    });
+    edges.push({ id: `e-${previousId}-${endStep.id}`, source: previousId, target: endStep.id, branchType: 'default' });
+
+    // AI 생성 결과와 동일하게, 좌표는 최종 결과로 신뢰하지 않고 항상 레이아웃 엔진이 다시 계산한다.
+    const layout = layoutSopGraph(steps, edges);
+
+    return {
+        success: true,
+        document: {
+            id: params.id,
+            title: `${params.workLibrary.taskName} Standard Operating Procedure (샘플)`,
+            member: params.member,
+            workLibrary: { ...params.workLibrary, confirmed: true },
+            context: params.context || `${params.workLibrary.taskName} 전체 흐름을 검토하는 샘플 SOP입니다.`,
+            setupConfig: params.setupConfig,
+            steps: layout.steps,
+            edges: layout.edges,
+            reviewStatus: 'ai-draft',
+            createdAt: now,
+            updatedAt: now,
+            isSampleData: true,
+            structureVersion: 'activity-subaction-v1',
+        },
+    };
+}

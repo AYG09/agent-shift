@@ -6,12 +6,17 @@ import { FlowShapeRenderer } from '@/components/flow/FlowShapeRenderer';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { SopStepData } from '@/lib/sop-types';
 import { getSopNodeSize } from '@/lib/sop-node-geometry';
-import { getAgentizationModeForStep, getAgentizationModeMeta } from '@/lib/sop-agentization';
+import { AGENTIZATION_SUGGESTION_META, getAgentizationModeForStep, getAgentizationModeMeta } from '@/lib/sop-agentization';
 import { CheckCircle2, Clock } from 'lucide-react';
 
 export const SopStepNode = memo(({ data, selected }: NodeProps) => {
     const step = data.step as SopStepData;
     const stepNumber = (data.index as number) || 1;
+    const highlightedByActivity = Boolean(data.highlightedByActivity);
+    // Resolved once per document build in sop-canvas-utils.ts (buildActivityOrderLookup) —
+    // this node never parses step.sourceActivityIds[0] itself (a normalized Activity id is
+    // a stable identifier, not an ordinal) and never subscribes to the Store just for this.
+    const activityBadgeOrder = data.activityBadgeOrder as number | 'unmapped' | undefined;
 
     const selectStep = useSopPrototypeStore((state) => state.selectStep);
     const document = useSopPrototypeStore((state) => state.document);
@@ -28,6 +33,8 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
 
     const strokeColor = selected
         ? '#4f46e5'
+        : highlightedByActivity
+        ? '#8b5cf6'
         : isConfirmed
         ? '#10b981'
         : isReviewed
@@ -36,6 +43,8 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
 
     const fillColor = selected
         ? '#f5f3ff'
+        : highlightedByActivity
+        ? '#faf5ff'
         : isConfirmed
         ? '#f0fdf4'
         : isReviewed
@@ -100,6 +109,15 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
                     {agentizationMeta.shortLabel}
                 </span>
             )}
+            {!step.terminalType && step.sourceActivityIds?.length ? (
+                <span
+                    className={`pointer-events-none absolute right-2 top-[-11px] z-20 rounded border px-1.5 py-0.5 text-[9px] font-bold shadow-sm ${activityBadgeOrder === 'unmapped' ? 'border-amber-200 bg-white text-amber-700' : 'border-violet-200 bg-white text-violet-700'}`}
+                    title={`Task Library Activity ${step.sourceActivityIds.join(', ')}${step.subActionOrder !== undefined ? ` · Sub Action #${step.subActionOrder}` : ''}`}
+                >
+                    {activityBadgeOrder === 'unmapped' ? 'Activity 미매핑' : `A${String(activityBadgeOrder ?? 0).padStart(2, '0')}`}
+                    {step.subActionOrder !== undefined ? ` · #${step.subActionOrder}` : step.sourceActivityIds.length > 1 ? ` +${step.sourceActivityIds.length - 1}` : ''}
+                </span>
+            ) : null}
 
             {/* Inner Content overlay */}
             <div className="absolute inset-0 p-3 flex flex-col justify-center text-center items-center overflow-hidden z-10">
@@ -131,7 +149,12 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
                         )}
                     </div>
                     <p className="text-xs text-zinc-200 mb-2 leading-relaxed">{step.definition}</p>
-                    {agentizationMeta && <p className="mb-2 text-[10px] font-semibold text-indigo-200">AI 적용 방식: {agentizationMeta.label}</p>}
+                    {agentizationMeta && <p className="mb-1 text-[10px] font-semibold text-indigo-200">구성원 확정: {agentizationMeta.label}</p>}
+                    {step.agentizationSuggestion && (
+                        <p className="mb-2 text-[10px] font-semibold text-violet-200">
+                            {AGENTIZATION_SUGGESTION_META[step.agentizationSuggestion.type].label}
+                        </p>
+                    )}
                     {step.requiredSkills.length > 0 && (
                         <div>
                             <span className="text-[10px] font-semibold text-zinc-400 block mb-1">요구 SKILL:</span>

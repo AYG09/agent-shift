@@ -12,9 +12,35 @@ function isLegacyDefaultHandlePair(sourceHandle?: string, targetHandle?: string)
     return (!sourceHandle && !targetHandle) || (sourceHandle === 'bottom' && targetHandle === 'top-target');
 }
 
-export function buildSopNodes(doc: SopDocument | null, selectedStepId: string | null): Node[] {
+/**
+ * Resolves each selected Task's Activity id to its catalog `order` ONCE per
+ * document build, so SopStepNode never has to parse an id string (a
+ * normalized Activity id is a stable identifier/hash, not an ordinal — slicing
+ * its last path segment could show a wildly wrong number) and never has to
+ * subscribe to the whole Store itself just to look this up per node.
+ */
+function buildActivityOrderLookup(doc: SopDocument): Map<string, number> {
+    const task = doc.workLibrary.taskCatalog.find((item) => item.id === doc.workLibrary.taskId);
+    const lookup = new Map<string, number>();
+    (task?.activities ?? []).forEach((activity, index) => {
+        lookup.set(activity.id, activity.order ?? index + 1);
+    });
+    return lookup;
+}
+
+/** `'unmapped'` means the step DOES reference an Activity id, but that id no longer resolves in the current catalog — a real fallback, never a fabricated ordinal. */
+export type SopNodeActivityBadgeData = number | 'unmapped' | undefined;
+
+function resolveActivityBadge(step: { sourceActivityIds?: string[] }, activityOrderLookup: Map<string, number>): SopNodeActivityBadgeData {
+    const primaryId = step.sourceActivityIds?.[0];
+    if (!primaryId) return undefined;
+    const order = activityOrderLookup.get(primaryId);
+    return order !== undefined ? order : 'unmapped';
+}
+
+export function buildSopNodes(doc: SopDocument | null, selectedStepId: string | null, selectedSourceActivityId: string | null = null): Node[] {
     if (!doc) return [];
-    return syncSopCanvasNodes(doc, selectedStepId, []);
+    return syncSopCanvasNodes(doc, selectedStepId, [], selectedSourceActivityId);
 }
 
 /**
@@ -25,7 +51,8 @@ export function buildSopNodes(doc: SopDocument | null, selectedStepId: string | 
  * 유지하는 병합 로직(prevNodes)을 컴포넌트 밖으로 뺐다 - 이전에는 이 병합 로직이
  * useEffect 안에만 있어서 buildSopNodes()만 호출하는 테스트로는 검증할 수 없었다.
  */
-export function syncSopCanvasNodes(doc: SopDocument, selectedStepId: string | null, prevNodes: Node[]): Node[] {
+export function syncSopCanvasNodes(doc: SopDocument, selectedStepId: string | null, prevNodes: Node[], selectedSourceActivityId: string | null = null): Node[] {
+    const activityOrderLookup = buildActivityOrderLookup(doc);
     return doc.steps.map((step, idx) => {
         const existing = prevNodes.find((n) => n.id === step.id);
         const posX = existing && existing.dragging ? existing.position.x : (step.position?.x ?? idx * 240 + 100);
@@ -38,6 +65,8 @@ export function syncSopCanvasNodes(doc: SopDocument, selectedStepId: string | nu
             data: {
                 step,
                 index: idx + 1,
+                highlightedByActivity: Boolean(selectedSourceActivityId && step.sourceActivityIds?.includes(selectedSourceActivityId)),
+                activityBadgeOrder: resolveActivityBadge(step, activityOrderLookup),
             },
             selected: step.id === selectedStepId,
             // 노드는 React Flow의 키보드/UI 삭제(Backspace 등)로 직접 지울 수 없다 - Store와

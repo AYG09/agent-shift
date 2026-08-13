@@ -38,6 +38,7 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
     const document = useSopPrototypeStore((state) => state.document);
     const selectedStepId = useSopPrototypeStore((state) => state.selectedStepId);
     const selectedEdgeId = useSopPrototypeStore((state) => state.selectedEdgeId);
+    const selectedSourceActivityId = useSopPrototypeStore((state) => state.selectedSourceActivityId);
     const readOnly = useSopPrototypeStore((state) => state.customerReviewMode);
     const selectStep = useSopPrototypeStore((state) => state.selectStep);
     const selectEdge = useSopPrototypeStore((state) => state.selectEdge);
@@ -47,7 +48,7 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
     const updateEdge = useSopPrototypeStore((state) => state.updateEdge);
     const [connectionNotice, setConnectionNotice] = React.useState<string | null>(null);
 
-    const initialNodes = useMemo(() => buildSopNodes(document, selectedStepId), [document, selectedStepId]);
+    const initialNodes = useMemo(() => buildSopNodes(document, selectedStepId, selectedSourceActivityId), [document, selectedStepId, selectedSourceActivityId]);
     const initialEdges = useMemo(() => buildSopEdges(document, selectedEdgeId, showBranchLabels), [document, selectedEdgeId, showBranchLabels]);
 
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -65,8 +66,8 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
     // Synchronize store updates into React Flow state
     useEffect(() => {
         if (!document) return;
-        setNodes((prevNodes) => syncSopCanvasNodes(document, selectedStepId, prevNodes));
-    }, [document, selectedStepId, setNodes]);
+        setNodes((prevNodes) => syncSopCanvasNodes(document, selectedStepId, prevNodes, selectedSourceActivityId));
+    }, [document, selectedStepId, selectedSourceActivityId, setNodes]);
 
     useEffect(() => {
         if (!document) return;
@@ -274,8 +275,16 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
                 edgesReconnectable={!readOnly}
                 elementsSelectable
                 deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
+                // fitViewOptions.minZoom floors the AUTOMATIC initial "fit everything"
+                // zoom so a 12-15+ node SOP never opens too small to read step titles
+                // (a Task Gate with many Activities routinely produces 15+ Sub Action
+                // nodes) — the interactive minZoom prop below stays the true floor for
+                // manual zoom-out/the Controls "fit view" button, so a member can still
+                // explicitly zoom out further to see the whole flow at once; this only
+                // changes what happens on first load. No node content-detail display is
+                // reintroduced — titles just stay legible at the zoom the canvas opens at.
                 fitView
-                fitViewOptions={{ padding: 0.2 }}
+                fitViewOptions={{ padding: 0.2, minZoom: 0.7 }}
                 minZoom={0.2}
                 maxZoom={1.8}
             >

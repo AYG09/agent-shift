@@ -85,11 +85,15 @@ export async function GET(request: NextRequest) {
 
     // Each role's scope is resolved by calling the repository operation that
     // is itself scoped to exactly that role's contract — member's own SOPs,
-    // leader's own organization, HR's every organization — rather than
-    // fetching a broad set and filtering it after the fact.
+    // leader/SME's own organization, HR's every organization — rather than
+    // fetching a broad set and filtering it after the fact. This generic
+    // listing is NOT the leader/SME review queue (see GET /api/sop/approvals,
+    // backed by listByLifecycleStage + sop-review-assignment.ts) — a leader/
+    // SME actor calling this endpoint only sees their own organization's
+    // records, same minimal-privilege default as before 'sme' existed.
     const records = actor.role === 'member'
         ? await sopRepository.listByMember(actor.actorId)
-        : actor.role === 'leader'
+        : actor.role === 'leader' || actor.role === 'sme'
         ? await sopRepository.listByOrganization(actor.organizationId)
         : await sopRepository.listAll();
 

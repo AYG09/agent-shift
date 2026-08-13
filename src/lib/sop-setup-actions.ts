@@ -1,6 +1,7 @@
 import { buildSopGenerationRequestBody, type SopGenerationRequestBodyParams } from './sop-ai-request';
 import { generateSopViaApi, type GenerateSopViaApiParams, type GenerateSopViaApiResult } from './sop-ai-generation';
-import type { SopDocument } from './sop-types';
+import { withTaskScope } from './sop-task-library';
+import type { SopDocument, WorkLibrarySelection } from './sop-types';
 
 type Navigate = (href: string) => void;
 
@@ -29,6 +30,26 @@ export function returnSopWorkspaceToSetup(params: {
     params.navigate('/sop/setup');
 }
 
+/**
+ * The ONLY entry point for the Task-based creation path — Home's "Task 기반
+ * 생성" card click and a direct `/sop/setup` navigation both call this exact
+ * function, so the Store's generation-scope source of truth
+ * (`workLibrary.sourceType`) can never be left stale (e.g. 'activity' from an
+ * old persisted session) when a member is actually on the Task path. A no-op
+ * when already task-scoped, so calling it redundantly from both entry points
+ * is harmless — see `withTaskScope`'s docstring for why `sourceType` is never
+ * hard-coded as a separate literal anywhere else (AI request, sample
+ * generation) once this has run.
+ */
+export function enterTaskCreationPath(params: {
+    workLibrary: WorkLibrarySelection;
+    setWorkLibrary: (patch: Partial<WorkLibrarySelection>) => void;
+}): void {
+    const normalized = withTaskScope(params.workLibrary);
+    if (normalized === params.workLibrary) return;
+    params.setWorkLibrary(normalized);
+}
+
 /** Handles the Setup Gate sample action without navigating after a blocked replacement. */
 export function loadSampleSopFromSetup(params: {
     customerReviewMode: boolean;
@@ -39,7 +60,10 @@ export function loadSampleSopFromSetup(params: {
         return { success: false, channel: 'validation', message: CUSTOMER_REVIEW_GENERATION_ERROR };
     }
     if (!params.generateFromSample()) {
-        return { success: false, channel: 'validation', message: '샘플 SOP를 적용하지 못했습니다. 현재 문서 상태를 확인한 뒤 다시 시도해 주세요.' };
+        // customerReviewMode is already handled above, so the remaining realistic cause is
+        // the selected Task Library entry having no Activity data to build a sample from
+        // (see buildTaskGateSampleDocument) — never silently produced as a legacy document.
+        return { success: false, channel: 'validation', message: '샘플 SOP를 적용하지 못했습니다. 선택한 Task Library 항목에 Activity 데이터가 있는지, 현재 문서 상태가 잠겨 있지는 않은지 확인한 뒤 다시 시도해 주세요.' };
     }
     params.navigate('/sop/workspace');
     return { success: true };

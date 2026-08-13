@@ -38,3 +38,75 @@ export const SopUpdateConflictResponseSchema = z.object({
     error: z.string(),
     current: SopRecordSchema,
 });
+
+/**
+ * PUT /api/sop/[id] rejection because the record's lifecycleStatus is not
+ * 'draft' (approval-requested/approved/rejected). Same ownership-already-
+ * verified reasoning as SopUpdateConflictResponseSchema, so `current` is safe
+ * to echo back here too.
+ */
+export const SopLifecycleLockedResponseSchema = z.object({
+    error: z.string(),
+    current: SopRecordSchema,
+});
+
+const SopOrganizationProgressSchema = z.object({
+    organizationId: z.string(),
+    rosterMemberCount: z.number().int().nonnegative(),
+    participatingRosterMemberCount: z.number().int().nonnegative(),
+    recordCount: z.number().int().nonnegative(),
+    approvalRate: z.object({
+        approvedCount: z.number().int().nonnegative(),
+        submittedCount: z.number().int().nonnegative(),
+        rate: z.number().min(0).max(1).nullable(),
+    }),
+});
+
+/** GET /api/sop/approvals — the role-scoped, filtered Inbox queue plus organization progress computed from the SAME (role-scoped, pre-filter) record set. */
+export const SopApprovalQueueResponseSchema = z.object({
+    records: z.array(SopRecordSchema),
+    organizationProgress: z.array(SopOrganizationProgressSchema),
+});
+
+const SopLifecycleDistributionSchema = z.object({
+    draft: z.number().int().nonnegative(),
+    'leader-review': z.number().int().nonnegative(),
+    'sme-review': z.number().int().nonnegative(),
+    approved: z.number().int().nonnegative(),
+    rejected: z.number().int().nonnegative(),
+});
+
+const SopApprovalRateSchema = z.object({
+    approvedCount: z.number().int().nonnegative(),
+    submittedCount: z.number().int().nonnegative(),
+    rate: z.number().min(0).max(1).nullable(),
+});
+
+const SopTopTaskSchema = z.object({ taskId: z.string(), taskName: z.string(), recordCount: z.number().int().nonnegative() });
+
+const SopAgentizationEvidenceSchema = z.object({
+    taskId: z.string(),
+    taskName: z.string(),
+    modeCounts: z.object({ automation: z.number().int().nonnegative(), assist: z.number().int().nonnegative() }),
+});
+
+const SopStandardCandidateGroupSchema = z.object({
+    taskId: z.string(),
+    taskName: z.string(),
+    recordCount: z.number().int().nonnegative(),
+    organizationCount: z.number().int().nonnegative(),
+    lastUpdatedAt: z.string(),
+    sourceRecordIds: z.array(z.string()),
+});
+
+/** GET /api/sop/analytics — HR-only. `records` is the exact filtered detail-row set the export endpoint must reproduce. */
+export const SopAnalyticsResponseSchema = z.object({
+    records: z.array(SopRecordSchema),
+    participatingMemberCount: z.number().int().nonnegative(),
+    recordCount: z.number().int().nonnegative(),
+    lifecycleDistribution: SopLifecycleDistributionSchema,
+    approvalRate: SopApprovalRateSchema,
+    topTasks: z.array(SopTopTaskSchema),
+    agentizationEvidence: z.array(SopAgentizationEvidenceSchema),
+    standardCandidates: z.array(SopStandardCandidateGroupSchema),
+});

@@ -8,6 +8,7 @@ import { SopEdgeInspector } from './SopEdgeInspector';
 import { SopStepCoreEditor } from './SopStepCoreEditor';
 import { SopSkillEditor } from './SopSkillEditor';
 import { SopExecutionEditor } from './SopExecutionEditor';
+import { SopActivityMappingEditor } from './SopActivityMappingEditor';
 
 /**
  * Routes to the right editing surface for the current selection: the Agent화
@@ -46,6 +47,7 @@ export const SopStepInspector: React.FC = () => {
     return (
         <div className="h-full flex flex-col bg-white border-l border-zinc-200 overflow-y-auto">
             <SopStepCoreEditor step={step} stepIndex={stepIndex} allSteps={document.steps} onOpenAgentization={openAgentization}>
+                <SopActivityMappingEditor step={step} />
                 <SopSkillEditor step={step} />
                 <SopExecutionEditor step={step} />
             </SopStepCoreEditor>

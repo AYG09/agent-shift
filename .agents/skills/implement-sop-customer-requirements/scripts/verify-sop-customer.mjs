@@ -2,7 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const finalMode = process.argv.includes('--final');
+const scenarioFinalMode = process.argv.includes('--scenario-final');
+const finalMode = process.argv.includes('--final') || scenarioFinalMode;
 const repoRoot = process.cwd();
 const workOrderBase = '799f5d4';
 const failures = [];
@@ -39,7 +40,13 @@ try {
 }
 
 const forbiddenPrefixes = ['src/app/flow/', 'src/components/flow/'];
+const forbiddenFiles = new Set([
+  'tests/flow-branches.test.ts',
+  'tests/flow-shapes.test.ts',
+  'tests/terminal-node.test.tsx',
+]);
 const forbidden = changedFiles.filter((file) => forbiddenPrefixes.some((prefix) => file.startsWith(prefix)));
+forbidden.push(...changedFiles.filter((file) => forbiddenFiles.has(file)));
 if (forbidden.length > 0) failures.push(`/flow 보호 경로가 변경되었습니다: ${forbidden.join(', ')}`);
 
 const sensitiveFiles = new Set([
@@ -51,11 +58,15 @@ const sensitiveFiles = new Set([
 const sensitive = changedFiles.filter((file) => sensitiveFiles.has(file));
 if (sensitive.length > 0) warnings.push(`공유 고위험 파일 변경을 수동 검토하십시오: ${sensitive.join(', ')}`);
 
-const workbookLeak = changedFiles.filter((file) => file.endsWith('SOP 작성 및 분석 플랫폼_답변 회신.xlsx'));
-if (workbookLeak.length > 0) failures.push(`고객 원본 Excel이 저장소 변경에 포함되었습니다: ${workbookLeak.join(', ')}`);
+const customerSourceNames = [
+  'SOP 작성 및 분석 플랫폼_답변 회신.xlsx',
+  'SOP시스템 시나리오.docx',
+];
+const sourceLeaks = changedFiles.filter((file) => customerSourceNames.some((name) => file.endsWith(name)));
+if (sourceLeaks.length > 0) failures.push(`고객 원본 파일이 저장소 변경에 포함되었습니다: ${sourceLeaks.join(', ')}`);
 try {
-  const trackedWorkbook = lines(git(['ls-files'])).map(normalized).filter((file) => file.endsWith('SOP 작성 및 분석 플랫폼_답변 회신.xlsx'));
-  if (trackedWorkbook.length > 0) failures.push(`고객 원본 Excel이 Git에서 추적되고 있습니다: ${trackedWorkbook.join(', ')}`);
+  const trackedSources = lines(git(['ls-files'])).map(normalized).filter((file) => customerSourceNames.some((name) => file.endsWith(name)));
+  if (trackedSources.length > 0) failures.push(`고객 원본 파일이 Git에서 추적되고 있습니다: ${trackedSources.join(', ')}`);
 } catch (error) {
   failures.push(`Git 추적 파일을 확인하지 못했습니다: ${error instanceof Error ? error.message : String(error)}`);
 }
@@ -68,8 +79,65 @@ if (!existsSync(packagePath)) {
   for (const scriptName of ['lint', 'test:sop', 'test:sop-demo', 'build']) {
     if (!pkg.scripts?.[scriptName]) failures.push(`필수 npm script가 없습니다: ${scriptName}`);
   }
-  if (finalMode && !String(pkg.scripts?.['test:sop'] || '').includes('tests/sop-task-library.test.ts')) {
-    failures.push('최종 모드에서는 tests/sop-task-library.test.ts가 npm run test:sop에 포함되어야 합니다.');
+  const sopTestScript = String(pkg.scripts?.['test:sop'] || '');
+  const requiredSopTests = [
+    'tests/sop-task-library.test.ts',
+    'tests/sop-member-home.test.ts',
+    'tests/sop-subaction-agentization.test.ts',
+  ];
+  for (const testFile of requiredSopTests) {
+    if (finalMode && !sopTestScript.includes(testFile)) {
+      failures.push(`최종 모드에서는 ${testFile}가 npm run test:sop에 포함되어야 합니다.`);
+    }
+  }
+
+  if (scenarioFinalMode) {
+    const requiredScenarioTests = [
+      'tests/sop-customer-scenario.test.ts',
+      'tests/sop-approval-flow.test.ts',
+      'tests/sop-hr-analytics.test.ts',
+    ];
+    for (const testFile of requiredScenarioTests) {
+      if (!existsSync(resolve(repoRoot, testFile))) failures.push(`최종 시나리오 실행 테스트가 없습니다: ${testFile}`);
+      if (!sopTestScript.includes(testFile)) failures.push(`최종 시나리오 모드에서는 ${testFile}가 npm run test:sop에 포함되어야 합니다.`);
+    }
+  }
+}
+
+const requiredInstructionArtifacts = [
+  ['GEMINI.md', 'Gemini/Antigravity 저장소 지침'],
+  ['SOP_FINAL_CUSTOMER_SCENARIO_WORK_ORDER.md', '최종 고객 시나리오 작업지시서'],
+  ['.agents/skills/implement-sop-customer-requirements/references/final-system-scenario-contract.md', '최종 시나리오 기능 계약'],
+  ['.agents/skills/implement-sop-customer-requirements/references/subaction-semantics-contract.md', 'Sub Action 의미 계약'],
+];
+for (const [path, label] of requiredInstructionArtifacts) {
+  if (!existsSync(resolve(repoRoot, path))) failures.push(`${label}가 없습니다: ${path}`);
+}
+
+const followupWorkOrderPath = resolve(repoRoot, 'SOP_MEMBER_HOME_SUBACTION_AGENTIZATION_WORK_ORDER.md');
+if (!existsSync(followupWorkOrderPath)) {
+  failures.push('구성원 Home/Activity–Sub Action 작업지시서를 찾을 수 없습니다.');
+}
+
+const followupArtifacts = [
+  ['src/app/sop/page.tsx', '구성원 Home route'],
+  ['tests/sop-member-home.test.ts', '구성원 Home/lifecycle 실행 테스트'],
+  ['tests/sop-subaction-agentization.test.ts', 'Activity–Sub Action/Agentization 실행 테스트'],
+];
+for (const [path, label] of followupArtifacts) {
+  if (existsSync(resolve(repoRoot, path))) continue;
+  const message = `${label}가 아직 없습니다: ${path}`;
+  if (finalMode) failures.push(message);
+  else warnings.push(`${message} (사전 점검에서는 허용)`);
+}
+
+if (scenarioFinalMode) {
+  const scenarioArtifacts = [
+    ['src/app/sop/approvals/page.tsx', '직책자/SME 승인 inbox route'],
+    ['src/app/sop/hr/page.tsx', 'HR 대시보드 route'],
+  ];
+  for (const [path, label] of scenarioArtifacts) {
+    if (!existsSync(resolve(repoRoot, path))) failures.push(`${label}가 없습니다: ${path}`);
   }
 }
 
@@ -168,7 +236,7 @@ if (!existsSync(fixturePath)) {
   }
 }
 
-console.log(`SOP customer guard (${finalMode ? 'final' : 'preflight'})`);
+console.log(`SOP customer guard (${scenarioFinalMode ? 'scenario-final' : finalMode ? 'final' : 'preflight'})`);
 console.log(`Changed files inspected: ${changedFiles.length}`);
 for (const warning of warnings) console.warn(`[WARN] ${warning}`);
 for (const failure of failures) console.error(`[FAIL] ${failure}`);

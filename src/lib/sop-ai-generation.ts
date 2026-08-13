@@ -8,6 +8,8 @@ export interface GenerateSopViaApiParams {
     context: string;
     setupConfig: SopSetupConfig;
     fetchImpl?: typeof fetch;
+    /** Must match the same field sent inside `requestBody` — see buildSopGenerationRequestBody. */
+    structureVersion?: 'activity-subaction-v1';
 }
 
 export type GenerateSopViaApiResult =
@@ -49,6 +51,7 @@ export async function generateSopViaApi(params: GenerateSopViaApiParams): Promis
             context: params.context,
             setupConfig: params.setupConfig,
             isSampleData: false,
+            structureVersion: params.structureVersion,
         });
 
         return { success: true, document };

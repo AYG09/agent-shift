@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { SopDocumentSchema } from './sop-document-schema';
+import { SopRecordLifecycleStatusSchema, SopRejectionSchema } from './sop-lifecycle';
+import { resolveCreationSource } from './sop-types';
 
 export { SopDocumentSchema };
 
@@ -24,6 +26,23 @@ export const SopRecordSchema = z.object({
     version: z.number().int().positive(),
     reviewDecision: z.enum(['approved', 'changes-requested']).optional(),
     reviewComment: z.string().optional(),
+    /** Approval workflow status — see sop-lifecycle.ts. Defaults to 'draft' for every newly created record. */
+    lifecycleStatus: SopRecordLifecycleStatusSchema.default('draft'),
+    /** Leader/HR-only flag (no member-facing write path) marking this approved record eligible as a colleague template. */
+    templateEligible: z.boolean().default(false),
+    /** Set once, at creation, when this record originated from cloning another member's template. Never re-derived. */
+    sourceTemplateId: z.string().optional(),
+    /** Set once, at creation, when this record originated from cloning the same member's own prior record. Never set together with sourceTemplateId; never re-derived. */
+    sourceRecordId: z.string().optional(),
+    /** Denormalized from document.creationSource (via resolveCreationSource) for cheap listing — see the superRefine consistency check below. */
+    creationSource: z.enum(['task', 'colleague-template', 'own-prior']),
+    /**
+     * Latest rejection decision only — no audit array. Present exactly when
+     * lifecycleStatus === 'rejected'; cleared (undefined) the moment a
+     * resubmission succeeds. See sop-lifecycle.ts's computeSopLifecycleTransition,
+     * the only writer of this field.
+     */
+    rejection: SopRejectionSchema.optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
 })
@@ -63,6 +82,21 @@ export const SopRecordSchema = z.object({
         }
         if (val.document.member.id !== undefined && val.memberId !== val.document.member.id) {
             ctx.addIssue({ code: 'custom', path: ['memberId'], message: 'record.memberId와 document.member.id가 일치하지 않습니다.' });
+        }
+        if (val.sourceTemplateId !== val.document.sourceTemplateId) {
+            ctx.addIssue({ code: 'custom', path: ['sourceTemplateId'], message: 'record.sourceTemplateId가 document.sourceTemplateId와 일치하지 않습니다.' });
+        }
+        if (val.sourceRecordId !== val.document.sourceRecordId) {
+            ctx.addIssue({ code: 'custom', path: ['sourceRecordId'], message: 'record.sourceRecordId가 document.sourceRecordId와 일치하지 않습니다.' });
+        }
+        if (val.sourceTemplateId && val.sourceRecordId) {
+            ctx.addIssue({ code: 'custom', path: ['sourceRecordId'], message: 'sourceTemplateId와 sourceRecordId는 동시에 설정될 수 없습니다.' });
+        }
+        if (val.creationSource !== resolveCreationSource(val.document)) {
+            ctx.addIssue({ code: 'custom', path: ['creationSource'], message: 'record.creationSource가 document로부터 도출된 creationSource와 일치하지 않습니다.' });
+        }
+        if (val.rejection && val.lifecycleStatus !== 'rejected') {
+            ctx.addIssue({ code: 'custom', path: ['rejection'], message: "rejection은 lifecycleStatus가 'rejected'일 때만 존재할 수 있습니다." });
         }
     });
 

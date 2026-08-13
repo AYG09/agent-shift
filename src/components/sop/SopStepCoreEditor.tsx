@@ -24,6 +24,7 @@ interface SopStepCoreEditorProps {
  */
 export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, stepIndex, allSteps, onOpenAgentization, children }) => {
     const readOnly = useSopPrototypeStore((s) => s.customerReviewMode);
+    const isSubActionStructure = useSopPrototypeStore((s) => s.document?.structureVersion === 'activity-subaction-v1');
     const selectStep = useSopPrototypeStore((s) => s.selectStep);
     const updateStep = useSopPrototypeStore((s) => s.updateStep);
     const updateStepReviewStatus = useSopPrototypeStore((s) => s.updateStepReviewStatus);
@@ -75,6 +76,19 @@ export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, step
         const result = duplicateStep(step.id);
         if (!result.success) {
             setStructureNotice(result.reason || '이 단계를 복제할 수 없습니다.');
+        }
+    };
+
+    // Explicit member choice, never a silent default — an unset origin blocks SOP
+    // confirmation (validateFullSopConfirmation), so a manually-added or AI-generated step
+    // missing this must stay visibly "미지정" until the member picks one. Switching AWAY
+    // from context-derived clears the rationale in the SAME patch so a stale rationale can
+    // never survive under activity-derived (that combination itself fails confirmation).
+    const handleOriginChange = (value: '' | 'activity-derived' | 'context-derived') => {
+        if (value === 'context-derived') {
+            updateStep(step.id, { subActionOrigin: 'context-derived' });
+        } else {
+            updateStep(step.id, { subActionOrigin: value === 'activity-derived' ? 'activity-derived' : undefined, subActionOriginRationale: undefined });
         }
     };
 
@@ -159,6 +173,38 @@ export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, step
                         className="w-full p-2.5 bg-zinc-50 border border-zinc-300 rounded-xl text-xs text-zinc-900 leading-relaxed focus:bg-white focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                     />
                 </div>
+
+                {!isTerminalStep && isSubActionStructure && (
+                    <div className={`rounded-xl border px-3 py-2.5 ${step.subActionOrigin === 'context-derived' ? 'border-violet-200 bg-violet-50' : step.subActionOrigin === 'activity-derived' ? 'border-zinc-200 bg-zinc-50' : 'border-rose-200 bg-rose-50'}`}>
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <label className="text-[11px] font-semibold text-zinc-800" htmlFor={`sub-action-origin-${step.id}`}>Sub Action 생성 근거</label>
+                            {!step.subActionOrigin && (
+                                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">미지정 · SOP 확정 차단</span>
+                            )}
+                        </div>
+                        <select
+                            id={`sub-action-origin-${step.id}`}
+                            value={step.subActionOrigin ?? ''}
+                            onChange={(e) => handleOriginChange(e.target.value as '' | 'activity-derived' | 'context-derived')}
+                            disabled={readOnly}
+                            className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-900 focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <option value="">미지정</option>
+                            <option value="activity-derived">Activity 기본 분해</option>
+                            <option value="context-derived">직무 맥락 보강</option>
+                        </select>
+                        {step.subActionOrigin === 'context-derived' && (
+                            <textarea
+                                value={step.subActionOriginRationale ?? ''}
+                                onChange={(e) => updateStep(step.id, { subActionOriginRationale: e.target.value })}
+                                disabled={readOnly}
+                                rows={2}
+                                placeholder="직무 맥락에서 이 Sub Action을 추가한 구체적인 근거를 입력하세요 (필수 — 비어 있으면 SOP를 확정할 수 없습니다)."
+                                className="mt-1.5 w-full rounded-lg border border-violet-300 bg-white px-2.5 py-1.5 text-[11px] leading-relaxed text-zinc-900 focus:ring-2 focus:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                        )}
+                    </div>
+                )}
 
                 {/* Shape Selection */}
                 <div>

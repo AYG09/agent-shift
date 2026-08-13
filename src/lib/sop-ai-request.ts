@@ -9,12 +9,14 @@ import { SOP_DETAIL_LEVELS, SOP_BRANCH_POLICIES, validateSopSetupConfig, type So
  * is rejected with a 400 before any model call — never trusted as a loosely-typed request body.
  */
 const SopSkillRefSchema = z.object({
-    id: z.string().optional(),
+    id: z.string().min(1).optional(),
     name: z.string().min(1),
     description: z.string().optional(),
 });
 
 const SopActivityRefSchema = z.object({
+    id: z.string().min(1).optional(),
+    order: z.number().int().positive().optional(),
     name: z.string().min(1),
     description: z.string().optional(),
     skills: z.array(SopSkillRefSchema),
@@ -24,12 +26,23 @@ export const SopGenerationRequestSchema = z
     .object({
         action: z.literal('generateSop'),
         memberRole: z.string().min(1),
+        sourceJobId: z.string().min(1).optional(),
+        jobName: z.string().min(1).optional(),
+        taskId: z.string().min(1).optional(),
         taskName: z.string().min(1),
+        taskDefinition: z.string().min(1).optional(),
         sourceType: z.enum(['task', 'activity']),
         activityName: z.string().optional(),
         activities: z.array(SopActivityRefSchema).min(1),
         skills: z.array(SopSkillRefSchema),
         context: z.string(),
+        /**
+         * Requests the newer Activity–Sub Action document shape: every non-terminal
+         * step maps to exactly one Activity with an explicit Sub Action order, plus
+         * a per-step AI Agent化 suggestion. Only valid for Task-wide scope — a single
+         * selected Activity has no "coverage across Activities" to structure.
+         */
+        structureVersion: z.literal('activity-subaction-v1').optional(),
         detailLevel: z.enum(SOP_DETAIL_LEVELS),
         minSteps: z.number().int(),
         maxSteps: z.number().int(),
@@ -49,6 +62,17 @@ export const SopGenerationRequestSchema = z
     .superRefine((val, ctx) => {
         if (val.sourceType === 'task' && val.activityName !== undefined) {
             ctx.addIssue({ code: 'custom', path: ['activityName'], message: 'Task-scoped SOP requests cannot include activityName.' });
+        }
+        const newTaskLibraryFields = [val.sourceJobId, val.jobName, val.taskId, val.taskDefinition];
+        if (newTaskLibraryFields.some((field) => field !== undefined) && newTaskLibraryFields.some((field) => !field?.trim())) {
+            ctx.addIssue({ code: 'custom', path: ['taskId'], message: 'Task Library generation requests must include Job, Task ID, and Task definition together.' });
+        }
+        const hasActivityIds = val.activities.some((activity) => activity.id !== undefined || activity.order !== undefined);
+        if (hasActivityIds && val.activities.some((activity) => !activity.id || !activity.order || activity.skills.some((skill) => !skill.id))) {
+            ctx.addIssue({ code: 'custom', path: ['activities'], message: 'Task Library Activity requests must include id, order, and Skill ids for every Activity.' });
+        }
+        if (val.structureVersion === 'activity-subaction-v1' && val.sourceType !== 'task') {
+            ctx.addIssue({ code: 'custom', path: ['structureVersion'], message: 'Activity–Sub Action generation requires Task-wide scope (sourceType: "task").' });
         }
         if (val.sourceType === 'activity') {
             if (!val.activityName?.trim()) {
@@ -82,10 +106,17 @@ export type SopGenerationRequest = z.infer<typeof SopGenerationRequestSchema>;
  */
 export interface SopGenerationRequestBodyParams {
     memberRole: string;
+    sourceJobId?: string;
+    jobName?: string;
+    taskId?: string;
     taskName: string;
+    taskDefinition?: string;
     sourceType: 'task' | 'activity';
+    structureVersion?: 'activity-subaction-v1';
     activityName?: string;
     activities: Array<{
+        id?: string;
+        order?: number;
         name: string;
         description?: string;
         skills: Array<{ id?: string; name: string; description?: string }>;
@@ -110,8 +141,13 @@ export function buildSopGenerationRequestBody(params: SopGenerationRequestBodyPa
     const request = {
         action: 'generateSop' as const,
         memberRole: params.memberRole,
+        ...(params.sourceJobId ? { sourceJobId: params.sourceJobId } : {}),
+        ...(params.jobName ? { jobName: params.jobName } : {}),
+        ...(params.taskId ? { taskId: params.taskId } : {}),
         taskName: params.taskName,
+        ...(params.taskDefinition ? { taskDefinition: params.taskDefinition } : {}),
         sourceType: params.sourceType,
+        ...(params.structureVersion ? { structureVersion: params.structureVersion } : {}),
         ...(params.activityName !== undefined ? { activityName: params.activityName } : {}),
         activities: params.activities,
         skills: params.skills,

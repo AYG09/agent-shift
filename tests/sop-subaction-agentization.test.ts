@@ -1,0 +1,927 @@
+import React from 'react';
+import TestRenderer, { act } from 'react-test-renderer';
+import {
+    validateSubActionStructure,
+    formatSubActionStructureErrors,
+} from '../src/lib/sop-activity-coverage';
+import { SopStepAiSchema } from '../src/lib/sop-schemas';
+import { SopAgentizationSuggestionSchema } from '../src/lib/sop-step-common-schema';
+import { SopDocumentSchema } from '../src/lib/sop-document-schema';
+import { createSopDocumentFromGeneration } from '../src/lib/sop-normalizer';
+import { runSopGenerationPostProcessing } from '../src/server/sop/sop-generation-runner';
+import {
+    AI_APPLICATION_MODES,
+    AGENTIZATION_SUGGESTION_META,
+    getAgentizationModeForStep,
+    mapSuggestionToApplicationMode,
+} from '../src/lib/sop-agentization';
+import { buildSopNodes } from '../src/lib/sop-canvas-utils';
+import { useSopPrototypeStore } from '../src/lib/sop-prototype-store';
+import { SopAgentizationPanel } from '../src/components/sop/SopAgentizationPanel';
+import { toSopTemplateSummary, SopTemplateSummarySchema } from '../src/lib/sop-template';
+import { sopRepository } from '../src/server/sop/sop-repository-memory';
+import { GET as sopTemplatesGet } from '../src/app/api/sop/templates/route';
+import { POST as sopTemplateClonePost } from '../src/app/api/sop/templates/[id]/clone/route';
+import { SAMPLE_SOP_DOCUMENT, SAMPLE_WORK_LIBRARY, buildTaskGateSampleDocument } from '../src/lib/sop-sample-data';
+import { computeSubActionCapacity } from '../src/lib/sop-subaction-capacity';
+import { validateSopFull, hasBlockingSopIssues } from '../src/lib/graph-validation';
+import { SOP_TASK_LIBRARY_FIXTURE, createWorkLibrarySelection, getScopedActivities, createTaskLibrarySelectionForRole } from '../src/lib/sop-task-library';
+import type { SopDocument, SopStepData } from '../src/lib/sop-types';
+import type { SopGenerationRequest } from '../src/lib/sop-ai-request';
+import { getSopPrompt } from '../src/server/sop/sop-prompt';
+import { validateFullSopConfirmation } from '../src/lib/sop-review';
+import { validateSopPersistenceState } from '../src/lib/sop-persistence-validation';
+import { POST as sopApiCreateForOrigin } from '../src/app/api/sop/route';
+import { PUT as sopApiUpdateForOrigin } from '../src/app/api/sop/[id]/route';
+
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+console.log('=== SOP Activity–Sub Action / Agentization suggestion / colleague-template regression tests ===');
+let passed = 0;
+
+function check(condition: boolean, message: string) {
+    if (!condition) throw new Error(`FAILED: ${message}`);
+    passed++;
+    console.log(`✓ ${message}`);
+}
+
+function fakeApiRequest(headers: Record<string, string>, body?: unknown) {
+    return { headers: new Headers(headers), json: async () => body } as unknown as Parameters<typeof sopTemplateClonePost>[0];
+}
+
+function memberHeaders(actorId: string, organizationId = 'org-sub-test') {
+    return { 'x-sop-actor-id': actorId, 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': organizationId };
+}
+
+function renderComponent(element: React.ReactElement): TestRenderer.ReactTestRenderer {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    act(() => {
+        renderer = TestRenderer.create(element);
+    });
+    return renderer;
+}
+
+async function run() {
+    const activities = SAMPLE_WORK_LIBRARY.taskCatalog[0].activities;
+    check(activities.length >= 3, 'Fixture sanity check: the sample Task exposes at least 3 Activities to build Sub Action coverage cases from');
+    const [actA, actB, actC] = activities;
+    const allowedIds = activities.map((a) => a.id);
+
+    // ---------------------------------------------------------
+    // Activity–Sub Action coverage validation (pure domain function)
+    // ---------------------------------------------------------
+    console.log('validateSubActionStructure...');
+
+    const validSteps = activities.map((activity, index) => ({
+        id: `sub-${index}`,
+        terminalType: undefined,
+        sourceActivityIds: [activity.id],
+        subActionOrder: 1,
+    }));
+    const validResult = validateSubActionStructure(validSteps, allowedIds);
+    check(validResult.valid, 'One Sub Action per Activity, each with exactly one source Activity id and a positive order, is valid');
+    check(validResult.missingIds.length === 0, 'Every allowed Activity id is covered by at least one Sub Action');
+
+    const multiActivitySteps = [
+        { id: 's1', sourceActivityIds: [actA.id, actB.id], subActionOrder: 1 },
+        ...activities.slice(2).map((a, i) => ({ id: `s-rest-${i}`, sourceActivityIds: [a.id], subActionOrder: 1 })),
+    ];
+    const multiResult = validateSubActionStructure(multiActivitySteps, allowedIds);
+    check(!multiResult.valid && multiResult.multiActivityStepIds.includes('s1'), 'A Sub Action mapped to more than one Activity id is rejected (exactly one required)');
+
+    const unknownIdSteps = [
+        { id: 's1', sourceActivityIds: ['not-a-real-activity-id'], subActionOrder: 1 },
+        ...activities.map((a, i) => ({ id: `s${i + 2}`, sourceActivityIds: [a.id], subActionOrder: 1 })),
+    ];
+    const unknownResult = validateSubActionStructure(unknownIdSteps, allowedIds);
+    check(!unknownResult.valid && unknownResult.unknownIds.includes('not-a-real-activity-id'), 'An unknown/cross-Task Activity id is rejected');
+
+    const missingCoverageSteps = activities.slice(1).map((a, i) => ({ id: `s${i}`, sourceActivityIds: [a.id], subActionOrder: 1 }));
+    const missingResult = validateSubActionStructure(missingCoverageSteps, allowedIds);
+    check(!missingResult.valid && missingResult.missingIds.includes(actA.id), 'An Activity with zero Sub Actions is reported as missing coverage');
+
+    const duplicateOrderSteps = [
+        { id: 's1', sourceActivityIds: [actA.id], subActionOrder: 1 },
+        { id: 's2', sourceActivityIds: [actA.id], subActionOrder: 1 },
+        ...activities.slice(1).map((a, i) => ({ id: `s-rest2-${i}`, sourceActivityIds: [a.id], subActionOrder: 1 })),
+    ];
+    const duplicateResult = validateSubActionStructure(duplicateOrderSteps, allowedIds);
+    check(!duplicateResult.valid && duplicateResult.duplicateOrderActivityIds.includes(actA.id), 'Two Sub Actions sharing the same order within one Activity are rejected');
+    check(formatSubActionStructureErrors(duplicateResult).some((m) => m.includes('순서')), 'Duplicate Sub Action order produces a human-readable Korean error message');
+
+    // ---------------------------------------------------------
+    // Terminal steps never carry Activity mapping / Sub Action order / AI suggestion
+    // ---------------------------------------------------------
+    console.log('Terminal exclusion...');
+
+    const terminalWithMapping = SopStepAiSchema.safeParse({
+        id: 't1', title: '시작', definition: '시작 단계입니다.', shape: 'terminal', terminalType: 'start',
+        sourceActivityIds: [actA.id],
+    });
+    check(!terminalWithMapping.success, 'SopStepAiSchema rejects a terminal step carrying sourceActivityIds');
+
+    const terminalWithOrder = SopStepAiSchema.safeParse({
+        id: 't2', title: '종료', definition: '종료 단계입니다.', shape: 'terminal', terminalType: 'end',
+        subActionOrder: 1,
+    });
+    check(!terminalWithOrder.success, 'SopStepAiSchema rejects a terminal step carrying subActionOrder');
+
+    const terminalWithSuggestion = SopStepAiSchema.safeParse({
+        id: 't3', title: '시작', definition: '시작 단계입니다.', shape: 'terminal', terminalType: 'start',
+        agentizationSuggestion: { type: 'agent-candidate', rationale: 'x' },
+    });
+    check(!terminalWithSuggestion.success, 'SopStepAiSchema rejects a terminal step carrying an agentizationSuggestion');
+
+    const businessStepWithAllThree = SopStepAiSchema.safeParse({
+        id: 'b1', title: '업무', definition: '업무 수행 단계입니다.', shape: 'process',
+        sourceActivityIds: [actA.id], subActionOrder: 1, agentizationSuggestion: { type: 'ai-assist', rationale: '반복 작업' },
+    });
+    check(businessStepWithAllThree.success, 'A non-terminal step MAY carry sourceActivityIds + subActionOrder + agentizationSuggestion together');
+
+    const activityDerivedStep = SopStepAiSchema.safeParse({
+        id: 'origin-a', title: '우선순위 설정', definition: '근거에 따라 우선순위를 설정합니다.', shape: 'process',
+        sourceActivityIds: [actA.id], subActionOrder: 1, subActionOrigin: 'activity-derived',
+    });
+    check(activityDerivedStep.success && activityDerivedStep.data.subActionOrigin === 'activity-derived', 'AI response schema preserves an Activity-derived Sub Action origin');
+
+    const contextDerivedWithoutRationale = SopStepAiSchema.safeParse({
+        id: 'origin-bad', title: '추가 기준 확인', definition: '구성원 맥락에 따른 추가 기준을 확인합니다.', shape: 'process',
+        sourceActivityIds: [actA.id], subActionOrder: 2, subActionOrigin: 'context-derived',
+    });
+    check(!contextDerivedWithoutRationale.success, 'A context-derived Sub Action without a rationale is rejected');
+
+    const contextDerivedStep = SopStepAiSchema.safeParse({
+        id: 'origin-context', title: '추가 기준 확인', definition: '구성원 맥락에 따른 추가 기준을 확인합니다.', shape: 'process',
+        sourceActivityIds: [actA.id], subActionOrder: 2, subActionOrigin: 'context-derived',
+        subActionOriginRationale: '구성원이 입력한 해외 고객 승인 조건을 반영한 추가 단계입니다.',
+    });
+    check(contextDerivedStep.success && Boolean(contextDerivedStep.data.subActionOriginRationale?.includes('해외 고객')), 'A context-derived Sub Action preserves its member-context rationale');
+
+    const terminalWithOrigin = SopStepAiSchema.safeParse({
+        id: 'origin-terminal', title: '시작', definition: '업무를 시작하는 단계입니다.', shape: 'terminal', terminalType: 'start',
+        subActionOrigin: 'activity-derived',
+    });
+    check(!terminalWithOrigin.success, 'A terminal step cannot carry Sub Action origin metadata');
+
+    // ---------------------------------------------------------
+    // Customer semantics: action-only nodes, dependency-aware parallelism, no pseudo gateways
+    // ---------------------------------------------------------
+    console.log('Sub Action semantic generation contract...');
+
+    const semanticPrompt = getSopPrompt({
+        taskName: '제품 포트폴리오 최적화',
+        sourceType: 'task',
+        structureVersion: 'activity-subaction-v1',
+        splitComplexSteps: false,
+        activities: [{
+            id: actA.id,
+            name: actA.name,
+            description: '수요 예측 및 갭 분석 결과를 바탕으로 중장기 제품 믹스 및 개발 우선순위를 설정하여 포트폴리오 최적화 안을 도출함',
+        }],
+        context: '제품 믹스와 개발 우선순위는 서로 독립적으로 검토할 수 있습니다.',
+    });
+    check(semanticPrompt.includes('실행 행동, 입력/이전 결과, 산출물, 목적/조건, 흐름 제어'), 'Activity clauses are classified before graph construction');
+    check(semanticPrompt.includes('입력/이전 결과는 inputs') && semanticPrompt.includes('실행 결과물은 outputs'), 'Inputs and outputs are explicitly stored as data instead of pseudo-nodes');
+    check(semanticPrompt.includes('실행 행동이 없는 순수 fork/join gateway'), 'Pure fork/join connectors are explicitly excluded from Sub Action and Agentization counts');
+    check(semanticPrompt.includes('수요 예측 및 갭 분석 결과') && semanticPrompt.includes('고객사 공급 조건 협상'), 'Both customer sentence examples are embedded in the generation contract');
+    check(semanticPrompt.includes("subActionOrigin: 'activity-derived'") && semanticPrompt.includes("subActionOrigin: 'context-derived'"), 'The prompt distinguishes Activity baseline decomposition from member-context augmentation');
+    check(semanticPrompt.includes('의미 단위로 분리'), 'Activity–Sub Action generation keeps semantic decomposition mandatory even when the legacy split toggle is false');
+
+    const portfolioReferenceSteps = [
+        { id: 'mix', title: '중장기 제품 믹스 설정', inputs: ['수요 예측 및 갭 분석 결과'], outputs: ['제품 믹스안'] },
+        { id: 'priority', title: '개발 우선순위 설정', inputs: ['수요 예측 및 갭 분석 결과'], outputs: ['개발 우선순위안'] },
+        { id: 'optimize', title: '포트폴리오 최적화안 도출', inputs: ['제품 믹스안', '개발 우선순위안'], outputs: ['포트폴리오 최적화안'] },
+    ];
+    const portfolioReferenceEdges = [
+        { source: 'mix', target: 'optimize' },
+        { source: 'priority', target: 'optimize' },
+    ];
+    check(portfolioReferenceSteps.length === 3 && portfolioReferenceEdges.filter((edge) => edge.target === 'optimize').length === 2, 'The independently executable product-mix and priority actions converge directly into optimization without fork/join pseudo-nodes');
+    check(!portfolioReferenceSteps.some((step) => step.title === '수요 예측 및 갭 분석 결과'), 'The prior Activity result remains an input and never becomes a Sub Action node');
+
+    const negotiationReferenceSteps = [
+        { title: '고객사 공급 조건 협상', outputs: ['합의된 공급 조건'] },
+        { title: '비즈니스 계약 추진', inputs: ['합의된 공급 조건'], outputs: ['샘플 공급 및 초기 물량 확보 조건을 포함한 계약안'] },
+    ];
+    check(negotiationReferenceSteps.length === 2, 'The negotiation sentence yields two executable actions, not separate purpose/output pseudo-nodes');
+    check(!negotiationReferenceSteps.some((step) => step.title === '샘플 공급' || step.title === '초기 물량 확보'), 'Sample supply and initial-volume securing remain contract outputs unless execution is independently in scope');
+
+    const persistedTerminalWithMapping = SopDocumentSchema.safeParse({
+        ...SAMPLE_SOP_DOCUMENT,
+        steps: SAMPLE_SOP_DOCUMENT.steps.map((s) => (s.terminalType ? { ...s, sourceActivityIds: [actA.id] } : s)),
+    });
+    check(!persistedTerminalWithMapping.success, 'The persisted-document schema also rejects a terminal step carrying an Activity mapping, not just the AI generation schema');
+
+    // ---------------------------------------------------------
+    // AI suggestion schema: type/rationale required, no confidence field survives parsing
+    // ---------------------------------------------------------
+    console.log('Agentization suggestion schema...');
+
+    check(SopAgentizationSuggestionSchema.safeParse({ type: 'agent-candidate', rationale: '규칙이 명확함' }).success, 'A well-formed suggestion (valid type + non-empty rationale) parses successfully');
+    check(!SopAgentizationSuggestionSchema.safeParse({ type: 'agent-candidate', rationale: '' }).success, 'An empty rationale is rejected');
+    check(!SopAgentizationSuggestionSchema.safeParse({ type: 'super-confident', rationale: 'x' }).success, 'An invalid suggestion type is rejected');
+
+    const parsedWithConfidence = SopAgentizationSuggestionSchema.safeParse({ type: 'ai-assist', rationale: 'x', confidence: 0.97, probability: 0.97 });
+    check(parsedWithConfidence.success, 'A response that also hallucinates confidence/probability still parses (extra keys are simply not part of the contract)');
+    check(
+        !('confidence' in (parsedWithConfidence as { data: object }).data) && !('probability' in (parsedWithConfidence as { data: object }).data),
+        'confidence/probability are not part of the parsed suggestion — the contract never carries an uncalibrated score through'
+    );
+
+    check(AI_APPLICATION_MODES.length === 2 && AI_APPLICATION_MODES.every((m) => m.id === 'automation' || m.id === 'assist'), 'SopAiApplicationMode (member-confirmed mode) still has exactly two values — no separate human-only mode was reintroduced');
+    check(mapSuggestionToApplicationMode('agent-candidate') === 'automation', `'agent-candidate' suggestion maps to the 'automation' member-mode pre-fill`);
+    check(mapSuggestionToApplicationMode('ai-assist') === 'assist', `'ai-assist' suggestion maps to the 'assist' member-mode pre-fill`);
+    check(mapSuggestionToApplicationMode('not-recommended') === undefined, `'not-recommended' suggestion maps to unset (human-performed) — it has no member-mode analog`);
+
+    // ---------------------------------------------------------
+    // Normalizer: an AI suggestion never becomes a member confirmation
+    // ---------------------------------------------------------
+    console.log('createSopDocumentFromGeneration: AI suggestion vs member confirmation...');
+
+    const rawGenerationResponse = {
+        title: 'Sub Action SOP',
+        steps: [
+            { id: 'start', title: '시작', definition: '시작 단계입니다.', shape: 'terminal', terminalType: 'start' },
+            ...activities.map((activity, index) => ({
+                id: `sub-${index}`,
+                title: `${activity.name} 수행`,
+                definition: `${activity.name}을(를) 기준에 따라 수행하고 결과를 남깁니다.`,
+                shape: 'process',
+                sourceActivityIds: [activity.id],
+                subActionOrder: 1,
+                agentizationSuggestion: { type: index % 2 === 0 ? 'agent-candidate' : 'not-recommended', rationale: `${activity.name}에 대한 AI 제안 근거` },
+            })),
+            { id: 'end', title: '종료', definition: '종료 단계입니다.', shape: 'terminal', terminalType: 'end' },
+        ],
+        edges: [
+            { id: 'e0', source: 'start', target: 'sub-0' },
+            ...activities.slice(1).map((_, i) => ({ id: `e${i + 1}`, source: `sub-${i}`, target: `sub-${i + 1}` })),
+            { id: `e-last`, source: `sub-${activities.length - 1}`, target: 'end' },
+        ],
+    };
+
+    const generatedDocument = createSopDocumentFromGeneration({
+        rawResponse: rawGenerationResponse,
+        member: SAMPLE_SOP_DOCUMENT.member,
+        workLibrary: SAMPLE_WORK_LIBRARY,
+        context: '테스트 맥락',
+        setupConfig: SAMPLE_SOP_DOCUMENT.setupConfig!,
+        structureVersion: 'activity-subaction-v1',
+    });
+
+    check(generatedDocument.structureVersion === 'activity-subaction-v1', 'The normalized document carries the requested structureVersion discriminator');
+    const businessSteps = generatedDocument.steps.filter((s) => !s.terminalType);
+    check(businessSteps.every((s) => s.subActionOrder !== undefined), 'Every non-terminal generated step carries a subActionOrder');
+    check(businessSteps.every((s) => s.sourceActivityIds?.length === 1), 'Every non-terminal generated step maps to exactly one source Activity id');
+    check(businessSteps.every((s) => Boolean(s.agentizationSuggestion)), 'Every non-terminal generated step carries an AI agentizationSuggestion');
+    check(generatedDocument.agentizationReview === undefined, 'A freshly generated document has NO member agentizationReview at all — the AI suggestion never pre-populates it');
+    for (const step of businessSteps) {
+        check(getAgentizationModeForStep(generatedDocument, step.id) === undefined, `[${step.id}] getAgentizationModeForStep reads undefined even though an AI suggestion exists — a suggestion is never read as if it were the member's confirmed mode`);
+    }
+
+    // ---------------------------------------------------------
+    // Different Sub Actions retain independent member modes; confirmation requires ALL selected
+    // ---------------------------------------------------------
+    console.log('Member Agentization judgement stays independent per Sub Action...');
+    useSopPrototypeStore.getState().resetStore();
+    useSopPrototypeStore.setState({ document: generatedDocument, customerReviewMode: false });
+    useSopPrototypeStore.getState().setAgentizationScope('workflow');
+    const [firstBusiness, secondBusiness] = businessSteps;
+    useSopPrototypeStore.getState().setAgentizationStepMode(firstBusiness.id, 'automation');
+    useSopPrototypeStore.getState().setAgentizationStepMode(secondBusiness.id, 'assist');
+    const docAfterModes = useSopPrototypeStore.getState().document!;
+    check(
+        getAgentizationModeForStep(docAfterModes, firstBusiness.id) === 'automation' && getAgentizationModeForStep(docAfterModes, secondBusiness.id) === 'assist',
+        'Two different Sub Actions independently retain automation vs assist without overwriting each other'
+    );
+
+    // ---------------------------------------------------------
+    // Content-meaning changes invalidate a confirmed Agentization review
+    // ---------------------------------------------------------
+    console.log('Meaningful edits invalidate Agentization confirmation...');
+    for (const step of businessSteps) {
+        if (getAgentizationModeForStep(useSopPrototypeStore.getState().document!, step.id) === undefined) {
+            useSopPrototypeStore.getState().setAgentizationStepMode(step.id, 'assist');
+        }
+    }
+    const confirmResult = useSopPrototypeStore.getState().confirmAgentization();
+    check(confirmResult.success, `Agent화 검토 확정 must succeed once every selected step has a mode, got: ${confirmResult.message}`);
+    check(Boolean(useSopPrototypeStore.getState().document!.agentizationReview?.confirmedAt), 'confirmedAt is set after a successful confirmation');
+
+    const otherActivityId = actB.id === firstBusiness.sourceActivityIds?.[0] ? actC.id : actB.id;
+    useSopPrototypeStore.getState().setStepSourceActivities(firstBusiness.id, [otherActivityId]);
+    check(!useSopPrototypeStore.getState().document!.agentizationReview?.confirmedAt, 'Moving a Sub Action to a different Activity clears the previously confirmed Agentization review');
+
+    // Customer review mode blocks every Agentization mutation.
+    useSopPrototypeStore.setState({ customerReviewMode: true });
+    const modeBeforeReadOnlyAttempt = getAgentizationModeForStep(useSopPrototypeStore.getState().document!, secondBusiness.id);
+    useSopPrototypeStore.getState().setAgentizationStepMode(secondBusiness.id, undefined);
+    check(getAgentizationModeForStep(useSopPrototypeStore.getState().document!, secondBusiness.id) === modeBeforeReadOnlyAttempt, 'Customer review mode blocks Agentization mutations at the Store level, not just in the UI');
+    useSopPrototypeStore.setState({ customerReviewMode: false });
+
+    // ---------------------------------------------------------
+    // AI suggestion badge and member-confirmed badge are visually distinguishable in the panel
+    // ---------------------------------------------------------
+    console.log('SopAgentizationPanel renders suggestion and confirmation distinctly...');
+    useSopPrototypeStore.setState({
+        document: { ...generatedDocument, agentizationReview: { scope: 'workflow', stepIds: [], stepModes: {}, note: '' } },
+        customerReviewMode: false,
+    });
+    const panelRenderer = renderComponent(React.createElement(SopAgentizationPanel, { onBack: () => {} }));
+    const panelText = JSON.stringify(panelRenderer.toJSON());
+    const candidateStep = businessSteps.find((s) => s.agentizationSuggestion?.type === 'agent-candidate')!;
+    check(panelText.includes(AGENTIZATION_SUGGESTION_META['agent-candidate'].label), 'The panel renders the AI-suggestion label distinctly from the member-mode "지정됨"/"확정됨" labels');
+    check(panelText.includes(candidateStep.agentizationSuggestion!.rationale), "The panel renders the AI suggestion's rationale text");
+    act(() => {
+        panelRenderer.unmount();
+    });
+
+    // ---------------------------------------------------------
+    // Canvas highlight: selecting an Activity highlights only that Activity's Sub Action nodes
+    // ---------------------------------------------------------
+    console.log('buildSopNodes: Activity selection highlights only its own Sub Action nodes...');
+    const nodesHighlighted = buildSopNodes(generatedDocument, null, firstBusiness.id === undefined ? null : otherActivityId);
+    const highlightedIds = nodesHighlighted.filter((n) => (n.data as { highlightedByActivity?: boolean }).highlightedByActivity).map((n) => n.id);
+    const expectedHighlighted = generatedDocument.steps.filter((s) => s.sourceActivityIds?.includes(otherActivityId)).map((s) => s.id);
+    check(
+        highlightedIds.length === expectedHighlighted.length && expectedHighlighted.every((id) => highlightedIds.includes(id)),
+        'Selecting an Activity highlights exactly the Sub Action nodes mapped to that Activity, and no others'
+    );
+
+    // ---------------------------------------------------------
+    // Code review defect 8: SopStepNode's Activity badge shows the catalog Activity.order,
+    // never a fragment parsed out of the (stable-identifier, not ordinal) Activity id string.
+    // ---------------------------------------------------------
+    console.log('buildSopNodes: Activity badge resolves catalog order, never a parsed id fragment...');
+    const badgeWorkLibrary = {
+        ...SAMPLE_WORK_LIBRARY,
+        taskCatalog: [{
+            ...SAMPLE_WORK_LIBRARY.taskCatalog[0],
+            id: SAMPLE_WORK_LIBRARY.taskId,
+            activities: [
+                { id: 'act-9f8e7d6c5b4a3210', order: 3, name: '해시 형태 ID Activity', description: '', skills: [] },
+                { id: 'act-aaaa1111', order: 1, name: '첫 Activity', description: '', skills: [] },
+            ],
+        }],
+    };
+    const badgeStep = {
+        id: 'badge-step', title: '뱃지 테스트 단계', definition: 'x', requiredSkills: [],
+        shape: 'process' as const, position: { x: 0, y: 0 }, reviewStatus: 'ai-draft' as const,
+        sourceActivityIds: ['act-9f8e7d6c5b4a3210'], subActionOrder: 1,
+    };
+    const badgeDocument: SopDocument = { ...generatedDocument, workLibrary: badgeWorkLibrary, steps: [badgeStep] };
+    const badgeNodes = buildSopNodes(badgeDocument, null, null);
+    const badgeNodeData = badgeNodes[0].data as { activityBadgeOrder?: number | 'unmapped' };
+    check(badgeNodeData.activityBadgeOrder === 3, 'A hash-like Activity id with catalog order=3 resolves to badge order 3 (A03), not a fragment of the id string');
+    check(String(badgeNodeData.activityBadgeOrder) !== '9f8e7d6c5b4a3210' && !String(badgeNodeData.activityBadgeOrder).includes('9f8e'), "The id string's tail never leaks into the resolved badge value");
+
+    const badgeStepMoved = { ...badgeStep, sourceActivityIds: ['act-aaaa1111'] };
+    const badgeDocumentAfterChange: SopDocument = { ...badgeDocument, steps: [badgeStepMoved] };
+    const badgeNodesAfterChange = buildSopNodes(badgeDocumentAfterChange, null, null);
+    check(
+        (badgeNodesAfterChange[0].data as { activityBadgeOrder?: number | 'unmapped' }).activityBadgeOrder === 1,
+        'After moving the Sub Action to a different Activity, the badge recomputes to that Activity\'s own order (1), not the previous one'
+    );
+
+    const badgeStepUnmapped = { ...badgeStep, sourceActivityIds: ['act-does-not-exist-in-catalog'] };
+    const badgeDocumentUnmapped: SopDocument = { ...badgeDocument, steps: [badgeStepUnmapped] };
+    const badgeNodesUnmapped = buildSopNodes(badgeDocumentUnmapped, null, null);
+    check(
+        (badgeNodesUnmapped[0].data as { activityBadgeOrder?: number | 'unmapped' }).activityBadgeOrder === 'unmapped',
+        'A Sub Action referencing an Activity id absent from the current catalog resolves to an explicit "unmapped" fallback, never a fabricated ordinal'
+    );
+
+    // ---------------------------------------------------------
+    // Generation-time repair: an unrepaired Sub Action coverage failure never reaches the Store (400, no silent pass-through)
+    // ---------------------------------------------------------
+    console.log('runSopGenerationPostProcessing: unrepaired Sub Action coverage fails with 400...');
+    const brokenObject = {
+        title: '깨진 SOP',
+        steps: [
+            { id: 'start', title: '시작', definition: '시작 단계의 상세 정의입니다.', shape: 'terminal', terminalType: 'start' },
+            { id: 'work', title: '작업', definition: '작업을 수행하는 단계입니다.', shape: 'process', sourceActivityIds: ['not-a-real-activity'], subActionOrder: 1 },
+            { id: 'end', title: '종료', definition: '종료 단계의 상세 정의입니다.', shape: 'terminal', terminalType: 'end' },
+        ],
+        edges: [
+            { id: 'e1', source: 'start', target: 'work' },
+            { id: 'e2', source: 'work', target: 'end' },
+        ],
+    };
+    const brokenSopRequest = {
+        action: 'generateSop', memberRole: '테스터', taskName: 'T', sourceType: 'task', structureVersion: 'activity-subaction-v1',
+        activities: [{ id: actA.id, order: 1, name: actA.name, skills: [] }],
+        skills: [], context: '', detailLevel: 'standard', minSteps: 1, maxSteps: 5, branchPolicy: 'auto', maxBranches: 2, allowRework: true,
+    } as unknown as SopGenerationRequest;
+    let repairCallCount = 0;
+    const repairResult = await runSopGenerationPostProcessing({
+        object: brokenObject,
+        prompt: 'PROMPT',
+        sopRequest: brokenSopRequest,
+        generateRepair: async () => {
+            repairCallCount++;
+            return brokenObject; // repair does not fix the unknown-Activity mapping
+        },
+    });
+    check(!repairResult.ok, 'A Sub Action coverage failure that survives one repair attempt returns ok:false, never a silently-applied document');
+    check(repairCallCount === 1, 'Exactly one repair attempt is made before giving up');
+    if (!repairResult.ok) {
+        check(repairResult.response.status === 400, `The failure response status must be 400, got ${repairResult.response.status}`);
+    }
+
+    const missingOriginObject = {
+        ...brokenObject,
+        title: '출처 보정 SOP',
+        steps: brokenObject.steps.map((step) => step.id === 'work'
+            ? {
+                ...step,
+                sourceActivityIds: [actA.id],
+                agentizationSuggestion: { type: 'ai-assist', rationale: '사람의 판단을 AI가 지원합니다.' },
+            }
+            : step),
+    };
+    let originRepairPrompt = '';
+    const repairedOriginObject = {
+        ...missingOriginObject,
+        steps: missingOriginObject.steps.map((step) => step.id === 'work'
+            ? { ...step, subActionOrigin: 'activity-derived' }
+            : step),
+    };
+    const originRepairResult = await runSopGenerationPostProcessing({
+        object: missingOriginObject,
+        prompt: 'ORIGIN PROMPT',
+        sopRequest: brokenSopRequest,
+        generateRepair: async (repairPrompt) => {
+            originRepairPrompt = repairPrompt;
+            return repairedOriginObject;
+        },
+    });
+    check(originRepairResult.ok, 'A valid repair that adds Sub Action origin metadata is accepted');
+    check(originRepairPrompt.includes('subActionOrigin') && originRepairPrompt.includes('context-derived'), 'The repair prompt explicitly asks for origin and a rationale for context-derived additions');
+
+    // ---------------------------------------------------------
+    // Code review defect 2: minSteps/maxSteps are decoupled — Activity count alone
+    // must never collapse maxSteps down to exactly minSteps (which would force
+    // exactly one Sub Action per Activity, a rule the customer never confirmed).
+    // ---------------------------------------------------------
+    console.log('computeSubActionCapacity: min/max capacity is decoupled, never collapsed to Activity count...');
+    const representativeTaskEntry = SOP_TASK_LIBRARY_FIXTURE.jobs
+        .flatMap((job) => job.tasks.map((task) => ({ job, task })))
+        .find(({ task }) => task.name === '채용 프로세스 운영 및 최적화')!;
+    check(representativeTaskEntry.task.activities.length === 14, 'Fixture sanity check: the representative Task exposes exactly 14 Activities');
+
+    const capacityResult = computeSubActionCapacity({
+        activityCount: representativeTaskEntry.task.activities.length,
+        minSteps: 6,
+        maxSteps: 8,
+        maxTotalNodes: 15,
+        detailLevel: 'standard',
+    });
+    check(capacityResult.minSteps === 14, 'minSteps is raised exactly to the Activity count so every Activity CAN be covered at least once');
+    check(capacityResult.maxSteps > capacityResult.minSteps, 'maxSteps is NOT collapsed to the same value as minSteps — 14 Activities must not force exactly 14 Sub Actions total');
+    check(capacityResult.maxSteps >= Math.ceil(14 * 1.5), 'maxSteps provides real headroom above the Activity count, not just Activity count + a token amount');
+    check(capacityResult.maxTotalNodes >= capacityResult.maxSteps + 4, 'maxTotalNodes leaves room for start/end/decision/loop nodes on top of the expanded maxSteps, not just on top of the raw Activity count');
+    check(
+        capacityResult.explanation !== null &&
+            capacityResult.explanation.includes(String(capacityResult.minSteps)) &&
+            capacityResult.explanation.includes(String(capacityResult.maxSteps)) &&
+            capacityResult.explanation.includes(String(capacityResult.maxTotalNodes)),
+        'The on-screen explanation states the EXACT minSteps/maxSteps/maxTotalNodes actually used for the request, matching what the UI shows to what is actually sent'
+    );
+
+    // A generated result where several Activities have 2+ Sub Actions must (a) pass the strict
+    // structure validator and (b) fit inside the computed capacity — proving the capacity policy
+    // and the actual graph validator agree, not just that the numbers look separately reasonable.
+    const activities14 = representativeTaskEntry.task.activities;
+    const allowedIds14 = activities14.map((a) => a.id);
+    const multiSubActionSteps = activities14.flatMap((activity, index) => {
+        const countForThisActivity = index < 6 ? 2 : 1; // 6 of 14 Activities get a second Sub Action
+        return Array.from({ length: countForThisActivity }, (_unused, subIndex) => ({
+            id: `cap-step-${activity.id}-${subIndex}`,
+            sourceActivityIds: [activity.id],
+            subActionOrder: subIndex + 1,
+        }));
+    });
+    check(multiSubActionSteps.length === 20, 'Fixture sanity check: 6 Activities x2 + 8 Activities x1 = 20 Sub Actions total');
+    const multiSubActionResult = validateSubActionStructure(multiSubActionSteps, allowedIds14);
+    check(multiSubActionResult.valid, 'A result where 6 of 14 Activities each have TWO Sub Actions (20 total) is genuinely valid, not just theoretically allowed');
+
+    const capacityGraphSteps = [
+        { id: 'cap-start', shape: 'terminal', terminalType: 'start' as const },
+        ...multiSubActionSteps.map((s) => ({ id: s.id, shape: 'process' })),
+        { id: 'cap-end', shape: 'terminal', terminalType: 'end' as const },
+    ];
+    const capacityGraphEdges: Array<{ id: string; source: string; target: string }> = [];
+    let capacityPrevious = 'cap-start';
+    multiSubActionSteps.forEach((s) => {
+        capacityGraphEdges.push({ id: `e-${capacityPrevious}-${s.id}`, source: capacityPrevious, target: s.id });
+        capacityPrevious = s.id;
+    });
+    capacityGraphEdges.push({ id: `e-${capacityPrevious}-cap-end`, source: capacityPrevious, target: 'cap-end' });
+    const capacityGraphIssues = validateSopFull(capacityGraphSteps, capacityGraphEdges, {
+        minSteps: capacityResult.minSteps,
+        maxSteps: capacityResult.maxSteps,
+        maxTotalNodes: capacityResult.maxTotalNodes,
+        branchPolicy: 'auto',
+        maxBranches: 2,
+        allowRework: true,
+        maxLoops: 3,
+    });
+    check(!hasBlockingSopIssues(capacityGraphIssues), 'A real 20-Sub-Action linear graph is NOT rejected by maxSteps/maxTotalNodes under the computed capacity — the capacity policy and the validator genuinely agree, not just look separately reasonable');
+
+    // ---------------------------------------------------------
+    // Code review defect 3: the Task-Gate sample document follows the SAME
+    // Activity–Sub Action contract as a real AI generation, generically for
+    // whatever Task is selected — never the old fixed recruitment content.
+    // ---------------------------------------------------------
+    console.log('buildTaskGateSampleDocument: Task-Gate sample follows the Activity–Sub Action contract...');
+    const sampleResult = buildTaskGateSampleDocument({
+        id: 'gate-sample-test-doc',
+        member: SAMPLE_SOP_DOCUMENT.member,
+        workLibrary: SAMPLE_WORK_LIBRARY,
+        context: '',
+        setupConfig: SAMPLE_SOP_DOCUMENT.setupConfig,
+    });
+    check(sampleResult.success, 'buildTaskGateSampleDocument succeeds for a normal Task Library selection with Activities');
+    if (sampleResult.success) {
+        const sampleDoc = sampleResult.document;
+        check(sampleDoc.structureVersion === 'activity-subaction-v1', 'The Task-Gate sample document declares the Activity–Sub Action structureVersion');
+        const sampleAllowedIds = getScopedActivities(SAMPLE_WORK_LIBRARY).map((a) => a.id);
+        const sampleStructure = validateSubActionStructure(sampleDoc.steps, sampleAllowedIds);
+        check(sampleStructure.valid, `The Task-Gate sample passes the strict Sub Action structure validator: ${formatSubActionStructureErrors(sampleStructure).join(' / ')}`);
+        const sampleBusinessSteps = sampleDoc.steps.filter((s) => !s.terminalType);
+        check(sampleBusinessSteps.every((s) => s.sourceActivityIds?.length === 1), 'Every non-terminal sample step maps to exactly one Activity');
+        check(sampleBusinessSteps.every((s) => Boolean(s.agentizationSuggestion)), 'Every non-terminal sample step carries an AI agentizationSuggestion');
+        check(sampleDoc.agentizationReview === undefined, 'The Task-Gate sample has no agentizationReview/confirmedAt at all — only a member can create one');
+        check(sampleAllowedIds.every((activityId) => sampleBusinessSteps.some((s) => s.sourceActivityIds?.includes(activityId))), 'Every selected Task Activity is covered by at least one Sub Action in the sample');
+    }
+
+    // A DIFFERENT Task must produce content generic to THAT Task, never the old hardcoded recruitment step titles.
+    const differentJobEntry = SOP_TASK_LIBRARY_FIXTURE.jobs.find((job) => job.name !== SAMPLE_WORK_LIBRARY.jobName) ?? SOP_TASK_LIBRARY_FIXTURE.jobs[0];
+    const differentTask = differentJobEntry.tasks.find((task) => task.name !== SAMPLE_WORK_LIBRARY.taskName)!;
+    const differentWorkLibrary = createWorkLibrarySelection(differentJobEntry, differentTask);
+    const differentTaskSampleResult = buildTaskGateSampleDocument({
+        id: 'gate-sample-different-task',
+        member: SAMPLE_SOP_DOCUMENT.member,
+        workLibrary: differentWorkLibrary,
+        context: '',
+        setupConfig: SAMPLE_SOP_DOCUMENT.setupConfig,
+    });
+    check(differentTaskSampleResult.success, 'buildTaskGateSampleDocument also succeeds for an unrelated Task');
+    if (differentTaskSampleResult.success) {
+        const differentSteps = differentTaskSampleResult.document.steps.filter((s) => !s.terminalType);
+        check(
+            differentSteps.every((s) => !s.title.includes('채용 공고 준비') && !s.title.includes('채용 요청 접수')),
+            'The sample for a different Task never shows the OLD hard-coded recruitment step titles mapped onto an unrelated Task'
+        );
+        check(
+            differentSteps.every((s) => differentTask.activities.some((a) => s.title.includes(a.name))),
+            "Every sample step title for the different Task is DERIVED FROM THAT Task's own Activity names, not fixed recruitment content"
+        );
+        check(
+            differentSteps.every((s) => differentTask.activities.every((a) => a.name !== s.title)),
+            'No sample step title is IDENTICAL to its Activity name — a Sub Action title must read as an action distinct from the Activity group label it belongs to'
+        );
+    }
+
+    // The genuinely-unsupported case (no Activity data at all) fails explicitly, never silently as a legacy document.
+    const emptyWorkLibrary = { ...SAMPLE_WORK_LIBRARY, taskCatalog: [{ ...SAMPLE_WORK_LIBRARY.taskCatalog[0], activities: [] }] };
+    const emptySampleResult = buildTaskGateSampleDocument({
+        id: 'gate-sample-empty',
+        member: SAMPLE_SOP_DOCUMENT.member,
+        workLibrary: emptyWorkLibrary,
+        context: '',
+        setupConfig: SAMPLE_SOP_DOCUMENT.setupConfig,
+    });
+    check(!emptySampleResult.success, 'buildTaskGateSampleDocument reports an explicit failure (never a silently-produced legacy document) when the selection has no Activity data');
+
+    // ---------------------------------------------------------
+    // Colleague template: listing excludes non-approved/non-eligible records and all PII
+    // ---------------------------------------------------------
+    console.log('Colleague template listing: eligibility filter + PII sanitization...');
+
+    // Calling sopRepository.create() directly (bypassing the POST /api/sop route's
+    // validateSopPersistenceState) so this fixture can be stamped as already-confirmed
+    // without re-running the full member confirmation UI flow — the lifecycle state
+    // machine under test here (draft -> approval-requested -> approved) only cares
+    // about document.reviewStatus, not how it got there.
+    const templateSourceDoc: SopDocument = {
+        ...generatedDocument,
+        id: 'template-source-doc',
+        member: { ...generatedDocument.member, id: 'colleague-owner', name: '민감정보 이름', employeeId: 'EMP-SECRET-1' },
+        reviewStatus: 'confirmed',
+        steps: generatedDocument.steps.map((s) => ({ ...s, reviewStatus: 'confirmed' as const })),
+    };
+    const createTemplateSource = await sopRepository.create({ memberId: 'colleague-owner', organizationId: 'org-sub-test', document: templateSourceDoc });
+    check(createTemplateSource.ok, 'Fixture setup: creating the would-be template source record succeeds');
+
+    const notYetApproved = await sopTemplatesGet(fakeApiRequest(memberHeaders('any-viewer')) as unknown as Parameters<typeof sopTemplatesGet>[0]);
+    const notYetApprovedBody = await notYetApproved.json();
+    check(!notYetApprovedBody.templates.some((t: { templateId: string }) => t.templateId === 'template-source-doc'), 'A record that is neither approved nor template-eligible never appears in the template list');
+
+    const draftToRequested = await sopRepository.transitionLifecycle('template-source-doc', { actorRole: 'member', actorId: 'colleague-owner', kind: 'member-submit' });
+    check(draftToRequested.ok, `Fixture setup: draft -> leader-review must succeed for a confirmed document, got ok=${draftToRequested.ok}`);
+    const requestedToSmeReview = await sopRepository.transitionLifecycle('template-source-doc', { actorRole: 'leader', actorId: 'leader-1', kind: 'leader-approve' });
+    check(requestedToSmeReview.ok, 'Fixture setup: leader approves the record (leader-review -> sme-review)');
+    const requestedToApproved = await sopRepository.transitionLifecycle('template-source-doc', { actorRole: 'sme', actorId: 'sme-1', kind: 'sme-approve' });
+    check(requestedToApproved.ok, 'Fixture setup: SME approves the record (sme-review -> approved)');
+
+    const approvedButNotEligible = await sopTemplatesGet(fakeApiRequest(memberHeaders('any-viewer')) as unknown as Parameters<typeof sopTemplatesGet>[0]);
+    const approvedButNotEligibleBody = await approvedButNotEligible.json();
+    check(!approvedButNotEligibleBody.templates.some((t: { templateId: string }) => t.templateId === 'template-source-doc'), 'An approved-but-not-template-eligible record still does not appear in the template list');
+
+    const eligibilityResult = await sopRepository.setTemplateEligibility('template-source-doc', true);
+    check(eligibilityResult.ok, 'Fixture setup: marking the approved record template-eligible succeeds');
+
+    const eligibleListing = await sopTemplatesGet(fakeApiRequest(memberHeaders('any-viewer')) as unknown as Parameters<typeof sopTemplatesGet>[0]);
+    const eligibleListingBody = await eligibleListing.json();
+    const listedEntry = eligibleListingBody.templates.find((t: { templateId: string }) => t.templateId === 'template-source-doc');
+    check(Boolean(listedEntry), 'An approved AND template-eligible record now appears in the listing for OTHER members');
+
+    const listingJson = JSON.stringify(eligibleListingBody);
+    check(!listingJson.includes('colleague-owner') && !listingJson.includes('민감정보 이름') && !listingJson.includes('EMP-SECRET-1'), 'The template listing payload never includes the source memberId, name, or employeeId');
+    check(!listingJson.includes('People & Culture') && !('organizationCategory' in (listedEntry ?? {})), 'The template listing payload has no organizationCategory field at all (removed, not just renamed, per the fake-anonymization fix)');
+    check(SopTemplateSummarySchema.safeParse(listedEntry).success, 'Each listed entry matches the sanitized SopTemplateSummary schema exactly (no extra PII field could sneak through)');
+
+    const summaryDirect = toSopTemplateSummary({ ...(await sopRepository.getById('template-source-doc'))! });
+    check(!('memberId' in summaryDirect) && !('employeeId' in (summaryDirect as object)), 'toSopTemplateSummary() itself never includes memberId/employeeId in its return shape');
+    check(!('organizationCategory' in (summaryDirect as object)), 'toSopTemplateSummary() itself never includes an organizationCategory field');
+
+    // Code review defect 4: the record's OWN owner must never see it in their own colleague-template list.
+    const ownerViewingOwnList = await sopTemplatesGet(fakeApiRequest(memberHeaders('colleague-owner')) as unknown as Parameters<typeof sopTemplatesGet>[0]);
+    const ownerViewingOwnListBody = await ownerViewingOwnList.json();
+    check(
+        !ownerViewingOwnListBody.templates.some((t: { templateId: string }) => t.templateId === 'template-source-doc'),
+        "The record's own owner never sees their own approved+eligible SOP in their own colleague-template listing"
+    );
+    // Sanity: the repository-level distinction between "full visibility" and "candidate pool for a member" actually differs.
+    const fullVisibilityList = await sopRepository.listTemplateEligible();
+    const candidatePoolForOwner = await sopRepository.listColleagueTemplateCandidates('colleague-owner');
+    check(
+        fullVisibilityList.some((r) => r.id === 'template-source-doc') && !candidatePoolForOwner.some((r) => r.id === 'template-source-doc'),
+        'listTemplateEligible (full visibility) includes the record; listColleagueTemplateCandidates for its own owner excludes it — the two queries are genuinely distinct, not the same filter reused'
+    );
+
+    // ---------------------------------------------------------
+    // Colleague template clone: new id/current member/draft state, judgement stripped, original untouched
+    // ---------------------------------------------------------
+    console.log('Colleague template clone: independence + sanitization...');
+
+    const beforeCloneSourceRecord = await sopRepository.getById('template-source-doc');
+    const cloneRequesterHeaders = memberHeaders('clone-requester');
+    const cloneRequesterMember = { id: 'clone-requester', name: '복제 요청자', jobRole: '채용담당자', organization: 'Other Team' };
+    const cloneResponse = await sopTemplateClonePost(
+        fakeApiRequest(cloneRequesterHeaders, { member: cloneRequesterMember }),
+        { params: Promise.resolve({ id: 'template-source-doc' }) }
+    );
+    check(cloneResponse.status === 200, `Cloning an approved, eligible template must succeed, got ${cloneResponse.status}`);
+    const clonedDocument = (await cloneResponse.json()).document as SopDocument;
+
+    check(clonedDocument.id !== 'template-source-doc', 'The clone receives a brand-new document id, never reusing the source id');
+    check(clonedDocument.member.id === 'clone-requester' && clonedDocument.member.name === '복제 요청자', 'The clone is stamped with the CURRENT requester identity, not the source author');
+    check(clonedDocument.reviewStatus === 'ai-draft', 'The cloned document content review status resets to ai-draft');
+    check(clonedDocument.steps.every((s) => s.reviewStatus === 'ai-draft'), 'Every step in the clone also resets to ai-draft (never a stray confirmed step inside a non-confirmed document)');
+    check(clonedDocument.agentizationReview === undefined, 'The clone has NO agentizationReview at all — the source member\'s stepModes/note/confirmedAt are completely removed');
+    check(clonedDocument.sourceTemplateId === 'template-source-doc', 'The clone records minimal provenance (sourceTemplateId) pointing at the source template');
+    check(
+        clonedDocument.steps.filter((s) => !s.terminalType).every((s) => Boolean(s.agentizationSuggestion)),
+        'AI-generated agentizationSuggestion structural content IS retained on the clone (only the member judgement is stripped)'
+    );
+
+    const afterCloneSourceRecord = await sopRepository.getById('template-source-doc');
+    check(
+        JSON.stringify(afterCloneSourceRecord) === JSON.stringify(beforeCloneSourceRecord),
+        'Cloning never mutates the original source record in any way'
+    );
+
+    // A non-eligible / non-existent id must be rejected identically (no existence leak) and never mutate anything.
+    const cloneOfIneligible = await sopTemplateClonePost(
+        fakeApiRequest(memberHeaders('clone-requester-2'), { member: { id: 'clone-requester-2', name: 'x', jobRole: 'y' } }),
+        { params: Promise.resolve({ id: 'does-not-exist-or-not-eligible' }) }
+    );
+    check(cloneOfIneligible.status === 404, 'Cloning a non-existent or non-eligible id is rejected with 404');
+
+    // ---------------------------------------------------------
+    // Code review defect 7: clone-request identity is verified, never trusted blindly.
+    // ---------------------------------------------------------
+    console.log('Colleague template clone: identity/organization validation is not bypassable...');
+
+    const cloneMissingId = await sopTemplateClonePost(
+        fakeApiRequest(memberHeaders('clone-requester-3'), { member: { name: '이름만 있는 요청', jobRole: '아무 직무' } }),
+        { params: Promise.resolve({ id: 'template-source-doc' }) }
+    );
+    check(cloneMissingId.status === 400, `A clone request with no member.id at all must be rejected with 400, got ${cloneMissingId.status}`);
+
+    const cloneWrongId = await sopTemplateClonePost(
+        fakeApiRequest(memberHeaders('clone-requester-3'), { member: { id: 'someone-else-entirely', name: 'x', jobRole: 'y' } }),
+        { params: Promise.resolve({ id: 'template-source-doc' }) }
+    );
+    check(cloneWrongId.status === 403, `A clone request whose member.id does not match the actor context must be rejected with 403, got ${cloneWrongId.status}`);
+
+    const orgNormalizedResponse = await sopTemplateClonePost(
+        fakeApiRequest(memberHeaders('clone-requester-4', 'org-actual-4'), { member: { id: 'clone-requester-4', name: '조직 위조 시도', jobRole: '아무 직무', organization: '위조된 조직명' } }),
+        { params: Promise.resolve({ id: 'template-source-doc' }) }
+    );
+    check(orgNormalizedResponse.status === 200, `A clone request with a mismatched organization string must still succeed (normalized, not rejected), got ${orgNormalizedResponse.status}`);
+    const orgNormalizedDocument = (await orgNormalizedResponse.json()).document as SopDocument;
+    check(orgNormalizedDocument.member.organization === 'org-actual-4', "The clone's member.organization is normalized to the actor's own organizationId, never the client-submitted string");
+    check(orgNormalizedDocument.member.organization !== '위조된 조직명', 'The client-submitted forged organization string never survives into the clone');
+    check(
+        orgNormalizedDocument.member.organization !== templateSourceDoc.member.organization,
+        "The original author's organization does not leak into the clone either"
+    );
+
+    const savedClone = await sopRepository.create({ memberId: clonedDocument.member.id!, organizationId: 'org-sub-test', document: clonedDocument });
+    check(
+        savedClone.ok && savedClone.record.memberId === clonedDocument.member.id,
+        'The saved record.memberId matches the cloned document.member.id exactly (identity is consistent end-to-end, not just at the response boundary)'
+    );
+
+    // ---------------------------------------------------------
+    // Defect fix: subActionOrigin/subActionOriginRationale enforced ONLY at the
+    // confirm boundary (structureVersion 'activity-subaction-v1'), never at draft-save
+    // time, and never retroactively against a legacy document.
+    // ---------------------------------------------------------
+    console.log('Confirm boundary: subActionOrigin is required for activity-subaction-v1, never for legacy...');
+
+    function buildConfirmableSubActionDocument(id: string, jobRole: string): SopDocument {
+        const workLibrary = createTaskLibrarySelectionForRole(jobRole);
+        const built = buildTaskGateSampleDocument({
+            id,
+            member: { name: 'Origin 테스트', jobRole, id: 'origin-tester' },
+            workLibrary,
+            context: 'origin 테스트용 문서',
+            setupConfig: { detailLevel: 'standard', minSteps: 4, maxSteps: 20, branchPolicy: 'auto', maxBranches: 2, allowRework: true, maxTotalNodes: 24, maxLoops: 2, splitComplexSteps: true },
+        });
+        if (!built.success) throw new Error(`fixture setup failed: ${built.reason}`);
+        return {
+            ...built.document,
+            reviewStatus: 'reviewed' as const,
+            steps: built.document.steps.map((step) => ({
+                ...step,
+                reviewStatus: 'reviewed' as const,
+                requiredSkills: step.requiredSkills.map((skill) => ({ ...skill, accepted: true })),
+                ...(step.terminalType ? {} : { subActionOrigin: 'activity-derived' as const }),
+            })),
+        };
+    }
+
+    const originMemberHeaders = { 'x-sop-actor-id': 'origin-tester', 'x-sop-actor-role': 'member', 'x-sop-actor-organization-id': 'org-origin-test' };
+    function originApiRequest(headers: Record<string, string>, body?: unknown) {
+        return { headers: new Headers(headers), json: async () => body } as unknown as Parameters<typeof sopApiCreateForOrigin>[0];
+    }
+
+    // 1. A well-formed activity-subaction-v1 document with every non-terminal step
+    //    carrying a valid origin confirms successfully.
+    const validOriginDoc = buildConfirmableSubActionDocument('origin-doc-valid', 'Talent Acquisition');
+    const validConfirm = validateFullSopConfirmation(validOriginDoc);
+    check(validConfirm.success, `A well-formed activity-subaction-v1 document with valid origins on every step confirms successfully, errors: ${!validConfirm.success ? validConfirm.errors.join(' / ') : ''}`);
+
+    // 2. Removing subActionOrigin/subActionOriginRationale from every non-terminal step —
+    //    the draft schema still accepts it (these fields are optional)...
+    const missingOriginDoc: SopDocument = {
+        ...validOriginDoc,
+        steps: validOriginDoc.steps.map((step) => ({ ...step, subActionOrigin: undefined, subActionOriginRationale: undefined })),
+    };
+    check(SopDocumentSchema.safeParse(missingOriginDoc).success, 'A structureVersion activity-subaction-v1 document with NO subActionOrigin on any step still passes the DRAFT persist schema — draft permissiveness is unaffected');
+
+    // ...but the SAME document fails full confirmation.
+    const missingOriginConfirm = validateFullSopConfirmation(missingOriginDoc);
+    check(!missingOriginConfirm.success, 'The identical document fails validateFullSopConfirmation once origin is missing from its Sub Actions');
+    check(!missingOriginConfirm.success && missingOriginConfirm.errors.some((e) => e.includes('생성 근거')), 'The confirmation failure explicitly names the missing Sub Action origin, not a generic error');
+
+    // 3. context-derived without a rationale fails confirmation.
+    const missingRationaleDoc: SopDocument = {
+        ...validOriginDoc,
+        steps: validOriginDoc.steps.map((step, index) => (index === 1 && !step.terminalType ? { ...step, subActionOrigin: 'context-derived' as const, subActionOriginRationale: undefined } : step)),
+    };
+    const missingRationaleConfirm = validateFullSopConfirmation(missingRationaleDoc);
+    check(!missingRationaleConfirm.success, 'A context-derived Sub Action with no rationale fails confirmation');
+
+    // 4. context-derived WITH a rationale confirms successfully.
+    const withRationaleDoc: SopDocument = {
+        ...validOriginDoc,
+        steps: validOriginDoc.steps.map((step, index) => (index === 1 && !step.terminalType ? { ...step, subActionOrigin: 'context-derived' as const, subActionOriginRationale: '구성원이 입력한 업무 맥락에서 파생된 추가 단계입니다.' } : step)),
+    };
+    const withRationaleConfirm = validateFullSopConfirmation(withRationaleDoc);
+    check(withRationaleConfirm.success, `A context-derived Sub Action WITH a concrete rationale confirms successfully, errors: ${!withRationaleConfirm.success ? withRationaleConfirm.errors.join(' / ') : ''}`);
+
+    // 5. activity-derived with a leftover (unnecessary) rationale fails confirmation.
+    const unexpectedRationaleDoc: SopDocument = {
+        ...validOriginDoc,
+        steps: validOriginDoc.steps.map((step, index) => (index === 1 && !step.terminalType ? { ...step, subActionOrigin: 'activity-derived' as const, subActionOriginRationale: '전환 전 남은 근거 텍스트' } : step)),
+    };
+    const unexpectedRationaleConfirm = validateFullSopConfirmation(unexpectedRationaleDoc);
+    check(!unexpectedRationaleConfirm.success, 'An activity-derived Sub Action with a leftover context rationale (never cleared when switching away from context-derived) fails confirmation');
+
+    // 6. Legacy (no structureVersion) documents are never held to this rule.
+    const legacyDoc: SopDocument = { ...SAMPLE_SOP_DOCUMENT, structureVersion: undefined };
+    check(legacyDoc.steps.every((step) => step.subActionOrigin === undefined), 'Fixture sanity check: the legacy sample document has no subActionOrigin on any step');
+    const legacyConfirmable: SopDocument = { ...legacyDoc, steps: legacyDoc.steps.map((step) => ({ ...step, reviewStatus: 'reviewed' as const, requiredSkills: step.requiredSkills.map((sk) => ({ ...sk, accepted: true })) })) };
+    const legacyConfirm = validateFullSopConfirmation(legacyConfirmable);
+    check(legacyConfirm.success, `A legacy (no structureVersion) document with no subActionOrigin anywhere still confirms successfully — the origin rule is never retroactively enforced, errors: ${!legacyConfirm.success ? legacyConfirm.errors.join(' / ') : ''}`);
+
+    // 7. A member-added new step (via Workspace "단계 추가", which never silently fills
+    //    subActionOrigin) blocks confirmation until the member explicitly chooses one.
+    const manuallyAddedStep: SopStepData = { id: 'manual-step-no-origin', title: '신규 수행 단계', definition: '수행할 작업 항목을 작성해 주세요.', shape: 'process', position: { x: 0, y: 0 }, requiredSkills: [], reviewStatus: 'reviewed' };
+    check(manuallyAddedStep.subActionOrigin === undefined, 'A freshly-constructed manual step (matching SopWorkspace\'s "단계 추가" shape) never has subActionOrigin silently filled in');
+    const withManualStepDoc: SopDocument = { ...validOriginDoc, steps: [...validOriginDoc.steps, manuallyAddedStep] };
+    const withManualStepConfirm = validateFullSopConfirmation(withManualStepDoc);
+    check(!withManualStepConfirm.success, 'A document containing a manually-added step with no chosen origin is blocked from confirmation');
+
+    // 8. Server boundary: validateSopPersistenceState (POST/PUT confirm-time check) uses
+    //    the SAME validateFullSopConfirmation call — never a second, divergent check.
+    const persistenceErrorsForMissingOrigin = validateSopPersistenceState({ ...missingOriginDoc, reviewStatus: 'confirmed', steps: missingOriginDoc.steps.map((s) => ({ ...s, reviewStatus: 'confirmed' as const })) });
+    check(persistenceErrorsForMissingOrigin.some((e) => e.includes('생성 근거')), 'validateSopPersistenceState (the server save-time check) reports the same missing-origin error — it reuses validateFullSopConfirmation, not a separate rule');
+
+    // 9. Full API boundary: POST a genuinely-confirmed document succeeds; PUT-ing an
+    //    otherwise-identical confirmed document with origin stripped is rejected 400 and
+    //    never reaches the repository.
+    console.log('API: POST/PUT reject a confirmed activity-subaction-v1 document with missing Sub Action origin...');
+    const apiValidDoc: SopDocument = { ...validOriginDoc, id: 'origin-api-doc', reviewStatus: 'confirmed', steps: validOriginDoc.steps.map((s) => ({ ...s, reviewStatus: 'confirmed' as const })) };
+    const createOriginRes = await sopApiCreateForOrigin(originApiRequest(originMemberHeaders, { memberId: 'origin-tester', organizationId: 'org-origin-test', document: apiValidDoc }));
+    check(createOriginRes.status === 201, `POSTing a genuinely-confirmed activity-subaction-v1 document (valid origins) succeeds, got ${createOriginRes.status}`);
+    const createdOriginRecord = (await createOriginRes.json()).record;
+
+    const apiMissingOriginDoc: SopDocument = { ...apiValidDoc, steps: apiValidDoc.steps.map((s) => ({ ...s, subActionOrigin: undefined, subActionOriginRationale: undefined })) };
+    const putMissingOriginRes = await sopApiUpdateForOrigin(
+        originApiRequest(originMemberHeaders, { document: apiMissingOriginDoc, expectedVersion: createdOriginRecord.version }),
+        { params: Promise.resolve({ id: 'origin-api-doc' }) }
+    );
+    check(putMissingOriginRes.status === 400, `PUTing a 'confirmed' document with Sub Action origin stripped is rejected with 400, got ${putMissingOriginRes.status}`);
+    const afterRejectedOriginPut = await sopRepository.getById('origin-api-doc');
+    check(afterRejectedOriginPut?.document.steps.filter((s) => !s.terminalType).every((s) => Boolean(s.subActionOrigin)) ?? false, 'The stored record is completely unchanged after the rejected PUT — origin is still present on every non-terminal step');
+    check(afterRejectedOriginPut?.version === createdOriginRecord.version, 'The stored record\'s version does not advance after the rejected PUT');
+
+    // ---------------------------------------------------------
+    // Defect fix: subActionOrigin/subActionOriginRationale edits invalidate review/Agentization
+    // confirmation exactly like editing title/definition does — the field was previously
+    // missing from the store's "meaningful edit" list, silently bypassing invalidation.
+    // ---------------------------------------------------------
+    console.log('Store: editing subActionOrigin/subActionOriginRationale invalidates review and Agentization confirmation...');
+    useSopPrototypeStore.getState().resetStore();
+    useSopPrototypeStore.getState().setCustomerReviewMode(false);
+    check(useSopPrototypeStore.getState().setDocument(structuredClone(validOriginDoc)), 'Fixture setup: loading the valid origin document into the Store succeeds');
+    const firstNonTerminalStepId = validOriginDoc.steps.find((s) => !s.terminalType)!.id;
+    check(useSopPrototypeStore.getState().document!.steps.find((s) => s.id === firstNonTerminalStepId)!.reviewStatus === 'reviewed', 'Fixture setup: the target step starts reviewed (from buildConfirmableSubActionDocument)');
+    useSopPrototypeStore.getState().updateStep(firstNonTerminalStepId, { subActionOrigin: 'context-derived', subActionOriginRationale: '변경 테스트용 근거' });
+    check(useSopPrototypeStore.getState().document!.steps.find((s) => s.id === firstNonTerminalStepId)!.reviewStatus === 'ai-draft', 'Editing a step\'s subActionOrigin resets that step\'s reviewStatus back to ai-draft, exactly like editing its title/definition would');
+    check(useSopPrototypeStore.getState().document!.reviewStatus === 'ai-draft', 'Editing subActionOrigin invalidates the whole document\'s reviewStatus, not just the one step');
+    useSopPrototypeStore.getState().resetStore();
+
+    // ---------------------------------------------------------
+    // 복제 시 출처 처리 정책 (buildDuplicateStepPatch): a duplicated Sub Action
+    // INHERITS its full provenance (sourceActivityIds / subActionOrder /
+    // subActionOrigin / subActionOriginRationale) from the original — a copy of
+    // the same content has the same origin. The inherited (now duplicated)
+    // subActionOrder then blocks confirmation via the duplicate-order rule until
+    // the member assigns a fresh order, so a duplicate can never silently slip
+    // into a confirmed document. This test pins that policy explicitly.
+    // ---------------------------------------------------------
+    console.log('Store: duplicating a Sub Action inherits provenance and blocks confirm via duplicate order until reordered...');
+    useSopPrototypeStore.getState().resetStore();
+    useSopPrototypeStore.getState().setCustomerReviewMode(false);
+    const dupPolicyDoc = structuredClone(validOriginDoc);
+    dupPolicyDoc.id = 'origin-doc-duplicate-policy';
+    const dupSourceTemplate = dupPolicyDoc.steps.find((s) => !s.terminalType)!;
+    // Make the source step context-derived WITH a rationale so inheritance of BOTH origin fields is observable.
+    dupPolicyDoc.steps = dupPolicyDoc.steps.map((s) =>
+        s.id === dupSourceTemplate.id ? { ...s, subActionOrigin: 'context-derived' as const, subActionOriginRationale: '복제 정책 검증용 맥락 근거' } : s
+    );
+    check(useSopPrototypeStore.getState().setDocument(dupPolicyDoc), 'Fixture setup: loading the duplicate-policy document into the Store succeeds');
+
+    const dupResult = useSopPrototypeStore.getState().duplicateStep(dupSourceTemplate.id);
+    check(dupResult.success, `Duplicating a non-terminal Sub Action succeeds${!dupResult.success ? ` (reason: ${dupResult.reason})` : ''}`);
+    const duplicatedStepId = useSopPrototypeStore.getState().selectedStepId!;
+    const afterDupDoc = useSopPrototypeStore.getState().document!;
+    const dupOriginal = afterDupDoc.steps.find((s) => s.id === dupSourceTemplate.id)!;
+    const dupCopy = afterDupDoc.steps.find((s) => s.id === duplicatedStepId)!;
+    check(Boolean(dupCopy) && dupCopy.id !== dupOriginal.id && dupCopy.title === `${dupOriginal.title} (사본)`, 'The duplicate is a distinct step whose title marks it as a copy');
+    check(dupCopy.subActionOrigin === 'context-derived' && dupCopy.subActionOriginRationale === dupOriginal.subActionOriginRationale, 'POLICY: the duplicate inherits subActionOrigin AND subActionOriginRationale from the original — provenance is copied, never silently reset to 미지정');
+    check(
+        JSON.stringify(dupCopy.sourceActivityIds) === JSON.stringify(dupOriginal.sourceActivityIds) && dupCopy.subActionOrder === dupOriginal.subActionOrder,
+        'POLICY: the duplicate also inherits sourceActivityIds and subActionOrder (initially identical to the original)'
+    );
+    check(dupCopy.reviewStatus === 'ai-draft', 'The duplicate always starts unreviewed (ai-draft), regardless of the original\'s review state');
+
+    const dupBlockedConfirm = validateFullSopConfirmation(afterDupDoc);
+    const dupBlockedErrors = dupBlockedConfirm.success ? [] : dupBlockedConfirm.errors;
+    check(!dupBlockedConfirm.success && dupBlockedErrors.some((e) => e.includes('순서가 중복')), 'POLICY: the inherited duplicate subActionOrder explicitly blocks confirmation (duplicate-order rule) — a duplicate can never slip into a confirmed document unnoticed');
+    check(!dupBlockedErrors.some((e) => e.includes('생성 근거')), 'The confirm errors do NOT include a missing-origin complaint — inheritance already satisfied the origin rule; only the order needs member action');
+
+    // Assigning a fresh, unique order resolves the structural block without ever re-touching origin.
+    const usedOrders = afterDupDoc.steps
+        .filter((s) => !s.terminalType && s.sourceActivityIds?.[0] === dupCopy.sourceActivityIds?.[0] && s.subActionOrder !== undefined)
+        .map((s) => s.subActionOrder as number);
+    useSopPrototypeStore.getState().setStepSubActionOrder(duplicatedStepId, Math.max(...usedOrders) + 1);
+    const dupReorderedConfirm = validateFullSopConfirmation(useSopPrototypeStore.getState().document!);
+    const dupRemainingErrors = dupReorderedConfirm.success ? [] : dupReorderedConfirm.errors;
+    check(!dupRemainingErrors.some((e) => e.includes('순서가 중복') || e.includes('생성 근거')), 'After assigning a fresh subActionOrder, neither duplicate-order nor missing-origin errors remain — the inherited provenance stands as-is without any re-selection');
+    useSopPrototypeStore.getState().resetStore();
+
+    console.log(`ALL SOP ACTIVITY–SUB ACTION / AGENTIZATION / TEMPLATE TESTS PASSED (${passed})`);
+}
+
+run().catch((error) => {
+    console.error(error);
+    process.exit(1);
+});

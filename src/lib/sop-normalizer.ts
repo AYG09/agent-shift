@@ -12,6 +12,8 @@ export function createSopDocumentFromGeneration(params: {
     context: string;
     setupConfig: SopSetupConfig;
     isSampleData?: boolean;
+    /** Set only when this generation actually requested the Activity–Sub Action structure — never inferred. */
+    structureVersion?: 'activity-subaction-v1';
 }): SopDocument {
     // A raw AI response is never used as-is; it must pass Zod validation first.
     const parseResult = SopGenerationResponseSchema.safeParse(params.rawResponse);
@@ -64,6 +66,11 @@ export function createSopDocumentFromGeneration(params: {
             shape: classifiedType === 'terminal' ? ('terminal' as FlowShape) : (s.shape as FlowShape) || 'process',
             terminalType,
             ioType: s.ioType,
+            sourceActivityIds: s.sourceActivityIds,
+            subActionOrder: s.subActionOrder,
+            subActionOrigin: s.subActionOrigin,
+            subActionOriginRationale: s.subActionOriginRationale,
+            agentizationSuggestion: s.agentizationSuggestion,
             position: s.position && (s.position.x !== 0 || s.position.y !== 0) ? s.position : { x: 0, y: 0 },
             reviewStatus: 'ai-draft' as const,
         };
@@ -104,5 +111,6 @@ export function createSopDocumentFromGeneration(params: {
         createdAt: now,
         updatedAt: now,
         isSampleData: params.isSampleData || false,
+        structureVersion: params.structureVersion,
     };
 }

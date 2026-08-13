@@ -1,7 +1,7 @@
 interface:
   display_name: "SOP Customer Requirements"
-  short_description: "Safely implement customer-backed SOP Gate and Workspace changes"
-  default_prompt: "Use $implement-sop-customer-requirements to implement the approved SOP Task Library and Workspace requirements without changing /flow."
+  short_description: "Implement customer-backed SOP role flows safely"
+  default_prompt: "Use $implement-sop-customer-requirements to implement the final member-to-approver-to-HR SOP scenario, including Task-to-Sub-Action provenance and Agentization, without copying the source design or changing /flow."
 
 policy:
   allow_implicit_invocation: true

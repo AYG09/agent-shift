@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { Bot, CheckCircle2, CircleAlert, Users } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
-import { AI_APPLICATION_MODES, getAgentizableSopStepIds, getAgentizationModeForStep } from '@/lib/sop-agentization';
+import { AGENTIZATION_SUGGESTION_META, AI_APPLICATION_MODES, getAgentizableSopStepIds, getAgentizationModeForStep, mapSuggestionToApplicationMode } from '@/lib/sop-agentization';
 import type { SopAiApplicationMode } from '@/lib/sop-types';
 
 const MODE_ICONS: Record<SopAiApplicationMode, React.ComponentType<{ className?: string }>> = {
@@ -62,7 +62,29 @@ export const SopAgentizationPanel: React.FC<Props> = ({ onBack }) => {
 
                 {selectedIds.length > 0 && <div><div className="mb-1.5 flex items-center justify-between"><label className="font-semibold text-zinc-800">선택 단계 일괄 지정</label><span className="text-[10px] text-zinc-500">개별 판단은 아래에서 변경</span></div><div className="grid grid-cols-1 gap-1.5">{AI_APPLICATION_MODES.map((mode) => { const Icon = MODE_ICONS[mode.id]; return <button key={mode.id} type="button" onClick={() => setAgentizationDefaultMode(mode.id)} disabled={readOnly} className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-left hover:border-indigo-300 hover:bg-indigo-50/40 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-zinc-200 disabled:hover:bg-white"><Icon className="h-3.5 w-3.5 text-indigo-600" /><span className="text-[11px] font-semibold text-zinc-800">{mode.label}</span><span className="ml-auto text-[10px] text-zinc-500">일괄 적용</span></button>; })}</div></div>}
 
-                {selectedIds.length > 0 && <div><div className="mb-1.5 flex items-center justify-between"><label className="font-semibold text-zinc-800">노드별 AI 참여 방식</label><span className="text-[10px] text-zinc-500">미지정은 사람 수행</span></div><div className="divide-y divide-zinc-100 overflow-hidden rounded-md border border-zinc-200">{selectedIds.map((id) => { const step = document.steps.find((item) => item.id === id); if (!step) return null; const mode = getAgentizationModeForStep(document, id); return <div key={id} className="bg-white px-3 py-2.5"><div className="mb-1.5 flex items-center justify-between gap-2"><button type="button" onClick={() => selectStep(id)} className="min-w-0 truncate text-left text-[11px] font-semibold text-zinc-800"><span className="mr-1.5 font-mono text-[10px] text-zinc-400">{String(document.steps.indexOf(step) + 1).padStart(2, '0')}</span>{step.title}</button>{mode && <span className="text-[10px] text-emerald-600">지정됨</span>}</div><select value={mode || ''} onChange={(event) => setAgentizationStepMode(id, event.target.value ? (event.target.value as SopAiApplicationMode) : undefined)} disabled={readOnly} className="w-full rounded-md border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-[11px] font-medium text-zinc-800 focus:border-indigo-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"><option value="">AI 참여 방식 선택</option>{AI_APPLICATION_MODES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></div>; })}</div></div>}
+                {selectedIds.length > 0 && <div><div className="mb-1.5 flex items-center justify-between"><label className="font-semibold text-zinc-800">노드별 AI 참여 방식</label><span className="text-[10px] text-zinc-500">미지정은 사람 수행</span></div><div className="divide-y divide-zinc-100 overflow-hidden rounded-md border border-zinc-200">{selectedIds.map((id) => {
+                    const step = document.steps.find((item) => item.id === id);
+                    if (!step) return null;
+                    const mode = getAgentizationModeForStep(document, id);
+                    const suggestion = step.agentizationSuggestion;
+                    const suggestionMeta = suggestion ? AGENTIZATION_SUGGESTION_META[suggestion.type] : null;
+                    const suggestedMode = suggestion ? mapSuggestionToApplicationMode(suggestion.type) : undefined;
+                    return <div key={id} className="bg-white px-3 py-2.5">
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <button type="button" onClick={() => selectStep(id)} className="min-w-0 truncate text-left text-[11px] font-semibold text-zinc-800"><span className="mr-1.5 font-mono text-[10px] text-zinc-400">{String(document.steps.indexOf(step) + 1).padStart(2, '0')}</span>{step.title}</button>
+                            {mode && <span className="shrink-0 text-[10px] font-semibold text-emerald-600">지정됨</span>}
+                        </div>
+                        {suggestionMeta && (
+                            <div className={`mb-1.5 flex items-start justify-between gap-2 rounded-sm border px-2 py-1.5 text-[10px] leading-4 ${suggestionMeta.badgeClass}`}>
+                                <div className="min-w-0"><span className="font-bold">{suggestionMeta.label}</span><p className="mt-0.5 text-zinc-700">{suggestion!.rationale}</p></div>
+                                {!readOnly && mode !== suggestedMode && (
+                                    <button type="button" onClick={() => setAgentizationStepMode(id, suggestedMode)} className="shrink-0 rounded border border-current px-1.5 py-0.5 font-semibold hover:bg-white/60">제안 적용</button>
+                                )}
+                            </div>
+                        )}
+                        <select value={mode || ''} onChange={(event) => setAgentizationStepMode(id, event.target.value ? (event.target.value as SopAiApplicationMode) : undefined)} disabled={readOnly} className="w-full rounded-md border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-[11px] font-medium text-zinc-800 focus:border-indigo-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"><option value="">AI 참여 방식 선택</option>{AI_APPLICATION_MODES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
+                    </div>;
+                })}</div></div>}
 
                 <div><label className="mb-1.5 block font-semibold text-zinc-800">판단 근거 <span className="font-normal text-zinc-400">(선택)</span></label><textarea rows={2} value={review.note || ''} onChange={(event) => setAgentizationNote(event.target.value)} placeholder="예: 반복 규칙은 명확하나 최종 승인에는 사람이 필요" disabled={readOnly} className="w-full resize-none rounded-md border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs leading-5 text-zinc-800 placeholder:text-zinc-400 focus:border-indigo-500 focus:bg-white focus:outline-none disabled:cursor-not-allowed disabled:opacity-60" /></div>
                 {isConfirmed && <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] leading-4 text-emerald-800"><span className="font-semibold">검토 확정:</span> {selectedIds.length}개 단계별 적용 방식이 기록되었습니다.</div>}

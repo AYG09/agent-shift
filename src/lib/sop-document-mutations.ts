@@ -16,6 +16,11 @@ const MEANINGFUL_STEP_FIELDS: (keyof SopStepData)[] = [
     'shape',
     'terminalType',
     'ioType',
+    // Sub Action provenance is meaningful content, not metadata — changing whether a step
+    // is Activity-derived vs. context-derived (or editing its rationale) must invalidate
+    // review/Agentization confirmation exactly like editing title/definition does.
+    'subActionOrigin',
+    'subActionOriginRationale',
 ];
 
 export function isMeaningfulStepEdit(partial: Partial<SopStepData>): boolean {
@@ -123,6 +128,16 @@ export function buildDeleteStepPatch(
 
 // terminal(시작/종료) 노드는 복제할 수 없다 - 그대로 복제하면 terminalType이 같은
 // 노드가 2개가 되어 SOP의 "시작·종료 각각 정확히 1개" 불변식이 즉시 깨진다.
+//
+// Sub Action 출처 정책(복제): 복제본은 원본의 provenance(sourceActivityIds /
+// subActionOrder / subActionOrigin / subActionOriginRationale)를 그대로 물려받는다.
+// 복제 시점의 복제본은 내용이 원본과 동일하므로 "이 행동이 왜 존재하는가"(Activity
+// 기본 분해 vs 직무 맥락 보강)도 동일하기 때문이다 — 출처를 임의로 초기화하면
+// 오히려 확정 차단을 우회할 수 없는 미지정 상태를 강제하게 된다. 대신 복제된
+// subActionOrder는 같은 Activity 안에서 원본과 중복되므로, 구성원이 순서를 새로
+// 지정하기 전까지 확정 경계(validateSubActionStructure의 duplicate-order 검사)가
+// 문서 확정을 명시적으로 차단한다. 이 정책은 tests/sop-subaction-agentization.test.ts
+// 의 복제 회귀 테스트로 고정되어 있다.
 export function buildDuplicateStepPatch(doc: SopDocument, stepId: string): StructuralResult<{ steps: SopStepData[]; newStepId: string }> {
     const original = doc.steps.find((s) => s.id === stepId);
     if (!original) return { success: false, reason: '해당 단계를 찾을 수 없습니다.' };

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { SopAgentizationReview, SopAgentizationScope, SopAiApplicationMode, SopDocument } from './sop-types';
+import type { SopAgentizationReview, SopAgentizationScope, SopAgentizationSuggestionType, SopAiApplicationMode, SopDocument } from './sop-types';
 
 /**
  * `SopAgentizationReview.mode`/`.stepModes` values are typed as the current,
@@ -27,6 +27,25 @@ export const AI_APPLICATION_MODES: Array<{ id: SopAiApplicationMode; label: stri
     { id: 'automation', label: 'AI Agent 후보', shortLabel: 'AI Agent', detail: '정해진 규칙 안에서 AI가 단계 실행을 주도', badgeClass: 'border-violet-300 bg-violet-50 text-violet-800' },
     { id: 'assist', label: 'AI 지원', shortLabel: 'AI 지원', detail: '사람이 수행하고 AI가 초안·검색·분석을 지원', badgeClass: 'border-indigo-300 bg-indigo-50 text-indigo-800' },
 ];
+
+/**
+ * Display metadata for an AI-generated suggestion (SopStepData.agentizationSuggestion).
+ * Deliberately a separate table from AI_APPLICATION_MODES — a suggestion is not a
+ * member decision, so its badge must never look identical to the "지정됨"/"확정됨"
+ * member-confirmed indicators used elsewhere in this panel.
+ */
+export const AGENTIZATION_SUGGESTION_META: Record<SopAgentizationSuggestionType, { label: string; badgeClass: string }> = {
+    'agent-candidate': { label: 'AI 제안: AI Agent 후보', badgeClass: 'border-violet-200 bg-violet-50 text-violet-700' },
+    'ai-assist': { label: 'AI 제안: AI 지원', badgeClass: 'border-indigo-200 bg-indigo-50 text-indigo-700' },
+    'not-recommended': { label: 'AI 제안: 권장 안 함', badgeClass: 'border-zinc-200 bg-zinc-50 text-zinc-600' },
+};
+
+/** A suggestion pre-fills the member's select value — it never writes stepModes itself. 'not-recommended' has no member-mode analog, so it maps to unset (human-performed). */
+export function mapSuggestionToApplicationMode(type: SopAgentizationSuggestionType): SopAiApplicationMode | undefined {
+    if (type === 'agent-candidate') return 'automation';
+    if (type === 'ai-assist') return 'assist';
+    return undefined;
+}
 
 /**
  * Keeps existing browser-persisted reviews readable after reducing the old

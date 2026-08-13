@@ -18,6 +18,11 @@ export const SopRequiredSkillSchema = z.object({
     accepted: z.boolean().default(false),
 });
 
+export const SopAgentizationSuggestionSchema = z.object({
+    type: z.enum(['agent-candidate', 'ai-assist', 'not-recommended']),
+    rationale: z.string().min(1),
+});
+
 export const SopStepCommonFieldsSchema = z.object({
     id: z.string(),
     detailedInstructions: z.string().optional(),
@@ -37,6 +42,11 @@ export const SopStepCommonFieldsSchema = z.object({
     type: z.string().optional(),
     terminalType: z.enum(['start', 'end']).optional(),
     ioType: z.enum(['input', 'output']).optional(),
+    sourceActivityIds: z.array(z.string().min(1)).optional(),
+    subActionOrder: z.number().int().positive().optional(),
+    subActionOrigin: z.enum(['activity-derived', 'context-derived']).optional(),
+    subActionOriginRationale: z.string().min(1).optional(),
+    agentizationSuggestion: SopAgentizationSuggestionSchema.optional(),
 });
 
 export const SopEdgeCommonFieldsSchema = z.object({

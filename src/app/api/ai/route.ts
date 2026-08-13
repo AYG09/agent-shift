@@ -847,8 +847,13 @@ export async function POST(request: NextRequest) {
                 schema = SopGenerationResponseSchema;
                 prompt = getSopPrompt({
                     memberRole: sopRequest.memberRole,
+                    sourceJobId: sopRequest.sourceJobId,
+                    jobName: sopRequest.jobName,
+                    taskId: sopRequest.taskId,
                     taskName: sopRequest.taskName,
+                    taskDefinition: sopRequest.taskDefinition,
                     sourceType: sopRequest.sourceType,
+                    structureVersion: sopRequest.structureVersion,
                     activityName: sopRequest.activityName,
                     activities: sopRequest.activities,
                     skills: sopRequest.skills,

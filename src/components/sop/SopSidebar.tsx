@@ -30,6 +30,8 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
         document,
         selectedStepId,
         selectStep,
+        selectSourceActivity,
+        selectedSourceActivityId,
         customerReviewMode: readOnly,
     } = useSopPrototypeStore();
 
@@ -69,6 +71,9 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
 
     const allSkillsList = Array.from(allSkillsMap.values());
     const aiSuggestedPendingSkills = allSkillsList.filter((s) => s.source === 'ai-suggested' && !s.accepted);
+    const selectedTask = document.workLibrary.taskCatalog.find((task) => task.id === document.workLibrary.taskId);
+    const sourceActivities = [...(selectedTask?.activities ?? [])].sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
+    const coveredActivityIds = new Set(document.steps.flatMap((step) => step.sourceActivityIds ?? []));
 
     // Filtered steps
     const filteredSteps = document.steps.filter((step) => {
@@ -123,9 +128,8 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                                 대상 Task / Activity
                             </span>
                             <h4 className="font-bold text-zinc-900 text-xs mb-0.5">{document.workLibrary.taskName}</h4>
-                            <p className="text-[11px] text-zinc-600">
-                                {document.workLibrary.activityName || '전체 Activity'}
-                            </p>
+                            <p className="text-[11px] text-zinc-600">{document.workLibrary.jobName || document.member.jobRole} · {document.workLibrary.sourceType === 'task' ? 'Task 전체' : document.workLibrary.activityName || '선택 Activity'}</p>
+                            {selectedTask?.description && <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">{selectedTask.description}</p>}
                         </div>
 
                         <div className="p-3.5 bg-zinc-50 rounded-xl border border-zinc-200">
@@ -148,6 +152,37 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                                 <span className="text-[10px] text-emerald-700 font-semibold block">검토 진행률</span>
                                 <span className="text-base font-bold text-emerald-900">{progressPercent}%</span>
                             </div>
+                        </div>
+
+                        <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-violet-800">{document.structureVersion === 'activity-subaction-v1' ? 'Activity별 Sub Action' : 'Activity 반영률'}</span>
+                                <span className="text-sm font-bold text-violet-900">{coveredActivityIds.size}/{sourceActivities.length}</span>
+                            </div>
+                            <div className="mt-2 max-h-52 space-y-1 overflow-y-auto">{sourceActivities.map((activity) => {
+                                const mappedSteps = document.steps
+                                    .filter((step) => step.sourceActivityIds?.includes(activity.id))
+                                    .sort((left, right) => (left.subActionOrder ?? 0) - (right.subActionOrder ?? 0));
+                                const active = selectedSourceActivityId === activity.id;
+                                return (
+                                    <div key={activity.id} className="rounded-md">
+                                        <button type="button" onClick={() => selectSourceActivity(active ? null : activity.id)} className={`flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[11px] ${active ? 'bg-violet-200 text-violet-950' : 'hover:bg-white text-zinc-700'}`}>
+                                            <span className="font-bold text-violet-700">A{String(activity.order ?? 0).padStart(2, '0')}</span>
+                                            <span className="min-w-0 flex-1 truncate">{activity.name}</span>
+                                            <span className="text-[10px]">{mappedSteps.length}개</span>
+                                        </button>
+                                        {active && mappedSteps.length > 0 && (
+                                            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-violet-200 pl-2">
+                                                {mappedSteps.map((step) => (
+                                                    <button key={step.id} type="button" onClick={() => selectStep(step.id)} className={`block w-full truncate rounded px-1 py-0.5 text-left text-[10px] ${step.id === selectedStepId ? 'bg-indigo-100 text-indigo-800 font-semibold' : 'text-zinc-600 hover:bg-white'}`}>
+                                                        {step.subActionOrder !== undefined ? `#${step.subActionOrder} ` : ''}{step.title}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}</div>
                         </div>
 
                         <div>
@@ -205,6 +240,9 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                                             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 shrink-0">
                                                 {String(realIndex + 1).padStart(2, '0')}
                                             </span>
+                                            {document.structureVersion === 'activity-subaction-v1' && step.subActionOrder !== undefined && (
+                                                <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-violet-100 text-violet-700 shrink-0">#{step.subActionOrder}</span>
+                                            )}
                                             <span className="font-semibold text-zinc-900 truncate">{step.title}</span>
                                         </div>
 
@@ -238,7 +276,7 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                                 SOP 사용 SKILL 총 {allSkillsList.length}개
                             </span>
                             <p className="text-[11px] text-indigo-700">
-                                Work Library SKILL: {allSkillsList.filter((s) => s.source === 'work-library').length}개 | AI
+                                Task Library SKILL: {allSkillsList.filter((s) => s.source === 'work-library').length}개 | AI
                                 제안: {allSkillsList.filter((s) => s.source === 'ai-suggested').length}개
                             </p>
                         </div>
@@ -260,7 +298,7 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                                             </span>
                                         ) : (
                                             <span className="text-indigo-800 font-medium bg-indigo-100 px-1.5 py-0.2 rounded">
-                                                Work Library
+                                                Task Library
                                             </span>
                                         )}
                                     </div>
