@@ -13,17 +13,17 @@ function isLegacyDefaultHandlePair(sourceHandle?: string, targetHandle?: string)
 }
 
 /**
- * Resolves each selected Task's Activity id to its catalog `order` ONCE per
- * document build, so SopStepNode never has to parse an id string (a
+ * Resolves each selected Task's Activity id to its catalog `order`/`name` ONCE
+ * per document build, so SopStepNode never has to parse an id string (a
  * normalized Activity id is a stable identifier/hash, not an ordinal — slicing
  * its last path segment could show a wildly wrong number) and never has to
  * subscribe to the whole Store itself just to look this up per node.
  */
-function buildActivityOrderLookup(doc: SopDocument): Map<string, number> {
+function buildActivityMetaLookup(doc: SopDocument): Map<string, { order: number; name: string }> {
     const task = doc.workLibrary.taskCatalog.find((item) => item.id === doc.workLibrary.taskId);
-    const lookup = new Map<string, number>();
+    const lookup = new Map<string, { order: number; name: string }>();
     (task?.activities ?? []).forEach((activity, index) => {
-        lookup.set(activity.id, activity.order ?? index + 1);
+        lookup.set(activity.id, { order: activity.order ?? index + 1, name: activity.name });
     });
     return lookup;
 }
@@ -31,11 +31,99 @@ function buildActivityOrderLookup(doc: SopDocument): Map<string, number> {
 /** `'unmapped'` means the step DOES reference an Activity id, but that id no longer resolves in the current catalog — a real fallback, never a fabricated ordinal. */
 export type SopNodeActivityBadgeData = number | 'unmapped' | undefined;
 
-function resolveActivityBadge(step: { sourceActivityIds?: string[] }, activityOrderLookup: Map<string, number>): SopNodeActivityBadgeData {
+function resolveActivityBadge(step: { sourceActivityIds?: string[] }, activityMetaLookup: Map<string, { order: number; name: string }>): SopNodeActivityBadgeData {
     const primaryId = step.sourceActivityIds?.[0];
     if (!primaryId) return undefined;
-    const order = activityOrderLookup.get(primaryId);
-    return order !== undefined ? order : 'unmapped';
+    const meta = activityMetaLookup.get(primaryId);
+    return meta !== undefined ? meta.order : 'unmapped';
+}
+
+/** Data payload for the read-only Activity group container nodes. */
+export interface SopActivityGroupNodeData {
+    label: string;
+    /** Only the FIRST segment of an Activity that wraps across layout rows shows the full label; continuations show a compact "계속" chip. */
+    showFullLabel: boolean;
+    order: number;
+    width: number;
+    height: number;
+    [key: string]: unknown;
+}
+
+/**
+ * Builds the read-only background container nodes that visualize which
+ * Activity each Sub Action belongs to — the customer's expected SOP design
+ * shows Sub Actions grouped inside their parent Activity section. Groups are
+ * computed from CONTIGUOUS runs of steps sharing the same primary Activity
+ * (generation orders Sub Actions per Activity, so runs are contiguous along
+ * the reading path), then split per layout row so a group that wraps across
+ * the serpentine rows renders as tight per-row containers instead of one huge
+ * box covering unrelated nodes. Terminals and unmapped steps never join a
+ * group. Pure function of the document — canvas and tests run the same code.
+ */
+export function buildSopActivityGroupNodes(doc: SopDocument | null): Node[] {
+    if (!doc || doc.structureVersion !== 'activity-subaction-v1') return [];
+    const activityMetaLookup = buildActivityMetaLookup(doc);
+
+    // 1. Contiguous runs of the same primary Activity along the step order.
+    type Segment = { activityId: string; steps: SopDocument['steps'] };
+    const runs: Segment[] = [];
+    doc.steps.forEach((step) => {
+        const primaryId = !step.terminalType ? step.sourceActivityIds?.[0] : undefined;
+        if (!primaryId || !activityMetaLookup.has(primaryId)) return;
+        const last = runs[runs.length - 1];
+        if (last && last.activityId === primaryId) last.steps.push(step);
+        else runs.push({ activityId: primaryId, steps: [step] });
+    });
+
+    // 2. Split each run by layout row (nodes in the same row share y within half
+    //    a row spacing) so the container hugs its own row segment.
+    const ROW_CLUSTER_TOLERANCE = 100;
+    const PADDING_X = 16;
+    const PADDING_TOP = 30;
+    const PADDING_BOTTOM = 18;
+    const nodes: Node[] = [];
+    const segmentCountByActivity = new Map<string, number>();
+
+    runs.forEach((run) => {
+        const rows = new Map<number, SopDocument['steps']>();
+        run.steps.forEach((step) => {
+            const y = step.position?.y ?? 0;
+            const rowKey = [...rows.keys()].find((key) => Math.abs(key - y) <= ROW_CLUSTER_TOLERANCE);
+            if (rowKey !== undefined) rows.get(rowKey)!.push(step);
+            else rows.set(y, [step]);
+        });
+
+        [...rows.values()].forEach((rowSteps) => {
+            const meta = activityMetaLookup.get(run.activityId)!;
+            const minX = Math.min(...rowSteps.map((s) => s.position.x));
+            const minY = Math.min(...rowSteps.map((s) => s.position.y));
+            const maxX = Math.max(...rowSteps.map((s) => s.position.x + getSopNodeSize(s).width));
+            const maxY = Math.max(...rowSteps.map((s) => s.position.y + getSopNodeSize(s).height));
+            const segmentIndex = segmentCountByActivity.get(run.activityId) ?? 0;
+            segmentCountByActivity.set(run.activityId, segmentIndex + 1);
+
+            nodes.push({
+                id: `sop-activity-group:${run.activityId}:${segmentIndex}`,
+                type: 'sopActivityGroup',
+                position: { x: minX - PADDING_X, y: minY - PADDING_TOP },
+                data: {
+                    label: `${meta.order}. ${meta.name}`,
+                    showFullLabel: segmentIndex === 0,
+                    order: meta.order,
+                    width: maxX - minX + PADDING_X * 2,
+                    height: maxY - minY + PADDING_TOP + PADDING_BOTTOM,
+                } satisfies SopActivityGroupNodeData,
+                draggable: false,
+                selectable: false,
+                focusable: false,
+                deletable: false,
+                zIndex: -10,
+                style: { pointerEvents: 'none' },
+            });
+        });
+    });
+
+    return nodes;
 }
 
 export function buildSopNodes(doc: SopDocument | null, selectedStepId: string | null, selectedSourceActivityId: string | null = null): Node[] {
@@ -52,7 +140,7 @@ export function buildSopNodes(doc: SopDocument | null, selectedStepId: string | 
  * useEffect 안에만 있어서 buildSopNodes()만 호출하는 테스트로는 검증할 수 없었다.
  */
 export function syncSopCanvasNodes(doc: SopDocument, selectedStepId: string | null, prevNodes: Node[], selectedSourceActivityId: string | null = null): Node[] {
-    const activityOrderLookup = buildActivityOrderLookup(doc);
+    const activityMetaLookup = buildActivityMetaLookup(doc);
     return doc.steps.map((step, idx) => {
         const existing = prevNodes.find((n) => n.id === step.id);
         const posX = existing && existing.dragging ? existing.position.x : (step.position?.x ?? idx * 240 + 100);
@@ -66,7 +154,7 @@ export function syncSopCanvasNodes(doc: SopDocument, selectedStepId: string | nu
                 step,
                 index: idx + 1,
                 highlightedByActivity: Boolean(selectedSourceActivityId && step.sourceActivityIds?.includes(selectedSourceActivityId)),
-                activityBadgeOrder: resolveActivityBadge(step, activityOrderLookup),
+                activityBadgeOrder: resolveActivityBadge(step, activityMetaLookup),
             },
             selected: step.id === selectedStepId,
             // 노드는 React Flow의 키보드/UI 삭제(Backspace 등)로 직접 지울 수 없다 - Store와

@@ -15,9 +15,10 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
-import { buildSopNodes, buildSopEdges, syncSopCanvasNodes } from '@/lib/sop-canvas-utils';
+import { buildSopNodes, buildSopEdges, syncSopCanvasNodes, buildSopActivityGroupNodes } from '@/lib/sop-canvas-utils';
 import { classifySopStepType } from '@/lib/graph-validation';
 import { SopStepNode } from './SopStepNode';
+import { SopActivityGroupNode } from './SopActivityGroupNode';
 import { SopReworkEdge } from './SopReworkEdge';
 import { AI_APPLICATION_MODES } from '@/lib/sop-agentization';
 
@@ -28,6 +29,7 @@ interface SopCanvasProps {
 
 const nodeTypes = {
     sopStep: SopStepNode,
+    sopActivityGroup: SopActivityGroupNode,
 };
 
 const edgeTypes = {
@@ -48,7 +50,12 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
     const updateEdge = useSopPrototypeStore((state) => state.updateEdge);
     const [connectionNotice, setConnectionNotice] = React.useState<string | null>(null);
 
-    const initialNodes = useMemo(() => buildSopNodes(document, selectedStepId, selectedSourceActivityId), [document, selectedStepId, selectedSourceActivityId]);
+    // Activity 그룹 컨테이너(읽기 전용 배경)를 단계 노드보다 먼저 배열에 넣어
+    // 렌더 순서상 항상 뒤(z-index -10)에 깔리게 한다.
+    const initialNodes = useMemo(
+        () => [...buildSopActivityGroupNodes(document), ...buildSopNodes(document, selectedStepId, selectedSourceActivityId)],
+        [document, selectedStepId, selectedSourceActivityId]
+    );
     const initialEdges = useMemo(() => buildSopEdges(document, selectedEdgeId, showBranchLabels), [document, selectedEdgeId, showBranchLabels]);
 
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -63,10 +70,15 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
         [document]
     );
 
-    // Synchronize store updates into React Flow state
+    // Synchronize store updates into React Flow state. Group containers are
+    // rebuilt from the Store document each sync (positions follow committed
+    // drags); step nodes keep the drag-preserving merge in syncSopCanvasNodes.
     useEffect(() => {
         if (!document) return;
-        setNodes((prevNodes) => syncSopCanvasNodes(document, selectedStepId, prevNodes, selectedSourceActivityId));
+        setNodes((prevNodes) => [
+            ...buildSopActivityGroupNodes(document),
+            ...syncSopCanvasNodes(document, selectedStepId, prevNodes.filter((node) => node.type === 'sopStep'), selectedSourceActivityId),
+        ]);
     }, [document, selectedStepId, selectedSourceActivityId, setNodes]);
 
     useEffect(() => {
@@ -293,7 +305,7 @@ export const SopCanvas: React.FC<SopCanvasProps> = ({ showMiniMap, showBranchLab
                 {showMiniMap && (
                     <MiniMap
                         className="!bg-white/90 !border !border-zinc-200 !rounded-xl !shadow-md"
-                        nodeColor={() => '#6366f1'}
+                        nodeColor={(node) => (node.type === 'sopActivityGroup' ? '#ede9fe' : '#6366f1')}
                     />
                 )}
             </ReactFlow>

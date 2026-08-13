@@ -16,7 +16,7 @@ import {
     getAgentizationModeForStep,
     mapSuggestionToApplicationMode,
 } from '../src/lib/sop-agentization';
-import { buildSopNodes } from '../src/lib/sop-canvas-utils';
+import { buildSopNodes, buildSopActivityGroupNodes } from '../src/lib/sop-canvas-utils';
 import { useSopPrototypeStore } from '../src/lib/sop-prototype-store';
 import { SopAgentizationPanel } from '../src/components/sop/SopAgentizationPanel';
 import { toSopTemplateSummary, SopTemplateSummarySchema } from '../src/lib/sop-template';
@@ -836,6 +836,53 @@ async function run() {
         check(
             sampleAllowedIds.every((activityId) => sampleBusinessSteps.filter((s) => s.sourceActivityIds?.includes(activityId)).length >= 2),
             'Every selected Task Activity decomposes into AT LEAST TWO Sub Actions in the sample — the node unit is the Sub Action, never a 1:1 Activity-copy node'
+        );
+
+        // -----------------------------------------------------
+        // Activity group containers (customer's expected design: Sub Actions
+        // rendered INSIDE their parent Activity section on the canvas).
+        // -----------------------------------------------------
+        console.log('buildSopActivityGroupNodes: canvas Activity group containers...');
+        const groupNodes = buildSopActivityGroupNodes(sampleDoc);
+        check(groupNodes.length > 0, 'An Activity–Sub Action document produces Activity group container nodes for the canvas');
+        check(groupNodes.every((n) => n.type === 'sopActivityGroup'), 'Every group container uses the sopActivityGroup node type');
+        check(
+            groupNodes.every((n) => n.draggable === false && n.selectable === false && n.zIndex === -10),
+            'Group containers are read-only background nodes — never draggable, selectable, or above the real step nodes'
+        );
+        check(
+            sampleAllowedIds.every((activityId) => groupNodes.some((n) => n.id.startsWith(`sop-activity-group:${activityId}:`))),
+            'Every covered Activity gets at least one group container on the canvas'
+        );
+        const scopedActivities = getScopedActivities(SAMPLE_WORK_LIBRARY);
+        const firstActivity = scopedActivities[0];
+        const firstGroup = groupNodes.find((n) => n.id === `sop-activity-group:${firstActivity.id}:0`);
+        check(
+            Boolean(firstGroup) && (firstGroup!.data as { label: string }).label === `${firstActivity.order ?? 1}. ${firstActivity.name}`,
+            'The group label shows the catalog Activity order and NAME (e.g. "1. 대상자 추출") exactly as the customer design groups Sub Actions'
+        );
+        check(
+            groupNodes.every((n) => {
+                const d = n.data as { width: number; height: number };
+                return d.width > 0 && d.height > 0;
+            }),
+            'Every group container has a positive bounding box computed from its member steps'
+        );
+        // Each group must actually CONTAIN its member steps' positions.
+        const stepsInFirstActivity = sampleDoc.steps.filter((s) => !s.terminalType && s.sourceActivityIds?.[0] === firstActivity.id);
+        const firstActivityGroups = groupNodes.filter((n) => n.id.startsWith(`sop-activity-group:${firstActivity.id}:`));
+        check(
+            stepsInFirstActivity.every((s) =>
+                firstActivityGroups.some((g) => {
+                    const d = g.data as { width: number; height: number };
+                    return s.position.x >= g.position.x && s.position.x <= g.position.x + d.width && s.position.y >= g.position.y && s.position.y <= g.position.y + d.height;
+                })
+            ),
+            'Every Sub Action of an Activity lies inside one of that Activity\'s group containers — membership is visually truthful, not decorative'
+        );
+        check(
+            buildSopActivityGroupNodes({ ...sampleDoc, structureVersion: undefined }).length === 0,
+            'A legacy (non Activity–Sub Action) document renders NO group containers — the grouping visual never fabricates Activity structure that the document does not declare'
         );
     }
 

@@ -109,6 +109,20 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
                     {agentizationMeta.shortLabel}
                 </span>
             )}
+            {/* 고객사 기대 디자인: 시작/종료 노드에는 "시작"/"종료" 태그가 붙어
+                어느 노드가 프로세스의 진입·완료 지점인지 한눈에 보이게 한다. */}
+            {step.terminalType && (
+                <span
+                    className={`pointer-events-none absolute left-2 top-[-11px] z-20 rounded border px-1.5 py-0.5 text-[9px] font-bold shadow-sm ${
+                        step.terminalType === 'start'
+                            ? 'border-emerald-200 bg-white text-emerald-700'
+                            : 'border-rose-200 bg-white text-rose-700'
+                    }`}
+                    title={step.terminalType === 'start' ? '프로세스 시작 지점' : '프로세스 종료 지점'}
+                >
+                    {step.terminalType === 'start' ? '시작' : '종료'}
+                </span>
+            )}
             {!step.terminalType && step.sourceActivityIds?.length ? (
                 <span
                     className={`pointer-events-none absolute right-2 top-[-11px] z-20 rounded border px-1.5 py-0.5 text-[9px] font-bold shadow-sm ${activityBadgeOrder === 'unmapped' ? 'border-amber-200 bg-white text-amber-700' : 'border-violet-200 bg-white text-violet-700'}`}
