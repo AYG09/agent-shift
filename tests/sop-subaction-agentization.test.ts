@@ -1437,6 +1437,30 @@ async function run() {
         }
     }
 
+    // ---------------------------------------------------------
+    // Gate density: a CONFIRMED Task Library collapses to a read-only summary
+    // (the 3-pane editor was the screen's dominant density offender even after
+    // review was already finished); reopening restores the full editor.
+    // ---------------------------------------------------------
+    console.log('WorkLibrarySelector confirmed-state summary (Gate density)...');
+    {
+        const { WorkLibrarySelector } = await import('../src/components/sop/WorkLibrarySelector');
+        act(() => {
+            useSopPrototypeStore.getState().resetStore();
+            useSopPrototypeStore.setState({ workLibrary: { ...useSopPrototypeStore.getState().workLibrary, confirmed: true } });
+        });
+        const confirmedRenderer = renderComponent(React.createElement(WorkLibrarySelector));
+        check(confirmedRenderer.root.findAllByType('input').length === 0 && confirmedRenderer.root.findAllByType('textarea').length === 0, 'A CONFIRMED library renders NO editor inputs — the 3-pane editor collapses to a read-only summary');
+        const summaryChips = confirmedRenderer.root.findAll((n) => n.type === 'span' && typeof n.props.title === 'string' && Array.isArray(n.props.children));
+        check(summaryChips.length > 0, 'The summary lists each Activity as a compact chip (order + name)');
+        const reopenBtn = confirmedRenderer.root.findAllByType('button').find((b) => Array.isArray(b.props.children) && b.props.children.some((child: unknown) => child === '검토 다시 열기'));
+        check(Boolean(reopenBtn), 'The summary keeps the "검토 다시 열기" button as the single way back into editing');
+        act(() => reopenBtn!.props.onClick());
+        check(confirmedRenderer.root.findAllByType('input').length > 0, 'Reopening the review restores the FULL editor with all inputs — no data was lost while collapsed');
+        confirmedRenderer.unmount();
+        useSopPrototypeStore.getState().resetStore();
+    }
+
     console.log(`ALL SOP ACTIVITY–SUB ACTION / AGENTIZATION / TEMPLATE TESTS PASSED (${passed})`);
 }
 

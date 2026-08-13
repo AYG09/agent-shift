@@ -12,6 +12,11 @@ const STEP_OPTIONS = Array.from({ length: 13 }, (_, index) => index + 4);
 export const SopGenerationSettings: React.FC<{ activityCount: number }> = ({ activityCount }) => {
     const { setupConfig, setSetupConfig } = useSopPrototypeStore();
     const [showAdvanced, setShowAdvanced] = React.useState(false);
+    // 밀도 개선: 구조 설정은 합리적인 기본값이 이미 채워져 있으므로 기본 접힘.
+    // 현재 값 요약은 헤더에 항상 보이고, 검증 오류가 있으면 강제로 펼쳐져
+    // 필드별 오류 표시가 접힌 채 숨겨지는 일이 없다. 내용은 접힘 상태에서도
+    // 마운트를 유지한다(CSS hidden) — 폼 상태와 기존 테스트가 그대로 동작한다.
+    const [collapsed, setCollapsed] = React.useState(true);
     const issues = validateSopSetupConfig(setupConfig);
     const issueFor = (field: string) => issues.find((issue) => issue.field === field)?.message;
     const capacity = computeSubActionCapacity({
@@ -22,15 +27,32 @@ export const SopGenerationSettings: React.FC<{ activityCount: number }> = ({ act
         detailLevel: setupConfig.detailLevel,
     });
     const parseIntFieldValue = (raw: string): number => (raw.trim() === '' ? NaN : Number(raw));
+    const isOpen = !collapsed || issues.length > 0;
+    const summary = [
+        SOP_DETAIL_LEVEL_GUIDE[setupConfig.detailLevel]?.label || setupConfig.detailLevel,
+        capacity.adjusted ? `${capacity.minSteps}~${capacity.maxSteps}단계` : `${setupConfig.minSteps}–${setupConfig.maxSteps}단계`,
+        SOP_BRANCH_POLICY_GUIDE[setupConfig.branchPolicy]?.label || setupConfig.branchPolicy,
+        setupConfig.allowRework ? '재작업 허용' : '재작업 금지',
+    ].join(' · ');
 
     return (
         <div className="rounded-lg border border-zinc-200 bg-white">
-            <div className="flex items-start gap-3 border-b border-zinc-100 px-4 py-3">
+            <button
+                type="button"
+                onClick={() => setCollapsed((value) => !value)}
+                aria-expanded={isOpen}
+                className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-zinc-50/70"
+            >
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-indigo-600 text-white"><Sliders className="h-4 w-4" /></div>
-                <div className="min-w-0"><h2 className="text-sm font-semibold text-zinc-900">워크플로우 구조 설정</h2><p className="mt-0.5 text-[11px] leading-4 text-zinc-500">생성할 SOP의 단계 범위와 분기·재작업 정책을 정합니다.</p></div>
-            </div>
+                <div className="min-w-0 flex-1">
+                    <h2 className="text-sm font-semibold text-zinc-900">워크플로우 구조 설정</h2>
+                    <p className="mt-0.5 truncate text-[11px] leading-4 text-zinc-500" title={summary}>{summary}</p>
+                    {issues.length > 0 && <p className="mt-0.5 text-[11px] font-semibold text-rose-600">설정 오류 {issues.length}건 — 확인이 필요합니다</p>}
+                </div>
+                <ChevronDown className={`mt-1 h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
 
-            <div className="space-y-4 p-4">
+            <div className={isOpen ? 'space-y-4 border-t border-zinc-100 p-4' : 'hidden'}>
                 <div>
                     <div className="mb-2 flex items-center justify-between gap-2"><label className="text-xs font-semibold text-zinc-800">업무 분해 수준</label><span className="text-[10px] font-medium text-indigo-700">SOP 생성 구조</span></div>
                     <p className="mb-2 text-[11px] leading-4 text-zinc-500">AI가 같은 업무를 어느 수준까지 나눠 SOP 단계로 만들지 정합니다. 캔버스 표시는 단계명 중심으로 유지됩니다.</p>

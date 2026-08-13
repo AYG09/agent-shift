@@ -64,6 +64,7 @@ export const SopSetupGate: React.FC = () => {
     // 핵심 요약은 접힌 헤더에 항상 표시되므로 정보 손실 없이 화면 밀도만 낮아진다.
     const [showMemberInfo, setShowMemberInfo] = useState(false);
     const [showRecommendation, setShowRecommendation] = useState(false);
+    const [showContextHelpers, setShowContextHelpers] = useState(false);
 
     // Direct /sop/setup entry (bookmark, refresh, back-button) must normalize the
     // generation scope exactly like Home's "Task 기반 생성" card click does — this
@@ -432,12 +433,18 @@ export const SopSetupGate: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Topic Helper Chips */}
+                    {/* Topic Helper Chips — 7개 칩이 3줄을 차지하므로 기본 접힘. */}
                     <div className="mb-3">
-                        <label className="block text-xs font-semibold text-zinc-600 mb-2 flex items-center gap-1">
-                            <HelpCircle className="w-3.5 h-3.5 text-amber-600" /> 클릭하여 보조 입력 양식 삽입:
-                        </label>
-                        <div className="flex flex-wrap gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => setShowContextHelpers((v) => !v)}
+                            aria-expanded={showContextHelpers}
+                            className="flex w-full items-center gap-1 text-left text-xs font-semibold text-zinc-600 hover:text-zinc-900"
+                        >
+                            <HelpCircle className="w-3.5 h-3.5 shrink-0 text-amber-600" /> 보조 입력 양식 삽입 ({CONTEXT_TOPICS.length}종)
+                            <ChevronDown className={`ml-auto h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform ${showContextHelpers ? 'rotate-180' : ''}`} />
+                        </button>
+                        <div className={showContextHelpers ? 'mt-2 flex flex-wrap gap-1.5' : 'hidden'}>
                             {CONTEXT_TOPICS.map((topic, i) => (
                                 <button
                                     key={i}

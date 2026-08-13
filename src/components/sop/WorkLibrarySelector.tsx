@@ -79,10 +79,36 @@ export function WorkLibrarySelector() {
     };
     const addSkill = () => updateSkills([...selectedActivity.skills, { id: `member-skill-${Date.now()}`, name: '새 SKILL', description: '' }]);
 
-    return <section className={`rounded-2xl border bg-white p-4 shadow-sm ${workLibrary.confirmed ? 'border-emerald-300' : 'border-zinc-200'}`}>
+    // 검토가 확정된 라이브러리는 3단 편집기 대신 읽기 전용 요약으로 접힌다 —
+    // "확정"의 의미(검토 끝)와 화면 밀도를 일치시킨다. "검토 다시 열기"를 누르는
+    // 순간 기존 편집기가 그대로 복원된다. 데이터는 어느 쪽에서도 변형되지 않는다.
+    if (workLibrary.confirmed) {
+        const totalSkillCount = activities.reduce((sum, activity) => sum + activity.skills.length, 0);
+        return <section className="rounded-2xl border border-emerald-300 bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white"><Layers className="h-5 w-5" /></div><div><h2 className="text-base font-bold text-zinc-900">2. Task Library 검토 및 확정</h2><p className="mt-0.5 text-xs text-emerald-700 font-semibold">검토 확정됨 — 편집기가 접혀 있습니다. 수정하려면 &quot;검토 다시 열기&quot;를 누르세요.</p></div></div>
+                <button type="button" onClick={reopenWorkLibrary} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-700"><CheckCircle2 className="h-4 w-4" />검토 다시 열기</button>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+                <p className="text-xs text-zinc-700"><strong>{workLibrary.jobName || 'Job 미지정'}</strong> · <strong className="text-zinc-900">{selectedTask.name}</strong> · Activity {activities.length}개 · SKILL {totalSkillCount}개</p>
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700">Task 전체 생성</span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+                {activities.map((activity) => (
+                    <span key={activity.id} className="inline-flex max-w-56 items-center gap-1 truncate rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] font-medium text-zinc-700" title={activity.description || activity.name}>
+                        <strong className="text-indigo-600">A{String(activity.order ?? 0).padStart(2, '0')}</strong>
+                        <span className="truncate">{activity.name}</span>
+                    </span>
+                ))}
+            </div>
+            <p className="mt-3 text-xs text-zinc-500">Task 전체 생성: {activities.length}개 Activity를 순서대로 반영하며, Activity마다 1개 이상의 Sub Action으로 SOP가 생성됩니다.</p>
+        </section>;
+    }
+
+    return <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-100 pb-3">
             <div className="flex gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white"><Layers className="h-5 w-5" /></div><div><h2 className="text-base font-bold text-zinc-900">2. Task Library 검토 및 확정</h2><p className="mt-0.5 text-xs text-zinc-600">Job › Task › 순서가 있는 Activity › Activity별 SKILL을 직접 검토·편집합니다.</p></div></div>
-            <button type="button" onClick={workLibrary.confirmed ? reopenWorkLibrary : confirmWorkLibrary} className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold ${workLibrary.confirmed ? 'border border-emerald-300 bg-white text-emerald-700' : 'bg-emerald-600 text-white'}`}><CheckCircle2 className="h-4 w-4" />{workLibrary.confirmed ? '검토 다시 열기' : '검토 완료 · 확정'}</button>
+            <button type="button" onClick={confirmWorkLibrary} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white"><CheckCircle2 className="h-4 w-4" />검토 완료 · 확정</button>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
