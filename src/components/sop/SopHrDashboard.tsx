@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AlertCircle, BarChart3, Download, Loader2, Sparkles } from 'lucide-react';
 import { fetchSopAnalytics, requestStandardDraft, type SopAnalyticsFetchResult } from '@/lib/sop-record-client';
 import { buildDemoActorHeaders } from '@/lib/sop-actor-client';
+import { SopRoleNav } from './SopRoleNav';
 import { SOP_LIFECYCLE_STATUS_META } from '@/lib/sop-lifecycle';
 import type { SopDocument } from '@/lib/sop-types';
 
@@ -93,10 +94,11 @@ export function SopHrDashboard({ fetchImpl }: { fetchImpl?: typeof fetch }) {
             <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white shadow-2xs">
                 <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-3 px-6">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600 text-sm font-bold text-white"><BarChart3 className="h-4.5 w-4.5" /></div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                         <h1 className="text-base font-semibold leading-tight text-zinc-900">HR 대시보드</h1>
-                        <p className="text-xs text-zinc-500">데모 역할 전환: 현재 HR 역할로 조회 중 (읽기 전용) · 실제 인증이 아닙니다.</p>
+                        <p className="truncate text-xs text-zinc-500">데모 역할 전환: 현재 HR 역할로 조회 중 (읽기 전용) · 실제 인증이 아닙니다.</p>
                     </div>
+                    <SopRoleNav />
                 </div>
             </header>
 

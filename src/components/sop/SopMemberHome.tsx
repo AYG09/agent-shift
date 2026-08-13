@@ -13,6 +13,7 @@ import {
     Users,
 } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
+import { SopRoleNav } from './SopRoleNav';
 import { listMySopRecords, requestSopApproval } from '@/lib/sop-record-client';
 import { enterTaskCreationPath } from '@/lib/sop-setup-actions';
 import { buildSopStatusRows, computeSopStatusCounts, computeMemberTaskActivitySkillCounts, type SopStatusCounts } from '@/lib/sop-member-home';
@@ -103,10 +104,11 @@ export function SopMemberHomeView({ navigate, fetchImpl }: { navigate: (href: st
             <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white shadow-2xs">
                 <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-3 px-6">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">SOP</div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                         <h1 className="text-base font-semibold leading-tight text-zinc-900">구성원 Home</h1>
-                        <p className="text-xs text-zinc-500">SOP 작성 및 분석 플랫폼 · 고객사 검토용 프로토타입</p>
+                        <p className="truncate text-xs text-zinc-500">SOP 작성 및 분석 플랫폼 · 고객사 검토용 프로토타입</p>
                     </div>
+                    <SopRoleNav />
                 </div>
             </header>
 

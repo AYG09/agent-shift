@@ -24,6 +24,7 @@ import { SopSidebar } from './SopSidebar';
 import { SopCanvas } from './SopCanvas';
 import { SopStepInspector } from './SopStepInspector';
 import { SopServerSaveControl } from './SopServerSaveControl';
+import { SopRoleNav } from './SopRoleNav';
 import { SopStepData } from '@/lib/sop-types';
 import { SOP_REVIEW_STATUS_BADGE_CLASS } from '@/lib/sop-review-status-meta';
 
@@ -179,8 +180,9 @@ export const SopWorkspace: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Center Section: Customer Review Mode */}
+                {/* Center Section: Customer Review Mode + 역할 화면 이동 */}
                 <div className="hidden lg:flex items-center gap-3">
+                    <SopRoleNav compact />
                     {/* Customer Review Mode Toggle */}
                     <button
                         type="button"

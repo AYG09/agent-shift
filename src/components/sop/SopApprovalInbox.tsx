@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle2, Loader2, ShieldCheck, XCircle } from 'lucide
 import { listApprovalQueue, decideSopApproval } from '@/lib/sop-record-client';
 import { SOP_LIFECYCLE_STATUS_META } from '@/lib/sop-lifecycle';
 import { SopApprovalReadOnlyPanel } from './SopApprovalReadOnlyPanel';
+import { SopRoleNav } from './SopRoleNav';
 import { SopRejectionModal } from './SopRejectionModal';
 import type { SopRecord } from '@/lib/sop-record-schema';
 import type { SopOrganizationProgress } from '@/lib/sop-analytics';
@@ -176,18 +177,21 @@ export function SopApprovalInbox({ fetchImpl }: { fetchImpl?: typeof fetch }) {
                             <p className="text-xs text-zinc-500">직책자·SME 공용 화면 · 프로토타입 역할 전환</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 p-1" role="group" aria-label="데모 역할 전환">
-                        {(['leader', 'sme'] as ApproverRole[]).map((option) => (
-                            <button
-                                key={option}
-                                type="button"
-                                onClick={() => setRole(option)}
-                                aria-pressed={role === option}
-                                className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${role === option ? 'bg-white text-indigo-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
-                            >
-                                {DEMO_REVIEWERS[option].label}
-                            </button>
-                        ))}
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 p-1" role="group" aria-label="데모 역할 전환">
+                            {(['leader', 'sme'] as ApproverRole[]).map((option) => (
+                                <button
+                                    key={option}
+                                    type="button"
+                                    onClick={() => setRole(option)}
+                                    aria-pressed={role === option}
+                                    className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${role === option ? 'bg-white text-indigo-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                                >
+                                    {DEMO_REVIEWERS[option].label}
+                                </button>
+                            ))}
+                        </div>
+                        <SopRoleNav />
                     </div>
                 </div>
             </header>

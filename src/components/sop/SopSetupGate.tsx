@@ -28,6 +28,7 @@ import { SopGenerationSettings } from './SopGenerationSettings';
 import { SopTaskRecommendationPanel } from './SopTaskRecommendationPanel';
 import { SopActivityProposalPanel } from './SopActivityProposalPanel';
 import { SopSetupReviewModeNotice } from './SopSetupReviewModeNotice';
+import { SopRoleNav } from './SopRoleNav';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
 
 const CONTEXT_TOPICS = [
@@ -231,6 +232,7 @@ export const SopSetupGate: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        <SopRoleNav />
                         <ApiKeySettings
                             trigger={
                                 <button
