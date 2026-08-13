@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Plus, Trash2, Sparkles, Check, X } from 'lucide-react';
+import { Plus, Trash2, Check, X } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { SopRequiredSkill, SopStepData } from '@/lib/sop-types';
 
@@ -50,17 +50,16 @@ export const SopSkillEditor: React.FC<SopSkillEditorProps> = ({ step }) => {
     };
 
     return (
-        <div className="pt-3 border-t border-zinc-200">
-            <div className="flex items-center justify-between mb-2">
-                <label className="font-bold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-indigo-600" /> 요구 SKILL ({step.requiredSkills.length})
-                </label>
+        <div>
+            {/* 섹션 제목·개수는 인스펙터의 아코디언 헤더가 담당한다 — 여기서는
+                추가 버튼만 우측 정렬로 남겨 제목이 중복되지 않게 한다. */}
+            <div className="mb-2 flex items-center justify-end">
                 <button
                     type="button"
                     onClick={() => setShowAddSkill(true)}
                     disabled={readOnly}
                     title={readOnly ? '고객 검토 모드에서는 SKILL을 추가할 수 없습니다.' : undefined}
-                    className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                     <Plus className="w-3 h-3" /> SKILL 연결
                 </button>

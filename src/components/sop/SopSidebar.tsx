@@ -7,7 +7,9 @@ import {
     Sparkles,
     CheckSquare,
     Search,
+    ChevronDown,
 } from 'lucide-react';
+import type { SopStepData } from '@/lib/sop-types';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { SOP_REVIEW_STATUS_BADGE_CLASS } from '@/lib/sop-review-status-meta';
 
@@ -38,6 +40,16 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
     const [activeTab, setActiveTab] = useState<TabType>('steps');
     const [searchQuery, setSearchQuery] = useState('');
     const [filterUnreviewedOnly, setFilterUnreviewedOnly] = useState(false);
+    // 접힌 Activity 그룹 id 집합 — 목록 밀도 개선의 핵심. 기본은 모두 펼침이며,
+    // 구성원이 그룹 단위로 접어 원하는 Activity에 집중할 수 있다.
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+    const toggleGroup = (groupId: string) =>
+        setCollapsedGroups((prev) => {
+            const next = new Set(prev);
+            if (next.has(groupId)) next.delete(groupId);
+            else next.add(groupId);
+            return next;
+        });
 
     if (!document) return null;
 
@@ -81,6 +93,30 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
         const matchesUnreviewed = filterUnreviewedOnly ? step.reviewStatus === 'ai-draft' : true;
         return matchesSearch && matchesUnreviewed;
     });
+
+    // Activity–Sub Action 문서의 단계 목록은 캔버스의 그룹 컨테이너와 같은 기준
+    // (primary Activity)으로 묶어 보여준다 — 30개 안팎의 평평한 목록은 스캔이
+    // 불가능하다는 고객 피드백의 직접 대응. terminal·미매핑 단계는 어떤 Activity
+    // 그룹에도 속하지 않으므로 문서 순서 그대로 그룹 밖 단독 행으로 표시한다.
+    const isSubActionStructure = document.structureVersion === 'activity-subaction-v1';
+    type StepGroup =
+        | { kind: 'solo'; step: SopStepData }
+        | { kind: 'activity'; activityId: string; order: number; name: string; steps: SopStepData[] };
+    const stepGroups: StepGroup[] = [];
+    if (isSubActionStructure) {
+        const activityMeta = new Map(sourceActivities.map((activity, index) => [activity.id, { order: activity.order ?? index + 1, name: activity.name }]));
+        filteredSteps.forEach((step) => {
+            const activityId = !step.terminalType ? step.sourceActivityIds?.[0] : undefined;
+            const meta = activityId ? activityMeta.get(activityId) : undefined;
+            if (!activityId || !meta) {
+                stepGroups.push({ kind: 'solo', step });
+                return;
+            }
+            const last = stepGroups[stepGroups.length - 1];
+            if (last && last.kind === 'activity' && last.activityId === activityId) last.steps.push(step);
+            else stepGroups.push({ kind: 'activity', activityId, order: meta.order, name: meta.name, steps: [step] });
+        });
+    }
 
     return (
         <div className="h-full flex flex-col bg-white border-r border-zinc-200 w-72 shrink-0 select-none">
@@ -221,50 +257,85 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                             </label>
                         </div>
 
-                        {/* Step items */}
-                        <div className="space-y-1.5">
-                            {filteredSteps.map((step) => {
+                        {/* Step items — Activity 그룹 아코디언(신규 구조) 또는 평면 목록(레거시).
+                            상태 배지는 shrink-0 + nowrap으로 고정해 "초 안"처럼 글자가
+                            꺾여 렌더링되는 파손을 차단한다. */}
+                        {(() => {
+                            const renderStepRow = (step: SopStepData) => {
                                 const realIndex = document.steps.findIndex((s) => s.id === step.id);
                                 const isSelected = step.id === selectedStepId;
                                 return (
                                     <div
                                         key={step.id}
                                         onClick={() => selectStep(step.id)}
-                                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                                        className={`flex cursor-pointer items-center gap-2 rounded-xl border p-2.5 transition-all ${
                                             isSelected
                                                 ? 'bg-indigo-50 border-indigo-400 shadow-2xs'
                                                 : 'bg-white border-zinc-200 hover:border-zinc-300'
                                         }`}
                                     >
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 shrink-0">
-                                                {String(realIndex + 1).padStart(2, '0')}
+                                        <span className="shrink-0 whitespace-nowrap rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-600">
+                                            {String(realIndex + 1).padStart(2, '0')}
+                                        </span>
+                                        {isSubActionStructure && step.subActionOrder !== undefined && (
+                                            <span className="shrink-0 whitespace-nowrap rounded bg-violet-100 px-1 py-0.5 text-[9px] font-bold text-violet-700">#{step.subActionOrder}</span>
+                                        )}
+                                        <span className="min-w-0 flex-1 truncate font-semibold text-zinc-900" title={step.title}>{step.title}</span>
+                                        {step.terminalType && (
+                                            <span className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-bold ${step.terminalType === 'start' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                                                {step.terminalType === 'start' ? '시작' : '종료'}
                                             </span>
-                                            {document.structureVersion === 'activity-subaction-v1' && step.subActionOrder !== undefined && (
-                                                <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-violet-100 text-violet-700 shrink-0">#{step.subActionOrder}</span>
-                                            )}
-                                            <span className="font-semibold text-zinc-900 truncate">{step.title}</span>
-                                        </div>
-
-                                        <div>
-                                            {step.reviewStatus === 'confirmed' ? (
-                                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
-                                                    확정
-                                                </span>
-                                            ) : step.reviewStatus === 'reviewed' ? (
-                                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800">
-                                                    검토됨
-                                                </span>
-                                            ) : (
-                                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">
-                                                    초안
-                                                </span>
-                                            )}
-                                        </div>
+                                        )}
+                                        <span
+                                            className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-bold ${
+                                                step.reviewStatus === 'confirmed'
+                                                    ? 'bg-emerald-100 text-emerald-800'
+                                                    : step.reviewStatus === 'reviewed'
+                                                    ? 'bg-blue-100 text-blue-800'
+                                                    : 'bg-amber-100 text-amber-800'
+                                            }`}
+                                        >
+                                            {step.reviewStatus === 'confirmed' ? '확정' : step.reviewStatus === 'reviewed' ? '검토됨' : '초안'}
+                                        </span>
                                     </div>
                                 );
-                            })}
-                        </div>
+                            };
+
+                            if (!isSubActionStructure) {
+                                return <div className="space-y-1.5">{filteredSteps.map(renderStepRow)}</div>;
+                            }
+
+                            return (
+                                <div className="space-y-2">
+                                    {stepGroups.map((group) => {
+                                        if (group.kind === 'solo') return renderStepRow(group.step);
+                                        const groupKey = `${group.activityId}`;
+                                        const collapsed = collapsedGroups.has(groupKey);
+                                        const reviewedInGroup = group.steps.filter((s) => s.reviewStatus !== 'ai-draft').length;
+                                        return (
+                                            <div key={groupKey} className="rounded-xl border border-violet-200/80 bg-violet-50/40">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleGroup(groupKey)}
+                                                    aria-expanded={!collapsed}
+                                                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-violet-100/60"
+                                                >
+                                                    <span className="shrink-0 whitespace-nowrap text-[10px] font-bold text-violet-700">
+                                                        A{String(group.order).padStart(2, '0')}
+                                                    </span>
+                                                    <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-zinc-800" title={group.name}>{group.name}</span>
+                                                    <span className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-bold ${reviewedInGroup === group.steps.length ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-zinc-500 border border-zinc-200'}`}>
+                                                        {reviewedInGroup}/{group.steps.length} 검토
+                                                    </span>
+                                                    <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-violet-400 transition-transform ${collapsed ? '' : 'rotate-180'}`} />
+                                                </button>
+                                                {!collapsed && <div className="space-y-1.5 px-2 pb-2">{group.steps.map(renderStepRow)}</div>}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
                     </div>
                 )}
 

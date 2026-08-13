@@ -6,6 +6,7 @@ import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { FLOW_SHAPE_IDS, FLOW_SHAPES, FlowShape } from '@/lib/flow-shapes';
 import { SopReviewStatus, SopStepData } from '@/lib/sop-types';
 import { normalizeStepShapeChange } from '@/lib/graph-validation';
+import { SopInspectorSection } from './SopInspectorSection';
 
 interface SopStepCoreEditorProps {
     step: SopStepData;
@@ -97,23 +98,31 @@ export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, step
 
     return (
         <>
-            {/* Header */}
-            <div className="p-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-xs z-20">
+            {/* Header — 2행 구조. 이전의 1행 justify-between 구조는 380px 패널에서
+                검토 버튼이 수십 px로 짓눌려 글자가 세로로 한 자씩 꺾이는 렌더 파손을
+                만들었다. 1행: 식별(Step 번호·제목)과 닫기, 2행: 행동(검토 토글·Agent화). */}
+            <div className="sticky top-0 z-20 border-b border-zinc-200 bg-white/95 p-3 backdrop-blur-xs">
                 <div className="flex items-center gap-2">
-                    <button type="button" onClick={onOpenAgentization} className="rounded-md border border-indigo-200 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-50">AI Agent화</button>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                    <span className="shrink-0 whitespace-nowrap rounded-full border border-indigo-200 bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-800">
                         Step {String(stepIndex + 1).padStart(2, '0')}
                     </span>
-                    <h3 className="text-sm font-bold text-zinc-900 truncate max-w-[180px]">{step.title}</h3>
+                    <h3 className="min-w-0 flex-1 truncate text-sm font-bold text-zinc-900" title={step.title}>{step.title}</h3>
+                    <button
+                        type="button"
+                        onClick={() => selectStep(null)}
+                        className="shrink-0 rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+                        aria-label="단계 편집 닫기"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
                 </div>
-
-                <div className="flex items-center gap-2">
+                <div className="mt-2 flex items-center gap-2">
                     <button
                         type="button"
                         onClick={handleToggleReviewStatus}
                         disabled={readOnly}
                         title={readOnly ? '고객 검토 모드에서는 검토 상태를 변경할 수 없습니다.' : undefined}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+                        className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-1.5 text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
                             step.reviewStatus === 'confirmed'
                                 ? 'bg-emerald-600 text-white'
                                 : step.reviewStatus === 'reviewed'
@@ -121,7 +130,7 @@ export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, step
                                 : 'bg-amber-100 text-amber-800 hover:bg-amber-200 border border-amber-300'
                         }`}
                     >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                         {step.reviewStatus === 'confirmed'
                             ? '확정됨 (수정 시 재검토)'
                             : step.reviewStatus === 'reviewed'
@@ -130,11 +139,10 @@ export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, step
                     </button>
                     <button
                         type="button"
-                        onClick={() => selectStep(null)}
-                        className="text-zinc-400 hover:text-zinc-700 p-1 rounded-lg hover:bg-zinc-100"
-                        aria-label="단계 편집 닫기"
+                        onClick={onOpenAgentization}
+                        className="shrink-0 whitespace-nowrap rounded-xl border border-indigo-200 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
                     >
-                        <X className="w-4 h-4" />
+                        AI Agent화
                     </button>
                 </div>
             </div>
@@ -145,7 +153,15 @@ export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, step
                 </div>
             )}
 
-            <div className="p-5 space-y-5 text-xs text-zinc-700">
+            <div className="space-y-3 p-4 text-xs text-zinc-700">
+                {/* 구조 관련 안내(도형 충돌·삭제 불가 등)는 어느 섹션이 접혀 있어도
+                    항상 보이도록 섹션 밖 최상단에 표시한다. */}
+                {structureNotice && (
+                    <p className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-[11px] font-medium leading-relaxed text-rose-700">
+                        {structureNotice}
+                    </p>
+                )}
+
                 {/* Title */}
                 <div>
                     <label className="block font-semibold text-zinc-900 mb-1">단계명 (Title)</label>
@@ -206,9 +222,15 @@ export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, step
                     </div>
                 )}
 
-                {/* Shape Selection */}
-                <div>
-                    <label className="block font-semibold text-zinc-900 mb-1">표준 도형 (Flow Shape)</label>
+                {/* Shape Selection — 도형·terminal 구조는 자주 바꾸지 않으므로 접힌
+                    섹션으로 두되, terminal인데 start/end 미지정이면 즉시 조치가 필요하므로
+                    강조 톤으로 펼쳐 둔다. */}
+                <SopInspectorSection
+                    title="표준 도형 (Flow Shape)"
+                    summary={isTerminalStep && !step.terminalType ? '시작/종료 지정 필요' : FLOW_SHAPES[step.shape]?.name || step.shape}
+                    defaultOpen={isTerminalStep && !step.terminalType}
+                    tone={isTerminalStep && !step.terminalType ? 'attention' : 'default'}
+                >
                     <select
                         value={step.shape}
                         onChange={(e) => handleShapeChange(e.target.value as FlowShape)}
@@ -262,13 +284,7 @@ export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, step
                             </span>
                         </div>
                     )}
-
-                    {structureNotice && (
-                        <p className="mt-2 text-[11px] font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-2 leading-relaxed">
-                            {structureNotice}
-                        </p>
-                    )}
-                </div>
+                </SopInspectorSection>
 
                 {/* Responsible Role & Duration */}
                 <div className="grid grid-cols-2 gap-3">
@@ -330,7 +346,8 @@ export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, step
                 {children}
 
                 {/* Duplicate / Delete Step Actions */}
-                <div className="pt-4 border-t border-zinc-200 space-y-2">
+                <SopInspectorSection title="단계 관리" summary="복제 · 삭제">
+                <div className="space-y-2">
                     <button
                         type="button"
                         onClick={handleDuplicateStep}
@@ -355,6 +372,7 @@ export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, step
                         </p>
                     )}
                 </div>
+                </SopInspectorSection>
             </div>
         </>
     );

@@ -16,8 +16,9 @@ export const SopExecutionEditor: React.FC<SopExecutionEditorProps> = ({ step }) 
 
     return (
         <>
-            {/* Detailed Instructions */}
-            <div className="pt-3 border-t border-zinc-200">
+            {/* Detailed Instructions — 섹션 구분은 인스펙터의 아코디언이 담당하므로
+                자체 상단 경계선을 두지 않는다. */}
+            <div>
                 <label className="block font-semibold text-zinc-900 mb-1">상세 수행 방법</label>
                 <textarea
                     rows={3}

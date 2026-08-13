@@ -1307,6 +1307,78 @@ async function run() {
     check(!dupRemainingErrors.some((e) => e.includes('순서가 중복') || e.includes('생성 근거')), 'After assigning a fresh subActionOrder, neither duplicate-order nor missing-origin errors remain — the inherited provenance stands as-is without any re-selection');
     useSopPrototypeStore.getState().resetStore();
 
+    // ---------------------------------------------------------
+    // Workspace panel density redesign: inspector accordion sections and the
+    // Activity-grouped sidebar step list (customer feedback: both panels showed
+    // everything at once and nothing was scannable).
+    // ---------------------------------------------------------
+    console.log('Workspace panel density redesign (accordion + grouped step list)...');
+    {
+        const { SopInspectorSection } = await import('../src/components/sop/SopInspectorSection');
+        const sectionRenderer = renderComponent(
+            // eslint-disable-next-line react/no-children-prop -- .ts 테스트 파일이라 JSX가 없고, createElement의 3번째 인자 형태는 이 컴포넌트의 required children 타입과 오버로드가 맞지 않는다.
+            React.createElement(SopInspectorSection, {
+                title: '테스트 섹션',
+                summary: '3개',
+                defaultOpen: false,
+                children: React.createElement('input', { defaultValue: '내용' }),
+            })
+        );
+        check(sectionRenderer.root.findAllByType('input').length === 1, 'A COLLAPSED inspector section keeps its children mounted (CSS hidden) — form state and every existing read-only guard test still sees the full tree');
+        const header = sectionRenderer.root.findAllByType('button')[0];
+        check(header.props['aria-expanded'] === false, 'A collapsed section reports aria-expanded=false');
+        act(() => header.props.onClick());
+        check(sectionRenderer.root.findAllByType('button')[0].props['aria-expanded'] === true, 'Clicking the section header expands it');
+        sectionRenderer.unmount();
+    }
+    {
+        const { SopSidebar } = await import('../src/components/sop/SopSidebar');
+        const sidebarBuild = buildTaskGateSampleDocument({
+            id: 'sidebar-group-doc',
+            member: SAMPLE_SOP_DOCUMENT.member,
+            workLibrary: SAMPLE_WORK_LIBRARY,
+            context: '',
+            setupConfig: SAMPLE_SOP_DOCUMENT.setupConfig,
+        });
+        check(sidebarBuild.success, 'Fixture: the sidebar-grouping sample document builds');
+        if (sidebarBuild.success) {
+            act(() => {
+                useSopPrototypeStore.getState().setDocument(sidebarBuild.document);
+            });
+            const sidebar = renderComponent(
+                React.createElement(SopSidebar, {
+                    showMiniMap: false,
+                    setShowMiniMap: () => {},
+                    showBranchLabels: true,
+                    setShowBranchLabels: () => {},
+                })
+            );
+            const groupHeaders = sidebar.root.findAll((n) => n.type === 'button' && n.props['aria-expanded'] !== undefined);
+            const coveredActivityIds = new Set(
+                sidebarBuild.document.steps.filter((s) => !s.terminalType).map((s) => s.sourceActivityIds?.[0]).filter(Boolean)
+            );
+            check(
+                groupHeaders.length === coveredActivityIds.size,
+                `The steps tab renders one collapsible group per covered Activity (${groupHeaders.length}/${coveredActivityIds.size}) — the flat 30-row list is gone`
+            );
+            const countStepRows = () => sidebar.root.findAll((n) => typeof n.props?.className === 'string' && n.props.className.includes('cursor-pointer') && typeof n.props.onClick === 'function' && n.type === 'div').length;
+            const rowsBefore = countStepRows();
+            const firstGroupSize = sidebarBuild.document.steps.filter((s) => !s.terminalType && s.sourceActivityIds?.[0] === [...coveredActivityIds][0]).length;
+            act(() => groupHeaders[0].props.onClick());
+            check(countStepRows() === rowsBefore - firstGroupSize, 'Collapsing a group hides exactly that Activity\'s step rows — members can focus one Activity at a time');
+            act(() => sidebar.root.findAll((n) => n.type === 'button' && n.props['aria-expanded'] !== undefined)[0].props.onClick());
+            check(countStepRows() === rowsBefore, 'Re-expanding restores the rows');
+            // 제목이 문자 그대로 "시작"/"종료"인 단계와 구분하기 위해 칩은 고유한
+            // 테두리 클래스(border-emerald-200/border-rose-200)로 식별한다.
+            const terminalChips = sidebar.root.findAll(
+                (n) => n.type === 'span' && typeof n.props.className === 'string' && (n.props.className.includes('border-emerald-200') || n.props.className.includes('border-rose-200')) && (n.props.children === '시작' || n.props.children === '종료')
+            );
+            check(terminalChips.length === 2, 'Terminal steps stay OUTSIDE Activity groups as solo rows tagged with 시작/종료 chips');
+            sidebar.unmount();
+            useSopPrototypeStore.getState().resetStore();
+        }
+    }
+
     console.log(`ALL SOP ACTIVITY–SUB ACTION / AGENTIZATION / TEMPLATE TESTS PASSED (${passed})`);
 }
 

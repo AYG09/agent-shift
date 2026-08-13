@@ -9,6 +9,7 @@ import { SopStepCoreEditor } from './SopStepCoreEditor';
 import { SopSkillEditor } from './SopSkillEditor';
 import { SopExecutionEditor } from './SopExecutionEditor';
 import { SopActivityMappingEditor } from './SopActivityMappingEditor';
+import { SopInspectorSection } from './SopInspectorSection';
 
 /**
  * Routes to the right editing surface for the current selection: the Agent화
@@ -44,12 +45,36 @@ export const SopStepInspector: React.FC = () => {
     const step = document.steps[stepIndex];
     if (!step) return null;
 
+    // 접힌 상태에서도 현재 값이 보이도록 섹션 요약을 계산한다.
+    const task = document.workLibrary.taskCatalog.find((item) => item.id === document.workLibrary.taskId);
+    const primaryActivity = task?.activities.find((activity) => activity.id === step.sourceActivityIds?.[0]);
+    const activitySummary = step.sourceActivityIds?.length
+        ? `${primaryActivity ? `A${String(primaryActivity.order ?? 0).padStart(2, '0')}` : '미확인 Activity'}${step.subActionOrder !== undefined ? ` · #${step.subActionOrder}` : ''}`
+        : '미지정';
+    const isTerminal = Boolean(step.terminalType);
+
     return (
         <div className="h-full flex flex-col bg-white border-l border-zinc-200 overflow-y-auto">
             <SopStepCoreEditor step={step} stepIndex={stepIndex} allSteps={document.steps} onOpenAgentization={openAgentization}>
-                <SopActivityMappingEditor step={step} />
-                <SopSkillEditor step={step} />
-                <SopExecutionEditor step={step} />
+                {/* 밀도 개선: 관심사별 아코디언 — 핵심 필드(단계명·정의·근거·담당·시간)만
+                    항상 보이고, 나머지는 요약 칩과 함께 접어 필요할 때만 펼친다.
+                    terminal 단계는 Activity 매핑이 없으므로 그 섹션 자체를 만들지 않는다. */}
+                {!isTerminal && (
+                    <SopInspectorSection
+                        title="소속 Activity · 순서"
+                        summary={activitySummary}
+                        tone={step.sourceActivityIds?.length ? 'default' : 'attention'}
+                        defaultOpen={!step.sourceActivityIds?.length}
+                    >
+                        <SopActivityMappingEditor step={step} />
+                    </SopInspectorSection>
+                )}
+                <SopInspectorSection title="요구 SKILL" summary={`${step.requiredSkills.length}개`}>
+                    <SopSkillEditor step={step} />
+                </SopInspectorSection>
+                <SopInspectorSection title="상세 수행 정보" summary={step.detailedInstructions?.trim() ? '작성됨' : '비어 있음'}>
+                    <SopExecutionEditor step={step} />
+                </SopInspectorSection>
             </SopStepCoreEditor>
         </div>
     );
