@@ -9,6 +9,7 @@ import { SopAgentizationSuggestionSchema } from '../src/lib/sop-step-common-sche
 import { SopDocumentSchema } from '../src/lib/sop-document-schema';
 import { createSopDocumentFromGeneration } from '../src/lib/sop-normalizer';
 import { runSopGenerationPostProcessing } from '../src/server/sop/sop-generation-runner';
+import { runSopValidationPipeline, buildSopStructuralDigest, generateSopRepairWithRetry } from '../src/lib/sop-generation-pipeline';
 import {
     AI_APPLICATION_MODES,
     AGENTIZATION_SUGGESTION_META,
@@ -270,6 +271,88 @@ async function run() {
     check(!SopGenerationResponseSchema.safeParse(ambiguousTerminals).success, 'The gate schema still rejects the ambiguous-terminal response');
     const ambiguousIssues = validateSopGraph(ambiguousTerminals.steps, ambiguousTerminals.edges);
     check(ambiguousIssues.some((i) => i.type === 'terminal-missing-type'), 'validateSopGraph reports terminal-missing-type for the ambiguous case, giving the LLM repair loop (not a parse death) the chance to fix it');
+
+    // ---------------------------------------------------------
+    // Repair-call resilience: in production the repair generation itself died in
+    // a degenerate repetition loop (the model spiralled inside a free-string
+    // `type` field until the 65536-token cap → truncated JSON → the one repair
+    // chance was wasted → 400). Three defenses: (1) the wire schema constrains
+    // `type` to an enum so Gemini's constrained decoding cannot spiral there,
+    // (2) the repair prompt embeds a compact structural digest instead of the
+    // full 100k+-char previous JSON, (3) a failed repair generation is retried
+    // once before falling through to the deterministic-fallback/400 path.
+    // ---------------------------------------------------------
+    console.log('Repair-call resilience (degenerate repetition loop defenses)...');
+
+    const degenerateType = `process ${'central-step-node-type-defined-in-schema-'.repeat(3000)}`;
+    const bulkyObject = {
+        title: '다이제스트 테스트',
+        steps: [
+            {
+                id: 's1', title: '업무 단계', definition: '아주 긴 정의 문장입니다. '.repeat(500), shape: 'process',
+                type: degenerateType,
+                requiredSkills: [{ name: '데이터 분석', requiredLevel: 'intermediate', source: 'work-library', accepted: true }],
+                detailedInstructions: '장문의 상세 지침. '.repeat(500),
+                sourceActivityIds: [actA.id], subActionOrder: 1, subActionOrigin: 'activity-derived',
+            },
+        ],
+        edges: [{ id: 'e1', source: 's1', target: 's2', branchType: 'no', label: 'NO' }],
+    };
+    const digest = buildSopStructuralDigest(bulkyObject);
+    check(digest.length < 1000, `The structural digest stays compact even for a bulky degenerate response (${digest.length} chars) — it can no longer feed a 100k+-char repetitive context back into the repair call`);
+    check(!digest.includes('상세 지침') && !digest.includes('데이터 분석') && !digest.includes('정의 문장'), 'The digest excludes step content (definition/skills/instructions) — repair defects are structural, and content is regenerated from the base prompt');
+    check(digest.includes('"s1"') && digest.includes('"e1"') && digest.includes(actA.id) && digest.includes('"no"'), 'The digest keeps everything the structural repair needs: step/edge IDs, connections, branch types, and Activity mappings');
+    check(!digest.includes(degenerateType), 'A degenerate over-long string field is truncated in the digest instead of being echoed back verbatim');
+
+    check(SopGenerationWireSchema.safeParse({
+        title: 'type enum', steps: [{ id: 't1', title: '단계', definition: '단계입니다.', shape: 'process', type: 'io' }], edges: [],
+    }).success, 'The wire schema accepts the known type enum values — constrained decoding now bounds the exact field the production spiral happened in');
+
+    let retryCalls = 0;
+    const retried = await generateSopRepairWithRetry(async () => {
+        retryCalls += 1;
+        if (retryCalls === 1) throw new Error('degenerate repetition loop (simulated)');
+        return { ok: true };
+    }, 'repair prompt');
+    check(retryCalls === 2 && (retried as { ok: boolean }).ok, 'A repair generation that fails once (e.g. degenerate loop) is retried exactly once and the second draw is used');
+
+    const brokenGraph = {
+        title: '중복 ID 그래프',
+        steps: [
+            { id: 'p-start', title: '시작', definition: '시작 단계입니다.', shape: 'terminal', terminalType: 'start' },
+            { id: 'p-work', title: '업무 A', definition: '업무 A를 수행합니다.', shape: 'process' },
+            { id: 'p-work', title: '업무 B', definition: '업무 B를 수행합니다.', shape: 'process' },
+            { id: 'p-end', title: '종료', definition: '종료 단계입니다.', shape: 'terminal', terminalType: 'end' },
+        ],
+        edges: [
+            { id: 'pe1', source: 'p-start', target: 'p-work' },
+            { id: 'pe2', source: 'p-work', target: 'p-end' },
+        ],
+    };
+    const fixedGraph = {
+        title: '수정된 그래프',
+        steps: [
+            { id: 'p-start', title: '시작', definition: '시작 단계입니다.', shape: 'terminal', terminalType: 'start' },
+            { id: 'p-work', title: '업무 A', definition: '업무 A를 수행합니다.', shape: 'process' },
+            { id: 'p-end', title: '종료', definition: '종료 단계입니다.', shape: 'terminal', terminalType: 'end' },
+        ],
+        edges: [
+            { id: 'pe1', source: 'p-start', target: 'p-work' },
+            { id: 'pe2', source: 'p-work', target: 'p-end' },
+        ],
+    };
+    let pipelineGenerateCalls = 0;
+    const retriedPipeline = await runSopValidationPipeline(
+        brokenGraph,
+        '기본 프롬프트',
+        async () => {
+            pipelineGenerateCalls += 1;
+            if (pipelineGenerateCalls === 1) throw new Error('NoObjectGeneratedError (simulated degenerate repair)');
+            return fixedGraph;
+        },
+        { minSteps: 1, maxSteps: 8, maxTotalNodes: 15, branchPolicy: 'auto', maxBranches: 2, allowRework: true, maxLoops: 3 }
+    );
+    check(retriedPipeline.ok && pipelineGenerateCalls === 2, 'END-TO-END: a blocking graph defect whose FIRST repair generation dies is still fixed by the retried second repair — the production failure path (one degenerate repair → immediate 400) is closed');
 
     // ---------------------------------------------------------
     // Customer semantics: action-only nodes, dependency-aware parallelism, no pseudo gateways

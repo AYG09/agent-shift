@@ -28,6 +28,61 @@ export interface SopPipelineFailure {
 export type SopPipelineResult = SopPipelineSuccess | SopPipelineFailure;
 
 /**
+ * Repair 프롬프트에 첨부하는 직전 응답의 구조 요약.
+ *
+ * 전체 JSON.stringify를 그대로 붙이면 (28~42노드 한국어 리치 필드 기준 10만+ 자)
+ * 길고 반복적인 컨텍스트가 모델의 퇴행 반복 루프(자유 문자열 필드 안에서 같은
+ * 구절을 출력 토큰 한도까지 반복 → JSON 절단 → repair 자체가
+ * NoObjectGeneratedError로 실패)를 유발할 수 있다 — 프로덕션 repair 호출이 실제로
+ * 이 방식으로 죽었다. 그래프 검증이 지적하는 결함은 전부 구조(steps/edges의
+ * id·연결·분기·루프·Activity 매핑) 수준이므로 repair에는 구조 요약이면 충분하고,
+ * 단계 내용(definition, SKILL, 상세 지침 등)은 기본 프롬프트가 이미 전부 담고
+ * 있어 모델이 다시 생성할 수 있다.
+ */
+export function buildSopStructuralDigest(object: unknown): string {
+    const rec = (object ?? {}) as { steps?: unknown; edges?: unknown };
+    const truncate = (v: unknown) => (typeof v === 'string' && v.length > 80 ? `${v.slice(0, 80)}…` : v);
+    const steps = (Array.isArray(rec.steps) ? rec.steps : []).map((s) => {
+        const step = (s ?? {}) as Record<string, unknown>;
+        return {
+            id: step.id,
+            title: truncate(step.title),
+            shape: step.shape,
+            type: truncate(step.type),
+            terminalType: step.terminalType,
+            sourceActivityIds: step.sourceActivityIds,
+            subActionOrder: step.subActionOrder,
+            subActionOrigin: step.subActionOrigin,
+        };
+    });
+    const edges = (Array.isArray(rec.edges) ? rec.edges : []).map((e) => {
+        const edge = (e ?? {}) as Record<string, unknown>;
+        return { id: edge.id, source: edge.source, target: edge.target, branchType: edge.branchType, label: truncate(edge.label) };
+    });
+    return JSON.stringify({ steps, edges });
+}
+
+/**
+ * Repair 생성 1회 재시도 래퍼. 퇴행 반복 루프 같은 생성 실패는 확률적이므로,
+ * 같은 프롬프트로 한 번 더 시도하면 대부분 정상 응답을 얻는다. 두 번째 시도도
+ * 실패하면 그대로 throw하여 호출부의 기존 fallback/오류 경로를 태운다.
+ */
+export async function generateSopRepairWithRetry(
+    generate: (repairPrompt: string) => Promise<unknown>,
+    repairPrompt: string
+): Promise<unknown> {
+    try {
+        return await generate(repairPrompt);
+    } catch (firstError) {
+        console.error(
+            '[SOP Pipeline] repair 생성 1차 실패, 1회 재시도:',
+            firstError instanceof Error ? firstError.message : String(firstError)
+        );
+        return generate(repairPrompt);
+    }
+}
+
+/**
  * SOP 생성 결과의 그래프 검증(+구조 설정 준수) -> (필요시) 1회 LLM repair -> 결정론적 fallback ->
  * 재검증 파이프라인.
  *
@@ -59,8 +114,11 @@ export async function runSopValidationPipeline(
     if (hasBlockingSopIssues(issues)) {
         console.log('[SOP Pipeline] SOP 그래프 검증 실패, 1회 repair 시도:', issues.map((i) => i.type));
         try {
-            const repairPrompt = `${prompt}\n\n${buildRepairInstruction(issues)}\n\n## 직전 응답 (참고용 - 문제 있는 부분만 고치세요)\n${JSON.stringify(object)}`;
-            object = normalizeSopGenerationObject(await generate(repairPrompt));
+            // 직전 응답은 전체 JSON이 아니라 구조 요약만 첨부한다 — buildSopStructuralDigest
+            // docstring 참고 (전체 JSON 첨부는 프로덕션에서 repair 생성의 퇴행 반복 루프를
+            // 유발해 repair 기회 자체를 날렸다).
+            const repairPrompt = `${prompt}\n\n${buildRepairInstruction(issues)}\n\n## 직전 응답의 구조 요약 (참고용 - 이 구조를 유지하되 지적된 결함만 고쳐 전체 응답을 다시 생성하세요)\n${buildSopStructuralDigest(object)}`;
+            object = normalizeSopGenerationObject(await generateSopRepairWithRetry(generate, repairPrompt));
             const repairedRec = object as { steps?: ValidatableSopStep[]; edges?: ValidatableEdge[] };
             issues = validateSopFull(repairedRec.steps || [], repairedRec.edges || [], constraints);
         } catch (repairError) {

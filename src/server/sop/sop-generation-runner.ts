@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runSopValidationPipeline } from '@/lib/sop-generation-pipeline';
+import { runSopValidationPipeline, generateSopRepairWithRetry } from '@/lib/sop-generation-pipeline';
 import type { SopStructuralConstraints } from '@/lib/graph-validation';
 import type { SopGenerationRequest } from '@/lib/sop-ai-request';
 import {
@@ -132,7 +132,8 @@ export async function runSopGenerationPostProcessing(params: {
             ? `${formatCoverageErrors(coverage).join('\n')}\n각 업무 단계(시작/종료 제외)는 정확히 1개의 sourceActivityIds를 가져야 하며, 같은 Activity 안에서 subActionOrder가 겹치면 안 됩니다. 선택된 모든 Activity ID를 빠짐없이 한 번 이상 Sub Action으로 반영하세요.${suggestionGuidance}${originGuidance}${decompositionGuidance}`
             : `${formatCoverageErrors(coverage).join('\n')}\n각 업무 단계의 sourceActivityIds를 수정하고, 선택된 모든 Activity ID를 빠짐없이 한 번 이상 반영하세요.`;
         try {
-            const repaired = await generateRepair(`${prompt}\n\n## Activity 연결 보정\n${repairGuidance}`);
+            // 퇴행 반복 루프 등 확률적 생성 실패에 대비해 coverage repair도 1회 재시도한다.
+            const repaired = await generateSopRepairWithRetry(generateRepair, `${prompt}\n\n## Activity 연결 보정\n${repairGuidance}`);
             pipelineResult = await runSopValidationPipeline(repaired, prompt, generateRepair, sopConstraints);
         } catch {
             // The final validation below returns a 400 with the actionable coverage issue.

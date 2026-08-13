@@ -23,6 +23,13 @@ const SopStepWireSchema = SopStepCommonFieldsSchema.extend({
     title: z.string().min(1),
     definition: z.string(),
     shape: z.enum(FLOW_SHAPE_IDS).default('process'),
+    // 공용 스키마의 type은 자유 문자열이지만, 와이어에서는 enum으로 제한한다.
+    // Gemini 구조화 출력의 제약 디코딩은 enum을 강제하므로, 모델이 자유 문자열
+    // 필드 안에서 퇴행 반복 루프(같은 구절을 토큰 한도까지 반복 → JSON 절단 →
+    // NoObjectGeneratedError)에 빠지는 것을 이 필드에서는 원천 차단한다 —
+    // 프로덕션 repair 호출이 실제로 type 필드 안에서 이 방식으로 죽었다.
+    // classifySopStepType은 'terminal'/'decision'만 구별하므로 의미는 동일하다.
+    type: z.enum(['process', 'decision', 'terminal', 'io', 'data', 'task', 'agent']).optional(),
     subActionOriginRationale: z.string().optional(),
     subActionOrder: z.number().optional(),
     sourceActivityIds: z.array(z.string()).optional(),
