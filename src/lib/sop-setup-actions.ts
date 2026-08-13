@@ -9,7 +9,7 @@ export type SopSetupActionResult =
     | { success: true }
     | { success: false; channel: 'validation' | 'ai'; message: string };
 
-const CUSTOMER_REVIEW_GENERATION_ERROR = '고객 검토 모드에서는 새 SOP를 생성할 수 없습니다. Workspace에서 검토 모드를 종료한 뒤 다시 시도해 주세요.';
+const CUSTOMER_REVIEW_GENERATION_ERROR = '고객 검토 모드에서는 새 SOP를 생성할 수 없습니다. 게이트 상단의 "고객 검토 모드 종료" 버튼으로 잠금을 해제한 뒤 다시 시도해 주세요.';
 
 function errorMessage(error: unknown): string {
     return error instanceof Error && error.message

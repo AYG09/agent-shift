@@ -26,6 +26,7 @@ import { WorkLibrarySelector } from './WorkLibrarySelector';
 import { SopGenerationSettings } from './SopGenerationSettings';
 import { SopTaskRecommendationPanel } from './SopTaskRecommendationPanel';
 import { SopActivityProposalPanel } from './SopActivityProposalPanel';
+import { SopSetupReviewModeNotice } from './SopSetupReviewModeNotice';
 import ApiKeySettings from '@/components/settings/ApiKeySettings';
 
 const CONTEXT_TOPICS = [
@@ -50,6 +51,8 @@ export const SopSetupGate: React.FC = () => {
         generateFromSample,
         setDocument,
         customerReviewMode,
+        setCustomerReviewMode,
+        document,
     } = useSopPrototypeStore();
 
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -146,9 +149,17 @@ export const SopSetupGate: React.FC = () => {
         if (!outcome.success) setValidationError(outcome.message);
     };
 
+    // 검토 모드 잠금 해제는 Workspace 토글과 정확히 같은 Store 액션을 사용한다.
+    // 이 버튼이 없으면 Gate는 교착에 빠진다: 생성·샘플 열기는 검토 모드가 막고,
+    // 검토 모드를 끌 수 있는 Workspace는 생성해야만 진입할 수 있기 때문이다.
+    const handleExitReviewMode = () => {
+        setCustomerReviewMode(false);
+        setValidationError(null);
+    };
+
     const handleGenerateAiSop = async () => {
         if (customerReviewMode) {
-            setValidationError('고객 검토 모드에서는 새 SOP를 생성할 수 없습니다. Workspace에서 검토 모드를 종료한 뒤 다시 시도해 주세요.');
+            setValidationError('고객 검토 모드에서는 새 SOP를 생성할 수 없습니다. 위의 "고객 검토 모드 종료" 버튼으로 잠금을 해제해 주세요.');
             return;
         }
         if (!validateGate()) return;
@@ -241,6 +252,15 @@ export const SopSetupGate: React.FC = () => {
 
             {/* Main Content */}
             <main className="mx-auto grid h-[calc(100vh-7.5rem)] max-w-[1440px] min-h-0 gap-4 px-6 py-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+                {/* 고객 검토 모드 잠금 안내 — 생성 버튼을 누르기 전에 잠금 상태와 해제 수단을 먼저 보여준다 */}
+                {customerReviewMode && (
+                    <SopSetupReviewModeNotice
+                        documentExists={Boolean(document)}
+                        onExitReviewMode={handleExitReviewMode}
+                        onGoToWorkspace={() => router.push('/sop/workspace')}
+                    />
+                )}
+
                 {/* Validation Error Banner */}
                 {validationError && (
                     <div className="lg:col-span-2 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-3 text-rose-800 text-sm font-medium animate-shake">

@@ -355,6 +355,44 @@ async function run() {
     check(retriedPipeline.ok && pipelineGenerateCalls === 2, 'END-TO-END: a blocking graph defect whose FIRST repair generation dies is still fixed by the retried second repair — the production failure path (one degenerate repair → immediate 400) is closed');
 
     // ---------------------------------------------------------
+    // Setup Gate review-mode deadlock fix: while 고객 검토 모드 is ON, the Gate
+    // blocks generation AND the Workspace (the only place with the toggle) is
+    // only reachable by generating. The Gate now surfaces an exit button using
+    // the same Store action as the Workspace toggle.
+    // ---------------------------------------------------------
+    console.log('Setup Gate review-mode notice (deadlock fix)...');
+    {
+        const { SopSetupReviewModeNotice } = await import('../src/components/sop/SopSetupReviewModeNotice');
+        let exited = 0;
+        let navigated = 0;
+        const noticeRenderer = renderComponent(
+            React.createElement(SopSetupReviewModeNotice, {
+                documentExists: false,
+                onExitReviewMode: () => { exited += 1; },
+                onGoToWorkspace: () => { navigated += 1; },
+            })
+        );
+        const buttons = noticeRenderer.root.findAllByType('button');
+        check(buttons.length === 1, 'Without a document the notice offers ONLY the exit-review-mode button (no dead Workspace link)');
+        act(() => buttons[0].props.onClick());
+        check(exited === 1, 'Clicking "고객 검토 모드 종료" fires the exit action — the Gate can now unlock itself without reaching the Workspace');
+        noticeRenderer.unmount();
+
+        const noticeWithDoc = renderComponent(
+            React.createElement(SopSetupReviewModeNotice, {
+                documentExists: true,
+                onExitReviewMode: () => { exited += 1; },
+                onGoToWorkspace: () => { navigated += 1; },
+            })
+        );
+        const buttonsWithDoc = noticeWithDoc.root.findAllByType('button');
+        check(buttonsWithDoc.length === 2, 'With an existing document the notice ALSO offers a direct Workspace link');
+        act(() => buttonsWithDoc[1].props.onClick());
+        check(navigated === 1, 'The Workspace link navigates without requiring a new generation');
+        noticeWithDoc.unmount();
+    }
+
+    // ---------------------------------------------------------
     // Customer semantics: action-only nodes, dependency-aware parallelism, no pseudo gateways
     // ---------------------------------------------------------
     console.log('Sub Action semantic generation contract...');
