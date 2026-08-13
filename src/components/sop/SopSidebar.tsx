@@ -35,6 +35,7 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
         selectSourceActivity,
         selectedSourceActivityId,
         customerReviewMode: readOnly,
+        markStepsReviewedBulk,
     } = useSopPrototypeStore();
 
     const [activeTab, setActiveTab] = useState<TabType>('steps');
@@ -314,21 +315,35 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                                         const reviewedInGroup = group.steps.filter((s) => s.reviewStatus !== 'ai-draft').length;
                                         return (
                                             <div key={groupKey} className="rounded-xl border border-violet-200/80 bg-violet-50/40">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => toggleGroup(groupKey)}
-                                                    aria-expanded={!collapsed}
-                                                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-violet-100/60"
-                                                >
-                                                    <span className="shrink-0 whitespace-nowrap text-[10px] font-bold text-violet-700">
-                                                        A{String(group.order).padStart(2, '0')}
-                                                    </span>
-                                                    <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-zinc-800" title={group.name}>{group.name}</span>
-                                                    <span className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-bold ${reviewedInGroup === group.steps.length ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-zinc-500 border border-zinc-200'}`}>
-                                                        {reviewedInGroup}/{group.steps.length} 검토
-                                                    </span>
-                                                    <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-violet-400 transition-transform ${collapsed ? '' : 'rotate-180'}`} />
-                                                </button>
+                                                {/* 접기 토글과 일괄 검토는 형제 버튼으로 분리한다 —
+                                                    button 안에 interactive 요소를 중첩하지 않는다. */}
+                                                <div className="flex items-center gap-2 px-2.5 py-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleGroup(groupKey)}
+                                                        aria-expanded={!collapsed}
+                                                        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left hover:bg-violet-100/60"
+                                                    >
+                                                        <span className="shrink-0 whitespace-nowrap text-[10px] font-bold text-violet-700">
+                                                            A{String(group.order).padStart(2, '0')}
+                                                        </span>
+                                                        <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-zinc-800" title={group.name}>{group.name}</span>
+                                                        <span className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-bold ${reviewedInGroup === group.steps.length ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-zinc-500 border border-zinc-200'}`}>
+                                                            {reviewedInGroup}/{group.steps.length} 검토
+                                                        </span>
+                                                        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-violet-400 transition-transform ${collapsed ? '' : 'rotate-180'}`} />
+                                                    </button>
+                                                    {!readOnly && reviewedInGroup < group.steps.length && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => markStepsReviewedBulk(group.activityId)}
+                                                            title="이 Activity의 미검토 Sub Action을 일괄 검토 완료로 표시 (실행 취소 가능)"
+                                                            className="shrink-0 whitespace-nowrap rounded border border-emerald-300 bg-white px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 hover:bg-emerald-50"
+                                                        >
+                                                            일괄 검토
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 {!collapsed && <div className="space-y-1.5 px-2 pb-2">{group.steps.map(renderStepRow)}</div>}
                                             </div>
                                         );
@@ -409,6 +424,20 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                 {/* 5. 검토 상태 */}
                 {activeTab === 'review' && (
                     <div className="space-y-4">
+                        {/* 일괄 검토 — 30노드 안팎의 Task 전체 SOP를 단계별 클릭 없이 한 번에
+                            검토 완료로 표시한다. 이미 검토된 단계는 건드리지 않고, '확정'은
+                            여기서 절대 만들어지지 않는다 (confirmFullSop 전용). */}
+                        {totalSteps - reviewedCount > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => markStepsReviewedBulk()}
+                                disabled={readOnly}
+                                title={readOnly ? '고객 검토 모드에서는 검토 상태를 변경할 수 없습니다.' : '모든 미검토 단계를 검토 완료로 표시합니다 (실행 취소 가능)'}
+                                className="w-full rounded-xl border border-emerald-300 bg-emerald-50 py-2.5 text-xs font-bold text-emerald-800 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                미검토 단계 {totalSteps - reviewedCount}개 일괄 검토 완료
+                            </button>
+                        )}
                         <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl text-center">
                             <span className="text-xs font-semibold text-zinc-500 block mb-1">전체 SOP 상태</span>
                             <span

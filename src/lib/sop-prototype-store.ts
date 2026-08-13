@@ -24,7 +24,7 @@ import {
     confirmAgentizationReview,
 } from './sop-agentization';
 import * as mutations from './sop-document-mutations';
-import { applyStepReviewStatus, validateFullSopConfirmation } from './sop-review';
+import { applyStepReviewStatus, applyBulkStepReview, validateFullSopConfirmation } from './sop-review';
 import { createBrowserSopDraftStorage, SOP_DRAFT_STORAGE_KEY } from './sop-draft-storage';
 
 function withWorkLibraryCatalog(library: unknown): WorkLibrarySelection | undefined {
@@ -135,6 +135,8 @@ interface SopPrototypeState {
 
     // Actions - Review & Confirm Status
     updateStepReviewStatus: (stepId: string, status: SopReviewStatus) => void;
+    /** 미검토(ai-draft) 단계를 일괄 '검토됨'으로 바꾼다. activityId를 주면 그 Activity의 Sub Action만. 변경된 단계 수를 반환한다. */
+    markStepsReviewedBulk: (activityId?: string) => number;
     confirmFullSop: () => { success: boolean; errors: string[] };
 
     // Undo / Redo / Save
@@ -552,6 +554,21 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                         ...pushHistory(doc),
                         document: { ...doc, steps, reviewStatus, updatedAt: new Date().toISOString() },
                     });
+                },
+
+                // 일괄 검토: applyBulkStepReview docstring 참고. 'confirmed'는 여기서도
+                // 절대 만들어지지 않으며, 실제 변경이 없으면 히스토리도 쌓지 않는다.
+                // 되돌리기(Undo)는 한 번의 일괄 작업 전체를 한 단계로 취소한다.
+                markStepsReviewedBulk: (activityId) => {
+                    const doc = get().document;
+                    if (!doc || isCustomerReviewLocked()) return 0;
+                    const { steps, reviewStatus, changedCount } = applyBulkStepReview(doc, activityId);
+                    if (changedCount === 0) return 0;
+                    set({
+                        ...pushHistory(doc),
+                        document: { ...doc, steps, reviewStatus, updatedAt: new Date().toISOString() },
+                    });
+                    return changedCount;
                 },
 
                 // Full Confirmation (ONLY path to set 'confirmed')

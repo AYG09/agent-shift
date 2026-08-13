@@ -30,7 +30,7 @@ import { SOP_TASK_LIBRARY_FIXTURE, createWorkLibrarySelection, getScopedActiviti
 import type { SopDocument, SopStepData } from '../src/lib/sop-types';
 import type { SopGenerationRequest } from '../src/lib/sop-ai-request';
 import { getSopPrompt } from '../src/server/sop/sop-prompt';
-import { validateFullSopConfirmation } from '../src/lib/sop-review';
+import { validateFullSopConfirmation, applyBulkStepReview } from '../src/lib/sop-review';
 import { validateSopPersistenceState } from '../src/lib/sop-persistence-validation';
 import { POST as sopApiCreateForOrigin } from '../src/app/api/sop/route';
 import { PUT as sopApiUpdateForOrigin } from '../src/app/api/sop/[id]/route';
@@ -1375,6 +1375,64 @@ async function run() {
             );
             check(terminalChips.length === 2, 'Terminal steps stay OUTSIDE Activity groups as solo rows tagged with 시작/종료 chips');
             sidebar.unmount();
+            useSopPrototypeStore.getState().resetStore();
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Bulk review: one-click 검토 완료 for all (or one Activity's) unreviewed
+    // steps — a 30-node Task-wide SOP made per-step clicking the only way to
+    // finish a review pass.
+    // ---------------------------------------------------------
+    console.log('Bulk step review (전체/Activity 일괄 검토)...');
+    {
+        const bulkBuild = buildTaskGateSampleDocument({
+            id: 'bulk-review-doc',
+            member: SAMPLE_SOP_DOCUMENT.member,
+            workLibrary: SAMPLE_WORK_LIBRARY,
+            context: '',
+            setupConfig: SAMPLE_SOP_DOCUMENT.setupConfig,
+        });
+        check(bulkBuild.success, 'Fixture: the bulk-review sample document builds');
+        if (bulkBuild.success) {
+            const bulkDoc = bulkBuild.document;
+            const draftCount = bulkDoc.steps.filter((s) => s.reviewStatus === 'ai-draft').length;
+            const firstActivityId = bulkDoc.steps.find((s) => !s.terminalType)!.sourceActivityIds![0];
+            const activityDraftCount = bulkDoc.steps.filter((s) => !s.terminalType && s.sourceActivityIds?.[0] === firstActivityId && s.reviewStatus === 'ai-draft').length;
+
+            // Activity 범위 일괄 검토: 해당 Activity의 Sub Action만 바뀐다.
+            const scoped = applyBulkStepReview(bulkDoc, firstActivityId);
+            check(scoped.changedCount === activityDraftCount, `Activity-scoped bulk review changes exactly that Activity's unreviewed Sub Actions (${scoped.changedCount}/${activityDraftCount})`);
+            check(
+                scoped.steps.every((s) => (s.sourceActivityIds?.[0] === firstActivityId && !s.terminalType ? s.reviewStatus === 'reviewed' : s.reviewStatus === bulkDoc.steps.find((o) => o.id === s.id)!.reviewStatus)),
+                'Steps outside the scoped Activity (terminals included) keep their previous review status untouched'
+            );
+
+            // 전체 일괄 검토: 모든 미검토 단계가 reviewed가 되고 문서 상태도 따라간다.
+            const full = applyBulkStepReview(bulkDoc);
+            check(full.changedCount === draftCount && full.reviewStatus === 'reviewed', 'Full bulk review marks every unreviewed step and the document itself as reviewed');
+            check(full.steps.every((s) => s.reviewStatus !== 'confirmed'), "Bulk review can NEVER produce 'confirmed' — that status stays exclusive to confirmFullSop's validation pass");
+
+            // 이미 검토/확정된 단계는 건드리지 않는다 (idempotent + confirmed 보존).
+            const preReviewed = { ...bulkDoc, steps: bulkDoc.steps.map((s, i) => (i === 1 ? { ...s, reviewStatus: 'confirmed' as const } : s)) };
+            const preserved = applyBulkStepReview(preReviewed);
+            check(preserved.steps[1].reviewStatus === 'confirmed', 'A previously confirmed step survives bulk review unchanged');
+            check(applyBulkStepReview({ ...bulkDoc, steps: full.steps }).changedCount === 0, 'Bulk review is idempotent — a second pass changes nothing');
+
+            // Store 액션: 고객 검토 모드 잠금 + 1회 Undo 복원.
+            act(() => {
+                useSopPrototypeStore.getState().setDocument(bulkDoc);
+                useSopPrototypeStore.getState().setCustomerReviewMode(true);
+            });
+            check(useSopPrototypeStore.getState().markStepsReviewedBulk() === 0 && useSopPrototypeStore.getState().document!.steps.filter((s) => s.reviewStatus === 'ai-draft').length === draftCount, 'The Store action is fully blocked under customer review mode');
+            act(() => useSopPrototypeStore.getState().setCustomerReviewMode(false));
+            let bulkChanged = 0;
+            act(() => {
+                bulkChanged = useSopPrototypeStore.getState().markStepsReviewedBulk();
+            });
+            check(bulkChanged === draftCount && useSopPrototypeStore.getState().document!.reviewStatus === 'reviewed', 'The Store action reviews all remaining drafts in ONE history entry');
+            act(() => useSopPrototypeStore.getState().undo());
+            check(useSopPrototypeStore.getState().document!.steps.filter((s) => s.reviewStatus === 'ai-draft').length === draftCount, 'A single Undo reverts the ENTIRE bulk review — never one step at a time');
             useSopPrototypeStore.getState().resetStore();
         }
     }

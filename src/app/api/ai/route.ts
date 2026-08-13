@@ -916,13 +916,32 @@ export async function POST(request: NextRequest) {
         // ("AI 응답이 스키마와 일치하지 않습니다")로 끝난다. SOP 생성만 별도 상한을 쓴다.
         const generationMaxOutputTokens = graphKind === 'sop' ? 65536 : 16384;
 
-        const { object: firstObject } = await generateObject({
-            model,
-            schema: resolvedSchema,
-            prompt: resolvedPrompt,
-            maxOutputTokens: generationMaxOutputTokens,
-            ...(providerOptions ? { providerOptions } : {}),
-        });
+        // SOP 1차 생성도 repair와 동일하게 1회 재시도한다 — 퇴행 반복 루프(자유 문자열
+        // 필드 안에서 같은 구절을 토큰 한도까지 반복 → JSON 절단 → NoObjectGeneratedError)는
+        // 확률적 실패라 같은 프롬프트의 두 번째 추첨이 대부분 성공한다. repair 경로는
+        // generateSopRepairWithRetry가 이미 방어하지만, 1차 생성이 즉사하면 그 방어에
+        // 도달하지도 못한 채 사용자에게 500이 나간다. /flow류는 기존 동작을 유지한다.
+        const generateFirstObject = async () =>
+            (
+                await generateObject({
+                    model,
+                    schema: resolvedSchema,
+                    prompt: resolvedPrompt,
+                    maxOutputTokens: generationMaxOutputTokens,
+                    ...(providerOptions ? { providerOptions } : {}),
+                })
+            ).object;
+        let firstObject: unknown;
+        try {
+            firstObject = await generateFirstObject();
+        } catch (firstError) {
+            if (graphKind !== 'sop') throw firstError;
+            console.error(
+                '[API Route] SOP 1차 생성 실패, 1회 재시도:',
+                firstError instanceof Error ? firstError.message : String(firstError)
+            );
+            firstObject = await generateFirstObject();
+        }
 
         let object: unknown = firstObject;
         let graphWarnings: string[] = [];

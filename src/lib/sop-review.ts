@@ -30,6 +30,33 @@ export function applyStepReviewStatus(
 }
 
 /**
+ * Bulk review: marks every still-unreviewed (ai-draft) step as 'reviewed' —
+ * optionally restricted to the steps whose PRIMARY Activity matches
+ * `activityId` (the same primary-Activity rule the canvas group containers and
+ * the sidebar step groups use). A 30-node Task-wide SOP made per-step
+ * clicking the only way to finish a review pass; this is the one-click
+ * counterpart the members asked for.
+ *
+ * Deliberately touches ONLY 'ai-draft' steps: already-'reviewed' steps stay
+ * untouched and 'confirmed' can never be produced here (that status remains
+ * exclusive to validateFullSopConfirmation). Returns changedCount so callers
+ * can skip the history push when nothing actually changed.
+ */
+export function applyBulkStepReview(
+    doc: SopDocument,
+    activityId?: string
+): { steps: SopStepData[]; reviewStatus: SopReviewStatus; changedCount: number } {
+    let changedCount = 0;
+    const steps = doc.steps.map((s) => {
+        if (s.reviewStatus !== 'ai-draft') return s;
+        if (activityId && (s.terminalType || s.sourceActivityIds?.[0] !== activityId)) return s;
+        changedCount += 1;
+        return { ...s, reviewStatus: 'reviewed' as SopReviewStatus };
+    });
+    return { steps, reviewStatus: computeDocumentReviewStatus(steps), changedCount };
+}
+
+/**
  * Full-document confirmation validation: every step must be reviewed, every
  * AI-suggested SKILL must be accepted or removed, and the graph itself must be
  * structurally valid (start/end nodes, decision branches, orphans, cycles).

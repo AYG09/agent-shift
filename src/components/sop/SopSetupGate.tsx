@@ -15,6 +15,7 @@ import {
     RefreshCw,
     X,
     KeyRound,
+    ChevronDown,
 } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { enterTaskCreationPath, loadSampleSopFromSetup, runSopSetupGeneration } from '@/lib/sop-setup-actions';
@@ -59,6 +60,10 @@ export const SopSetupGate: React.FC = () => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [validationError, setValidationError] = useState<string | null>(null);
     const [aiError, setAiError] = useState<string | null>(null);
+    // 밀도 개선: 읽기 전용 정보(구성원)와 선택 기능(AI Task 추천)은 기본 접힘.
+    // 핵심 요약은 접힌 헤더에 항상 표시되므로 정보 손실 없이 화면 밀도만 낮아진다.
+    const [showMemberInfo, setShowMemberInfo] = useState(false);
+    const [showRecommendation, setShowRecommendation] = useState(false);
 
     // Direct /sop/setup entry (bookmark, refresh, back-button) must normalize the
     // generation scope exactly like Home's "Task 기반 생성" card click does — this
@@ -330,22 +335,29 @@ export const SopSetupGate: React.FC = () => {
                     </div>
                 )}
 
-                {/* 1. 구성원 정보 Card */}
+                {/* 1. 구성원 정보 Card — 읽기 전용 정보라 기본 접힘. 핵심 요약(이름·직무·조직)은
+                    헤더에 항상 표시된다. */}
                 <div className="min-h-0 flex flex-col gap-4">
                 <section className="shrink-0 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-                    <div className="mb-3 flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-600 text-white">
+                    <button
+                        type="button"
+                        onClick={() => setShowMemberInfo((v) => !v)}
+                        aria-expanded={showMemberInfo}
+                        className="flex w-full items-center gap-3 text-left"
+                    >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-indigo-600 text-white">
                             <UserCheck className="w-5 h-5" />
                         </div>
-                        <div>
-                            <h2 className="text-lg font-semibold text-zinc-900">1. 구성원 정보</h2>
-                            <p className="text-xs text-zinc-500">
-                                프로토타입 로그인으로 식별된 구성원 정보입니다. 실제 인증 연동은 이 범위에 포함하지 않습니다.
+                        <div className="min-w-0 flex-1">
+                            <h2 className="text-base font-semibold text-zinc-900">1. 구성원 정보</h2>
+                            <p className="truncate text-xs text-zinc-500">
+                                {memberInfo.name} · {memberInfo.jobRole} · {memberInfo.organization || '소속 미지정'}
                             </p>
                         </div>
-                    </div>
+                        <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${showMemberInfo ? 'rotate-180' : ''}`} />
+                    </button>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                    <div className={showMemberInfo ? 'mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4' : 'hidden'}>
                         <div>
                             <span className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5">사번</span>
                             <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm font-semibold text-zinc-900">{memberInfo.employeeId || memberInfo.id || '프로토타입 계정'}</p>
@@ -369,7 +381,26 @@ export const SopSetupGate: React.FC = () => {
 
                 {/* 2. Task Library Card */}
                 <section className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-                    <SopTaskRecommendationPanel />
+                    {/* AI Task 추천은 선택 기능이라 기본 접힘 — 입력값은 Store에 persist되므로
+                        접었다 펴도 작성 중이던 업무 설명이 사라지지 않는다. */}
+                    <div className="rounded-lg border border-indigo-200/80 bg-indigo-50/40">
+                        <button
+                            type="button"
+                            onClick={() => setShowRecommendation((v) => !v)}
+                            aria-expanded={showRecommendation}
+                            className="flex w-full items-center gap-2 rounded-lg px-4 py-3 text-left hover:bg-indigo-100/50"
+                        >
+                            <Sparkles className="h-4 w-4 shrink-0 text-indigo-600" />
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900">수행 업무로 AI Task 추천</span>
+                            <span className="shrink-0 rounded-md border border-indigo-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-indigo-600">선택 기능</span>
+                            <ChevronDown className={`h-4 w-4 shrink-0 text-indigo-400 transition-transform ${showRecommendation ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showRecommendation && (
+                            <div className="px-2 pb-2">
+                                <SopTaskRecommendationPanel />
+                            </div>
+                        )}
+                    </div>
                     <WorkLibrarySelector />
                     {workLibrary.taskId && <SopActivityProposalPanel />}
                     {activityCoverageWarning && (
