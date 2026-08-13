@@ -11,7 +11,7 @@ import {
     AgentDrilldownResponseSchema,
     NodeSplitResponseSchema,
 } from '@/lib/ai-schemas';
-import { SopGenerationWireSchema } from '@/lib/sop-schemas';
+import { SopGenerationWireSchema, SopSuggestionPatchSchema } from '@/lib/sop-schemas';
 import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
 import { normalizeFlowShape } from '@/lib/flow-shapes';
 import { FULL_SHAPE_SELECTION_GUIDE, MULTI_MEANING_SPLIT_GUIDE, BRANCH_EDGE_GUIDE } from '@/lib/ai-shape-guide';
@@ -972,6 +972,40 @@ export async function POST(request: NextRequest) {
                         ...(providerOptions ? { providerOptions } : {}),
                     });
                     return repaired;
+                },
+                // 누락된 Agent화 제안만 채우는 소형 호출 — 33노드 전체 재생성 대신
+                // 수천 토큰짜리 제안 목록만 받는다. 확률적 실패에 대비해 1회 재시도.
+                generateSuggestionPatch: async (missingSteps) => {
+                    const stepList = missingSteps
+                        .map((step) => `- [${step.id}] ${step.title || '제목 없음'}: ${step.definition || '정의 없음'}`)
+                        .join('\n');
+                    const patchPrompt = `당신은 업무 프로세스의 AI 적용 가능성을 판단하는 전문가입니다.
+"${sopRequest!.taskName || '업무'}" SOP의 아래 업무 단계마다 Agent화 제안을 정확히 1개씩 생성하세요.
+- type: 'agent-candidate'(정해진 규칙 안에서 AI가 주도 가능) | 'ai-assist'(사람이 수행하고 AI가 초안·검색·분석을 지원) | 'not-recommended'(사람 판단·대면 소통·예외 처리 등으로 AI 적용 비권장)
+- rationale: 왜 그렇게 판단했는지 1문장의 구체적 근거. 빈 문자열 금지.
+- stepId는 아래 목록의 ID를 그대로 사용하고, 모든 ID에 대해 빠짐없이 반환하세요. 확률/신뢰도 수치는 만들지 마세요.
+
+## 단계 목록
+${stepList}`;
+                    const callPatch = async () =>
+                        (
+                            await generateObject({
+                                model,
+                                schema: SopSuggestionPatchSchema,
+                                prompt: patchPrompt,
+                                maxOutputTokens: 8192,
+                                ...(providerOptions ? { providerOptions } : {}),
+                            })
+                        ).object;
+                    try {
+                        return await callPatch();
+                    } catch (patchError) {
+                        console.error(
+                            '[API Route] Agent화 제안 패치 1차 실패, 1회 재시도:',
+                            patchError instanceof Error ? patchError.message : String(patchError)
+                        );
+                        return callPatch();
+                    }
                 },
             });
 

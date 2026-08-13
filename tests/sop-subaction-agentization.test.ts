@@ -1461,6 +1461,102 @@ async function run() {
         useSopPrototypeStore.getState().resetStore();
     }
 
+    // ---------------------------------------------------------
+    // Role navigation: 승인 Inbox와 HR 대시보드는 라우트로만 존재하고 UI 이동
+    // 경로가 없어 URL을 직접 입력해야 했다(고객 지적). 모든 주요 헤더에 공용
+    // SopRoleNav 탭이 상시 노출된다.
+    // ---------------------------------------------------------
+    console.log('SopRoleNav (역할 화면 상단 내비게이션)...');
+    {
+        const { SopRoleNav } = await import('../src/components/sop/SopRoleNav');
+        const navRenderer = renderComponent(React.createElement(SopRoleNav));
+        const links = navRenderer.root.findAllByType('a');
+        check(links.length === 3, 'The role nav renders exactly three destinations (구성원 / 승인 Inbox / HR 대시보드)');
+        const hrefs = links.map((l) => l.props.href);
+        check(hrefs.includes('/sop') && hrefs.includes('/sop/approvals') && hrefs.includes('/sop/hr'), 'The nav links point at the member home, approval inbox, and HR dashboard routes — every role screen is now reachable through the UI');
+        navRenderer.unmount();
+
+        const compactRenderer = renderComponent(React.createElement(SopRoleNav, { compact: true }));
+        const compactLinks = compactRenderer.root.findAllByType('a');
+        check(compactLinks.every((l) => typeof l.props.title === 'string' && l.props.title.length > 0), 'Compact (icon-only) mode keeps the label as a tooltip on every link');
+        compactRenderer.unmount();
+    }
+
+    // ---------------------------------------------------------
+    // Suggestion patch: agentizationSuggestion은 optional 와이어 필드라 모델이
+    // 장문 출력에서 통째로 생략할 수 있다(프로덕션: 33개 단계 전부 누락 → 전체
+    // 재생성 repair도 실패 → 400). 이제 누락 제안만 채우는 소형 패치 호출이
+    // 먼저 시도되고, 전체 재생성은 패치로 부족할 때만 남는다.
+    // ---------------------------------------------------------
+    console.log('runSopGenerationPostProcessing: missing-suggestion patch call (전체 재생성 없이 복구)...');
+    {
+        const noSuggestionObject = {
+            title: '제안 누락 SOP',
+            steps: [
+                { id: 'p-start', title: '시작', definition: '시작 단계의 상세 정의입니다.', shape: 'terminal', terminalType: 'start' },
+                { id: 'p-work-1', title: '작업 1', definition: '첫 번째 작업 단계입니다.', shape: 'process', sourceActivityIds: [actA.id], subActionOrder: 1, subActionOrigin: 'activity-derived' },
+                { id: 'p-work-2', title: '작업 2', definition: '두 번째 작업 단계입니다.', shape: 'process', sourceActivityIds: [actA.id], subActionOrder: 2, subActionOrigin: 'activity-derived' },
+                { id: 'p-end', title: '종료', definition: '종료 단계의 상세 정의입니다.', shape: 'terminal', terminalType: 'end' },
+            ],
+            edges: [
+                { id: 'pe1', source: 'p-start', target: 'p-work-1' },
+                { id: 'pe2', source: 'p-work-1', target: 'p-work-2' },
+                { id: 'pe3', source: 'p-work-2', target: 'p-end' },
+            ],
+        };
+        const patchSopRequest = {
+            action: 'generateSop', memberRole: '테스터', taskName: 'T', sourceType: 'task', structureVersion: 'activity-subaction-v1',
+            activities: [{ id: actA.id, order: 1, name: actA.name, skills: [] }],
+            skills: [], context: '', detailLevel: 'standard', minSteps: 1, maxSteps: 5, branchPolicy: 'auto', maxBranches: 2, allowRework: true,
+        } as unknown as SopGenerationRequest;
+
+        let patchCalls = 0;
+        let fullRepairCalls = 0;
+        let patchedStepInfos: { id: string; title?: string }[] = [];
+        const patchResult = await runSopGenerationPostProcessing({
+            object: noSuggestionObject,
+            prompt: 'PATCH PROMPT',
+            sopRequest: patchSopRequest,
+            generateRepair: async () => {
+                fullRepairCalls++;
+                throw new Error('full regeneration must NOT be needed when the patch succeeds');
+            },
+            generateSuggestionPatch: async (missingSteps) => {
+                patchCalls++;
+                patchedStepInfos = missingSteps;
+                return {
+                    suggestions: missingSteps.map((step) => ({ stepId: step.id, type: 'ai-assist', rationale: `${step.title} 단계는 AI가 초안을 지원할 수 있습니다.` })),
+                };
+            },
+        });
+        check(patchResult.ok, 'A response missing EVERY agentizationSuggestion is recovered by the small patch call alone — no 400');
+        check(patchCalls === 1 && fullRepairCalls === 0, 'The patch call replaces the full 33-node regeneration entirely when it succeeds (repair never invoked)');
+        check(patchedStepInfos.length === 2 && patchedStepInfos.every((s) => s.id.startsWith('p-work')), 'Only the non-terminal steps that actually lack a suggestion are sent to the patch call');
+        if (patchResult.ok) {
+            const patchedSteps = (patchResult.object as { steps: { id: string; terminalType?: string; agentizationSuggestion?: { rationale: string } }[] }).steps;
+            check(patchedSteps.filter((s) => !s.terminalType).every((s) => Boolean(s.agentizationSuggestion?.rationale)), 'Every business step carries an AI-authored suggestion after patching');
+            check(patchedSteps.filter((s) => s.terminalType).every((s) => !s.agentizationSuggestion), 'Terminals never receive suggestions — the terminal-exclusion invariant survives the patch');
+        }
+
+        // 패치가 빈 rationale을 돌려주면 그 단계는 채워지지 않는다 — 서버는 제안을
+        // 조작하지 않으며, 남은 누락은 기존 repair → 400 경로가 처리한다.
+        let fabricationRepairCalls = 0;
+        const fabricationResult = await runSopGenerationPostProcessing({
+            object: noSuggestionObject,
+            prompt: 'PATCH PROMPT 2',
+            sopRequest: patchSopRequest,
+            generateRepair: async () => {
+                fabricationRepairCalls++;
+                return noSuggestionObject; // 전체 재생성도 제안을 채우지 못함
+            },
+            generateSuggestionPatch: async (missingSteps) => ({
+                suggestions: missingSteps.map((step) => ({ stepId: step.id, type: 'ai-assist', rationale: '   ' })),
+            }),
+        });
+        check(!fabricationResult.ok && fabricationRepairCalls > 0, 'An empty-rationale patch is IGNORED (never fabricated into a suggestion) — the failure still routes through repair and ends in an actionable 400');
+        if (!fabricationResult.ok) check(fabricationResult.response.status === 400, 'The unfixed missing-suggestion failure stays a 400 with the step list');
+    }
+
     console.log(`ALL SOP ACTIVITY–SUB ACTION / AGENTIZATION / TEMPLATE TESTS PASSED (${passed})`);
 }
 

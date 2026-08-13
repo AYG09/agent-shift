@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { runSopValidationPipeline, generateSopRepairWithRetry } from '@/lib/sop-generation-pipeline';
+import { SopSuggestionPatchSchema } from '@/lib/sop-schemas';
 import type { SopStructuralConstraints } from '@/lib/graph-validation';
 import type { SopGenerationRequest } from '@/lib/sop-ai-request';
 import {
@@ -13,6 +14,8 @@ import {
 
 type GeneratedStep = {
     id: string;
+    title?: string;
+    definition?: string;
     terminalType?: 'start' | 'end';
     sourceActivityIds?: string[];
     subActionOrder?: number;
@@ -20,6 +23,32 @@ type GeneratedStep = {
     subActionOriginRationale?: string;
     agentizationSuggestion?: { type: string; rationale: string };
 };
+
+/** 패치 호출에 넘기는 누락 단계 요약 — 제안 판단에 필요한 최소 정보만. */
+export type SopSuggestionPatchStepInfo = { id: string; title?: string; definition?: string };
+
+/**
+ * 소형 패치 호출의 응답을 검증해 누락 단계에만 병합한다. stepId가 현재 누락
+ * 목록에 없는 항목, rationale이 비어 있는 항목은 조용히 무시된다 — 서버가
+ * 제안을 조작·기본값 처리하는 일은 절대 없고, 채워지지 않은 단계는 기존
+ * 검증·repair·400 경로가 그대로 처리한다.
+ */
+function applySuggestionPatch(object: unknown, missingIds: string[], rawPatch: unknown): unknown {
+    const parsed = SopSuggestionPatchSchema.safeParse(rawPatch);
+    if (!parsed.success) return object;
+    const patchById = new Map(parsed.data.suggestions.map((item) => [item.stepId, item]));
+    const missing = new Set(missingIds);
+    const rec = object as { steps?: GeneratedStep[] };
+    if (!Array.isArray(rec.steps)) return object;
+    const steps = rec.steps.map((step) => {
+        if (!missing.has(step.id)) return step;
+        const patchItem = patchById.get(step.id);
+        const rationale = patchItem?.rationale.trim();
+        if (!patchItem || !rationale) return step;
+        return { ...step, agentizationSuggestion: { type: patchItem.type, rationale } };
+    });
+    return { ...(object as object), steps };
+}
 
 /** Every non-terminal Sub Action must carry an AI Agent화 suggestion in the new structure — never silently optional. */
 function findMissingSuggestionStepIds(steps: GeneratedStep[]): string[] {
@@ -85,8 +114,13 @@ export async function runSopGenerationPostProcessing(params: {
     prompt: string;
     sopRequest: SopGenerationRequest;
     generateRepair: (repairPrompt: string) => Promise<unknown>;
+    /**
+     * 누락된 Agent화 제안만 채우는 소형 AI 호출 (SopSuggestionPatchSchema 응답).
+     * 없으면 기존의 전체 재생성 repair 경로만 사용한다.
+     */
+    generateSuggestionPatch?: (missingSteps: SopSuggestionPatchStepInfo[]) => Promise<unknown>;
 }): Promise<SopGenerationRunResult> {
-    const { object, prompt, sopRequest, generateRepair } = params;
+    const { object, prompt, sopRequest, generateRepair, generateSuggestionPatch } = params;
     // minSteps/maxSteps/branchPolicy/maxBranches/allowRework are required by
     // SopGenerationRequestSchema, so they need no fallback here — only
     // maxTotalNodes/maxLoops are genuinely optional in that schema, and their
@@ -113,6 +147,33 @@ export async function runSopGenerationPostProcessing(params: {
     const sourceActivityIds = sopRequest.activities.map((activity) => activity.id).filter((id): id is string => Boolean(id));
     const structureVersion = sopRequest.structureVersion;
     const readSteps = (obj: unknown) => (obj as { steps?: GeneratedStep[] }).steps ?? [];
+
+    // agentizationSuggestion은 optional 필드라 모델이 장문 출력에서 통째로 생략할
+    // 수 있다(프로덕션에서 33개 단계 전부 누락 사례). 33노드 전체를 다시 생성하는
+    // repair는 실패 확률이 높으므로, 누락 제안만 요청하는 소형 패치 호출을 먼저
+    // 시도한다 — 성공하면 전체 재생성 없이 통과하고, 실패하거나 일부만 채워지면
+    // 기존 repair → 400 경로가 그대로 이어받는다.
+    const tryPatchSuggestions = async (obj: unknown): Promise<unknown> => {
+        if (!generateSuggestionPatch || structureVersion !== 'activity-subaction-v1') return obj;
+        const missing = findMissingSuggestionStepIds(readSteps(obj));
+        if (missing.length === 0) return obj;
+        const missingSet = new Set(missing);
+        const missingStepInfos = readSteps(obj)
+            .filter((step) => missingSet.has(step.id))
+            .map((step) => ({ id: step.id, title: step.title, definition: step.definition }));
+        try {
+            const rawPatch = await generateSuggestionPatch(missingStepInfos);
+            const patched = applySuggestionPatch(obj, missing, rawPatch);
+            const remaining = findMissingSuggestionStepIds(readSteps(patched));
+            console.log(`[SOP Runner] Agent화 제안 패치: ${missing.length}개 누락 중 ${missing.length - remaining.length}개 보충`);
+            return patched;
+        } catch (patchError) {
+            console.error('[SOP Runner] Agent화 제안 패치 생성 실패:', patchError instanceof Error ? patchError.message : String(patchError));
+            return obj;
+        }
+    };
+
+    pipelineResult = { ...pipelineResult, object: await tryPatchSuggestions(pipelineResult.object) };
     const coverage = checkCoverage(readSteps(pipelineResult.object), sourceActivityIds, structureVersion);
     const missingSuggestions = structureVersion === 'activity-subaction-v1' ? findMissingSuggestionStepIds(readSteps(pipelineResult.object)) : [];
     const invalidOrigins = structureVersion === 'activity-subaction-v1' ? findInvalidOriginStepIds(readSteps(pipelineResult.object)) : [];
@@ -141,6 +202,8 @@ export async function runSopGenerationPostProcessing(params: {
         if (!pipelineResult.ok) {
             return { ok: false, response: NextResponse.json({ error: pipelineResult.error, issues: pipelineResult.issues }, { status: 400 }) };
         }
+        // 전체 repair 결과에도 제안이 빠져 있으면 400으로 가기 전에 패치를 한 번 더 시도한다.
+        pipelineResult = { ...pipelineResult, object: await tryPatchSuggestions(pipelineResult.object) };
         const repairedCoverage = checkCoverage(readSteps(pipelineResult.object), sourceActivityIds, structureVersion);
         const repairedMissingSuggestions = structureVersion === 'activity-subaction-v1' ? findMissingSuggestionStepIds(readSteps(pipelineResult.object)) : [];
         const repairedInvalidOrigins = structureVersion === 'activity-subaction-v1' ? findInvalidOriginStepIds(readSteps(pipelineResult.object)) : [];

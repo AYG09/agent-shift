@@ -249,6 +249,23 @@ export function normalizeSopGenerationObject(object: unknown): unknown {
 
 export const SopEdgeAiSchema = SopEdgeCommonFieldsSchema;
 
+/**
+ * Agent화 제안 전용 패치 응답 스키마. agentizationSuggestion은 와이어에서
+ * optional이라 모델이 (특히 28~42노드 장문 출력에서) 통째로 생략할 수 있는데,
+ * 그때 33노드 전체를 다시 생성하게 하면 실패 확률만 높다. 누락된 단계 목록만
+ * 넘겨 제안만 돌려받는 소형 호출(출력 수천 토큰)로 복구한다 — 제안은 반드시
+ * AI가 생성한 판단이어야 하므로 서버가 기본값을 조작해 채우는 일은 없다.
+ */
+export const SopSuggestionPatchSchema = z.object({
+    suggestions: z.array(
+        z.object({
+            stepId: z.string(),
+            type: z.enum(['agent-candidate', 'ai-assist', 'not-recommended']),
+            rationale: z.string(),
+        })
+    ),
+});
+
 export const SopGenerationResponseSchema = z.object({
     title: z.string().min(1),
     summary: z.string().optional(),
