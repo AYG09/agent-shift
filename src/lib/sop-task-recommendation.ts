@@ -31,7 +31,6 @@ export const SopTaskRecommendationResponseSchema = z.object({
     })).max(3),
 });
 
-export type SopTaskRecommendationRequest = z.infer<typeof SopTaskRecommendationRequestSchema>;
 export type SopTaskRecommendationResponse = z.infer<typeof SopTaskRecommendationResponseSchema>;
 
 export function validateTaskRecommendationResponse(

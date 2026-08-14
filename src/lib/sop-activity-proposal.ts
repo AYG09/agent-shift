@@ -50,7 +50,6 @@ export const SopActivityProposalRequestSchema = z.object({
     model: z.string().optional(),
     reasoning: z.string().optional(),
 });
-export type SopActivityProposalRequest = z.infer<typeof SopActivityProposalRequestSchema>;
 
 const SopActivityProposalModelResponseSchema = z.object({
     proposals: z.array(SopActivityProposalModelSchema).max(5),

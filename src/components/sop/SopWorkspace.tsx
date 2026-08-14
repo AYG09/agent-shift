@@ -25,8 +25,9 @@ import { SopCanvas } from './SopCanvas';
 import { SopStepInspector } from './SopStepInspector';
 import { SopServerSaveControl } from './SopServerSaveControl';
 import { SopRoleNav } from './SopRoleNav';
+import { formatClockTime } from '@/lib/sop-format';
 import { SopStepData } from '@/lib/sop-types';
-import { SOP_REVIEW_STATUS_BADGE_CLASS } from '@/lib/sop-review-status-meta';
+import { SOP_REVIEW_STATUS_BADGE_CLASS, SOP_DOCUMENT_REVIEW_STATUS_LABEL } from '@/lib/sop-review-status-meta';
 
 export const SopWorkspace: React.FC = () => {
     const router = useRouter();
@@ -126,8 +127,7 @@ export const SopWorkspace: React.FC = () => {
     // this document lives only in this browser's localStorage, not on a shared server.
     const formatTimestamp = (tsString: string | null) => {
         if (!tsString) return '이 브라우저에 저장됨';
-        const d = new Date(tsString);
-        return `이 브라우저에 저장됨 (${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')})`;
+        return `이 브라우저에 저장됨 (${formatClockTime(new Date(tsString))})`;
     };
 
     return (
@@ -171,11 +171,7 @@ export const SopWorkspace: React.FC = () => {
                         <span
                             className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${SOP_REVIEW_STATUS_BADGE_CLASS[document.reviewStatus]}`}
                         >
-                            {document.reviewStatus === 'confirmed'
-                                ? '확정 완료'
-                                : document.reviewStatus === 'reviewed'
-                                ? '검토 완료'
-                                : 'AI 초안 검토 중'}
+                            {SOP_DOCUMENT_REVIEW_STATUS_LABEL[document.reviewStatus]}
                         </span>
                     </div>
                 </div>

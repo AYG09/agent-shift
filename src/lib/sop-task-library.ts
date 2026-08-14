@@ -14,10 +14,6 @@ export interface SopTaskLibraryFixture {
 
 export const SOP_TASK_LIBRARY_FIXTURE = fixture as SopTaskLibraryFixture;
 
-export function getTaskLibraryJob(jobId: string | undefined): SopTaskLibraryJob | undefined {
-    return SOP_TASK_LIBRARY_FIXTURE.jobs.find((job) => job.id === jobId);
-}
-
 export function getTaskLibraryJobByRole(role: string | undefined): SopTaskLibraryJob | undefined {
     const normalized = role?.trim().toLowerCase();
     return SOP_TASK_LIBRARY_FIXTURE.jobs.find((job) => job.name.toLowerCase() === normalized)
@@ -26,13 +22,6 @@ export function getTaskLibraryJobByRole(role: string | undefined): SopTaskLibrar
 
 export function getTaskLibraryTask(selection: Pick<WorkLibrarySelection, 'taskId' | 'taskCatalog'>): WorkLibraryTask | undefined {
     return selection.taskCatalog.find((task) => task.id === selection.taskId);
-}
-
-export function getTaskLibraryActivity(
-    selection: Pick<WorkLibrarySelection, 'taskId' | 'activityId' | 'taskCatalog'>
-): WorkLibraryActivity | undefined {
-    const task = getTaskLibraryTask(selection);
-    return task?.activities.find((activity) => activity.id === selection.activityId);
 }
 
 export function getScopedActivities(selection: WorkLibrarySelection): WorkLibraryActivity[] {

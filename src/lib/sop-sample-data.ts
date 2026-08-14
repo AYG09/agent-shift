@@ -1,4 +1,5 @@
 import { SopDocument, SopMember, SopStepData, SopEdge, SopAgentizationSuggestionType, WorkLibrarySelection } from './sop-types';
+import { SOP_AGENTIZATION_SUGGESTION_TYPES } from './sop-step-common-schema';
 import { createTaskLibrarySelectionForRole, getScopedActivities } from './sop-task-library';
 import { layoutSopGraph } from './sop-layout';
 
@@ -457,27 +458,7 @@ export const CUSTOMER_SOP_DOCUMENT: SopDocument = {
     }),
 };
 
-/** Keeps the sample workflow usable after a member selects a different fixture Task or Activity. */
-export function mapSampleStepsToWorkLibraryScope(
-    steps: SopDocument['steps'],
-    workLibrary: WorkLibrarySelection,
-): SopDocument['steps'] {
-    const sourceActivities = getScopedActivities(workLibrary);
-    const businessSteps = steps.filter((step) => !step.terminalType);
-
-    return steps.map((step) => {
-        if (step.terminalType) return { ...step, sourceActivityIds: undefined };
-        const businessIndex = businessSteps.findIndex((item) => item.id === step.id);
-        return {
-            ...step,
-            sourceActivityIds: sourceActivities
-                .filter((_, activityIndex) => activityIndex % businessSteps.length === businessIndex)
-                .map((activity) => activity.id),
-        };
-    });
-}
-
-const TASK_GATE_SAMPLE_SUGGESTION_CYCLE: SopAgentizationSuggestionType[] = ['agent-candidate', 'ai-assist', 'not-recommended'];
+const TASK_GATE_SAMPLE_SUGGESTION_CYCLE: SopAgentizationSuggestionType[] = [...SOP_AGENTIZATION_SUGGESTION_TYPES];
 
 export type TaskGateSampleResult =
     | { success: true; document: SopDocument }

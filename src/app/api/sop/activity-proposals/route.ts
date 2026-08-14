@@ -1,8 +1,7 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
+import { resolveGenerationApiKey, resolveGenerationModel, buildReasoningProviderOptions } from '@/server/ai/model-factory';
 import { SopActivityProposalRequestSchema, validateActivityProposalResponse } from '@/lib/sop-activity-proposal';
 
 const ModelResponseSchema = z.object({
@@ -30,12 +29,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Activity 제안 요청이 유효하지 않습니다.', issues: parsed.error.issues }, { status: 400 });
         }
         const input = parsed.data;
-        const apiKey = input.apiKey?.trim() || process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
-        if (!apiKey) {
+        // 모델·키 해석은 model-factory(SSOT·프로바이더 교체 지점)가 담당한다.
+        // 이 라우트는 키가 필수다 — BYOK도 환경변수도 없으면 400으로 안내한다.
+        if (resolveGenerationApiKey(input.apiKey).source === 'none') {
             return NextResponse.json({ error: 'AI Activity 제안을 위해 API KEY를 등록해 주세요. Activity는 Work Map에서 직접 추가할 수 있습니다.' }, { status: 400 });
         }
-        const model = createGoogleGenerativeAI({ apiKey })(sanitizeModelId(input.model));
-        const reasoning = sanitizeReasoningLevel(input.reasoning);
+        const model = resolveGenerationModel({ model: input.model, apiKey: input.apiKey });
+        const reasoningOptions = buildReasoningProviderOptions(input.reasoning);
         const { object } = await generateObject({
             model,
             schema: ModelResponseSchema,
@@ -56,7 +56,7 @@ ${input.context}
 - 각 제안은 name(Activity명), description(설명), rationale(맥락의 어느 부분에서 이 제안이 나왔는지 짧은 설명), skills(1~5개, name+description)를 포함해야 합니다.
 - confidence/확률 수치는 절대 만들지 마세요.
 - 담당 직무: ${input.member.jobRole}`,
-            ...(reasoning === 'default' ? {} : { providerOptions: { google: { thinkingConfig: { thinkingLevel: reasoning } } } }),
+            ...(reasoningOptions ? { providerOptions: reasoningOptions } : {}),
         });
         const result = validateActivityProposalResponse(object, {
             existingActivityNames: input.existingActivityNames,

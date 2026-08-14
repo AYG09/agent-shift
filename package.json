@@ -12,6 +12,7 @@
         "test:sop": "tsx tests/sop.test.ts && tsx tests/sop-readonly-inspectors.test.tsx && tsx tests/sop-setup-actions.test.ts && tsx tests/sop-task-library.test.ts && tsx tests/sop-member-home.test.ts && tsx tests/sop-subaction-agentization.test.ts && tsx tests/sop-approval-flow.test.ts && tsx tests/sop-hr-analytics.test.ts && tsx tests/sop-customer-scenario.test.ts && tsx tests/sop-activity-proposal.test.ts",
         "test:sop-demo": "tsx tests/sop-demo.test.ts",
         "verify:sop-customer": "node .agents/skills/implement-sop-customer-requirements/scripts/verify-sop-customer.mjs",
+        "verify:quality": "node scripts/verify-quality.mjs",
         "format": "prettier --write ."
     },
     "dependencies": {

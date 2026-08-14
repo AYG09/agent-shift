@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveGenerationApiKey } from '@/server/ai/model-factory';
 import {
     FALLBACK_MODEL_PRIORITY,
     filterOfficialGeminiModels,
@@ -40,8 +41,8 @@ export async function POST(request: NextRequest) {
         // body 없이 호출되면 환경 변수 키로 진행한다
     }
 
-    const userKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
-    const apiKey = userKey || process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() || '';
+    // BYOK→환경변수 키 해석은 model-factory(SSOT)가 담당한다.
+    const apiKey = resolveGenerationApiKey(body.apiKey).apiKey ?? '';
 
     if (!apiKey) {
         return NextResponse.json(fallbackResult('missing-api-key', false));

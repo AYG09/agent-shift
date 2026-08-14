@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import type { SopStepData } from '@/lib/sop-types';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
-import { SOP_REVIEW_STATUS_BADGE_CLASS } from '@/lib/sop-review-status-meta';
+import { SOP_REVIEW_STATUS_BADGE_CLASS, SOP_DOCUMENT_REVIEW_STATUS_LABEL, SOP_STEP_REVIEW_STATUS_META, SOP_TERMINAL_CHIP_META } from '@/lib/sop-review-status-meta';
+import { formatActivityCode, formatStepNumber } from '@/lib/sop-format';
 
 interface SopSidebarProps {
     showMiniMap: boolean;
@@ -204,7 +205,7 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                                 return (
                                     <div key={activity.id} className="rounded-md">
                                         <button type="button" onClick={() => selectSourceActivity(active ? null : activity.id)} className={`flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[11px] ${active ? 'bg-violet-200 text-violet-950' : 'hover:bg-white text-zinc-700'}`}>
-                                            <span className="font-bold text-violet-700">A{String(activity.order ?? 0).padStart(2, '0')}</span>
+                                            <span className="font-bold text-violet-700">{formatActivityCode(activity.order)}</span>
                                             <span className="min-w-0 flex-1 truncate">{activity.name}</span>
                                             <span className="text-[10px]">{mappedSteps.length}개</span>
                                         </button>
@@ -276,27 +277,20 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                                         }`}
                                     >
                                         <span className="shrink-0 whitespace-nowrap rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-600">
-                                            {String(realIndex + 1).padStart(2, '0')}
+                                            {formatStepNumber(realIndex + 1)}
                                         </span>
                                         {isSubActionStructure && step.subActionOrder !== undefined && (
                                             <span className="shrink-0 whitespace-nowrap rounded bg-violet-100 px-1 py-0.5 text-[9px] font-bold text-violet-700">#{step.subActionOrder}</span>
                                         )}
                                         <span className="min-w-0 flex-1 truncate font-semibold text-zinc-900" title={step.title}>{step.title}</span>
+                                        {/* 터미널 칩·상태 배지는 meta 모듈(SSOT)에서만 온다 — DESIGN_CONVENTIONS §5 */}
                                         {step.terminalType && (
-                                            <span className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-bold ${step.terminalType === 'start' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                                                {step.terminalType === 'start' ? '시작' : '종료'}
+                                            <span className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-bold ${SOP_TERMINAL_CHIP_META[step.terminalType].chipClass}`}>
+                                                {SOP_TERMINAL_CHIP_META[step.terminalType].label}
                                             </span>
                                         )}
-                                        <span
-                                            className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-bold ${
-                                                step.reviewStatus === 'confirmed'
-                                                    ? 'bg-emerald-100 text-emerald-800'
-                                                    : step.reviewStatus === 'reviewed'
-                                                    ? 'bg-blue-100 text-blue-800'
-                                                    : 'bg-amber-100 text-amber-800'
-                                            }`}
-                                        >
-                                            {step.reviewStatus === 'confirmed' ? '확정' : step.reviewStatus === 'reviewed' ? '검토됨' : '초안'}
+                                        <span className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-bold ${SOP_STEP_REVIEW_STATUS_META[step.reviewStatus].badgeClass}`}>
+                                            {SOP_STEP_REVIEW_STATUS_META[step.reviewStatus].label}
                                         </span>
                                     </div>
                                 );
@@ -325,7 +319,7 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                                                         className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left hover:bg-violet-100/60"
                                                     >
                                                         <span className="shrink-0 whitespace-nowrap text-[10px] font-bold text-violet-700">
-                                                            A{String(group.order).padStart(2, '0')}
+                                                            {formatActivityCode(group.order)}
                                                         </span>
                                                         <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-zinc-800" title={group.name}>{group.name}</span>
                                                         <span className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-bold ${reviewedInGroup === group.steps.length ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-zinc-500 border border-zinc-200'}`}>
@@ -443,11 +437,7 @@ export const SopSidebar: React.FC<SopSidebarProps> = ({
                             <span
                                 className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${SOP_REVIEW_STATUS_BADGE_CLASS[document.reviewStatus]}`}
                             >
-                                {document.reviewStatus === 'confirmed'
-                                    ? 'SOP 확정 완료'
-                                    : document.reviewStatus === 'reviewed'
-                                    ? '전체 검토 완료'
-                                    : 'AI 초안 검토 중'}
+                                {SOP_DOCUMENT_REVIEW_STATUS_LABEL[document.reviewStatus]}
                             </span>
                         </div>
 

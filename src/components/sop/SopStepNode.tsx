@@ -6,6 +6,8 @@ import { FlowShapeRenderer } from '@/components/flow/FlowShapeRenderer';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { SopStepData } from '@/lib/sop-types';
 import { getSopNodeSize } from '@/lib/sop-node-geometry';
+import { formatActivityCode, formatStepNumber } from '@/lib/sop-format';
+import { SOP_TERMINAL_CHIP_META } from '@/lib/sop-review-status-meta';
 import { AGENTIZATION_SUGGESTION_META, getAgentizationModeForStep, getAgentizationModeMeta } from '@/lib/sop-agentization';
 import { CheckCircle2, Clock } from 'lucide-react';
 
@@ -110,17 +112,14 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
                 </span>
             )}
             {/* 고객사 기대 디자인: 시작/종료 노드에는 "시작"/"종료" 태그가 붙어
-                어느 노드가 프로세스의 진입·완료 지점인지 한눈에 보이게 한다. */}
+                어느 노드가 프로세스의 진입·완료 지점인지 한눈에 보이게 한다.
+                라벨·색상은 SOP_TERMINAL_CHIP_META(SSOT)를 따른다. */}
             {step.terminalType && (
                 <span
-                    className={`pointer-events-none absolute left-2 top-[-11px] z-20 rounded border px-1.5 py-0.5 text-[9px] font-bold shadow-sm ${
-                        step.terminalType === 'start'
-                            ? 'border-emerald-200 bg-white text-emerald-700'
-                            : 'border-rose-200 bg-white text-rose-700'
-                    }`}
-                    title={step.terminalType === 'start' ? '프로세스 시작 지점' : '프로세스 종료 지점'}
+                    className={`pointer-events-none absolute left-2 top-[-11px] z-20 rounded px-1.5 py-0.5 text-[9px] font-bold shadow-sm ${SOP_TERMINAL_CHIP_META[step.terminalType].chipClass}`}
+                    title={SOP_TERMINAL_CHIP_META[step.terminalType].title}
                 >
-                    {step.terminalType === 'start' ? '시작' : '종료'}
+                    {SOP_TERMINAL_CHIP_META[step.terminalType].label}
                 </span>
             )}
             {!step.terminalType && step.sourceActivityIds?.length ? (
@@ -128,7 +127,7 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
                     className={`pointer-events-none absolute right-2 top-[-11px] z-20 rounded border px-1.5 py-0.5 text-[9px] font-bold shadow-sm ${activityBadgeOrder === 'unmapped' ? 'border-amber-200 bg-white text-amber-700' : 'border-violet-200 bg-white text-violet-700'}`}
                     title={`Task Library Activity ${step.sourceActivityIds.join(', ')}${step.subActionOrder !== undefined ? ` · Sub Action #${step.subActionOrder}` : ''}`}
                 >
-                    {activityBadgeOrder === 'unmapped' ? 'Activity 미매핑' : `A${String(activityBadgeOrder ?? 0).padStart(2, '0')}`}
+                    {activityBadgeOrder === 'unmapped' ? 'Activity 미매핑' : formatActivityCode(activityBadgeOrder)}
                     {step.subActionOrder !== undefined ? ` · #${step.subActionOrder}` : step.sourceActivityIds.length > 1 ? ` +${step.sourceActivityIds.length - 1}` : ''}
                 </span>
             ) : null}
@@ -138,7 +137,7 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
                 {/* Step Number & Title */}
                 <div className="flex items-center gap-1.5 justify-center max-w-full">
                     <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-300 shrink-0">
-                        {String(stepNumber).padStart(2, '0')}
+                        {formatStepNumber(stepNumber)}
                     </span>
                     <h4 className="text-xs font-bold text-zinc-900 truncate max-w-[150px] leading-tight">
                         {step.title}
@@ -153,7 +152,7 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
                 <div role="tooltip" className="absolute left-1/2 -bottom-2 translate-y-full -translate-x-1/2 w-64 bg-zinc-900/95 text-white p-3 rounded-xl shadow-xl z-50 pointer-events-none text-left border border-zinc-700 backdrop-blur-xs animate-fade-in">
                     <div className="flex items-center justify-between border-b border-zinc-700 pb-1.5 mb-1.5">
                         <span className="text-xs font-bold text-indigo-300">
-                            {String(stepNumber).padStart(2, '0')}. {step.title}
+                            {formatStepNumber(stepNumber)}. {step.title}
                         </span>
                         {step.estimatedDuration && (
                             <span className="text-[10px] text-zinc-400 flex items-center gap-1">

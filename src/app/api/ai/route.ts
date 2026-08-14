@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { google } from '@ai-sdk/google';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject, NoObjectGeneratedError } from 'ai';
 import { z } from 'zod';
 import {
@@ -13,6 +11,7 @@ import {
 } from '@/lib/ai-schemas';
 import { SopGenerationWireSchema, SopSuggestionPatchSchema } from '@/lib/sop-schemas';
 import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
+import { resolveGenerationApiKey, resolveGenerationModel, buildReasoningProviderOptions } from '@/server/ai/model-factory';
 import { normalizeFlowShape } from '@/lib/flow-shapes';
 import { FULL_SHAPE_SELECTION_GUIDE, MULTI_MEANING_SPLIT_GUIDE, BRANCH_EDGE_GUIDE } from '@/lib/ai-shape-guide';
 import {
@@ -724,42 +723,14 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { action, context, asIsNodes, framework, apiKey, node, flowType, scenario } = body;
 
-        // BYOK: 사용자 제공 키 또는 환경 변수 키 사용 (개행 문자 방지를 위해 trim).
-        // apiKey는 아직 검증되지 않은 요청 바디 값이므로, 문자열이 아닌 값(숫자/객체 등)이
-        // 와도 500을 던지지 않고 "키 없음"으로 처리한다.
-        const trimmedApiKey = typeof apiKey === 'string' ? apiKey.trim() : undefined;
-
-        // 클라이언트가 설정창에서 고른 모델. 형식이 어긋나거나 구형이면 기본 모델로 되돌린다.
+        // 모델·키·추론 옵션 해석은 model-factory(SSOT·프로바이더 교체 지점)가 담당한다.
+        // 이 라우트는 로깅용으로만 정규화 결과를 다시 읽는다.
         const modelId = sanitizeModelId(body.model);
-
-        // 추론 깊이. Gemini 3.x는 thinkingLevel을 쓴다(2.5의 thinkingBudget과 다름).
-        // 'default'면 아무것도 보내지 않아 모델 기본 추론 수준을 그대로 쓴다.
         const reasoningLevel = sanitizeReasoningLevel(body.reasoning);
-        const providerOptions =
-            reasoningLevel === 'default'
-                ? undefined
-                : { google: { thinkingConfig: { thinkingLevel: reasoningLevel } } };
-
-        console.log('[API Route] Model:', modelId, '| Reasoning:', reasoningLevel);
-
-        let model;
-        if (trimmedApiKey) {
-            // 사용자가 제공한 API 키로 새 클라이언트 생성
-            const customGoogle = createGoogleGenerativeAI({ apiKey: trimmedApiKey });
-            model = customGoogle(modelId);
-            console.log('[API Route] Using user-provided API key');
-        } else {
-            // 환경 변수의 기본 키 사용 (환경 변수도 trim)
-            const envApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
-            if (envApiKey) {
-                const customGoogle = createGoogleGenerativeAI({ apiKey: envApiKey });
-                model = customGoogle(modelId);
-                console.log('[API Route] Using env API key (trimmed)');
-            } else {
-                model = google(modelId);
-                console.log('[API Route] Using default google() - no API key found!');
-            }
-        }
+        const providerOptions = buildReasoningProviderOptions(body.reasoning);
+        const keySource = resolveGenerationApiKey(apiKey).source;
+        console.log('[API Route] Model:', modelId, '| Reasoning:', reasoningLevel, '| Key:', keySource);
+        const model = resolveGenerationModel({ model: body.model, apiKey });
 
         let prompt: string | undefined;
         // 생성 결과에 그래프 수준 의미 검증(+ 최대 1회 repair)을 적용할지 여부.

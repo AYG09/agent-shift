@@ -10,6 +10,7 @@ import { SopSkillEditor } from './SopSkillEditor';
 import { SopExecutionEditor } from './SopExecutionEditor';
 import { SopActivityMappingEditor } from './SopActivityMappingEditor';
 import { SopInspectorSection } from './SopInspectorSection';
+import { formatActivityCode } from '@/lib/sop-format';
 
 /**
  * Routes to the right editing surface for the current selection: the Agent화
@@ -49,7 +50,7 @@ export const SopStepInspector: React.FC = () => {
     const task = document.workLibrary.taskCatalog.find((item) => item.id === document.workLibrary.taskId);
     const primaryActivity = task?.activities.find((activity) => activity.id === step.sourceActivityIds?.[0]);
     const activitySummary = step.sourceActivityIds?.length
-        ? `${primaryActivity ? `A${String(primaryActivity.order ?? 0).padStart(2, '0')}` : '미확인 Activity'}${step.subActionOrder !== undefined ? ` · #${step.subActionOrder}` : ''}`
+        ? `${primaryActivity ? formatActivityCode(primaryActivity.order) : '미확인 Activity'}${step.subActionOrder !== undefined ? ` · #${step.subActionOrder}` : ''}`
         : '미지정';
     const isTerminal = Boolean(step.terminalType);
 

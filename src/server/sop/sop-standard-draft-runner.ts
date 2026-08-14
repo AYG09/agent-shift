@@ -1,6 +1,5 @@
-import { google, createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
-import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
+import { resolveGenerationModel, buildReasoningProviderOptions } from '@/server/ai/model-factory';
 // generateObject에는 관대한 와이어 스키마를 쓴다 — 엄격한 게이트 규칙(superRefine,
 // min-length)은 Gemini가 강제하지 못해 파싱 즉사(NoObjectGeneratedError)만 만든다.
 // 이 초안도 파이프라인 정규화를 거친 뒤 createSopDocumentFromGeneration의 엄격한
@@ -51,17 +50,9 @@ export async function generateStandardDraftDocument(params: {
     reasoning?: string;
     apiKey?: string;
 }): Promise<SopStandardDraftRunResult> {
-    const modelId = sanitizeModelId(params.model);
-    const reasoningLevel = sanitizeReasoningLevel(params.reasoning);
-    const providerOptions = reasoningLevel === 'default' ? undefined : { google: { thinkingConfig: { thinkingLevel: reasoningLevel } } };
-
-    const trimmedApiKey = params.apiKey?.trim();
-    const envApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
-    const model = trimmedApiKey
-        ? createGoogleGenerativeAI({ apiKey: trimmedApiKey })(modelId)
-        : envApiKey
-          ? createGoogleGenerativeAI({ apiKey: envApiKey })(modelId)
-          : google(modelId);
+    // 모델·키·추론 옵션 해석은 model-factory(SSOT·프로바이더 교체 지점)가 담당한다.
+    const providerOptions = buildReasoningProviderOptions(params.reasoning);
+    const model = resolveGenerationModel({ model: params.model, apiKey: params.apiKey });
 
     const prompt = getStandardDraftPrompt({ taskName: params.taskName, taskDefinition: params.taskDefinition, sources: params.sources });
 

@@ -46,7 +46,6 @@ export const SopReviewerLifecycleTransitionSchema = z.discriminatedUnion('decisi
         feedback: z.string().trim().min(1),
     }),
 ]);
-export type SopReviewerLifecycleTransition = z.infer<typeof SopReviewerLifecycleTransitionSchema>;
 
 export const SOP_LIFECYCLE_STATUS_META: Record<SopRecordLifecycleStatus, { label: string; badgeClass: string }> = {
     draft: { label: '작성 중', badgeClass: 'border-zinc-300 bg-zinc-50 text-zinc-700' },

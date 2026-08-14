@@ -15,7 +15,8 @@ export type SopAiApplicationMode = 'automation' | 'assist';
  * union distinct from SopAiApplicationMode: 'not-recommended' has no member-mode
  * analog (an unset member mode already means human-performed).
  */
-export type SopAgentizationSuggestionType = 'agent-candidate' | 'ai-assist' | 'not-recommended';
+// 값 집합의 원천은 sop-step-common-schema.ts의 SOP_AGENTIZATION_SUGGESTION_TYPES (SSOT).
+export type SopAgentizationSuggestionType = (typeof import('./sop-step-common-schema').SOP_AGENTIZATION_SUGGESTION_TYPES)[number];
 
 export interface SopAgentizationSuggestion {
     type: SopAgentizationSuggestionType;

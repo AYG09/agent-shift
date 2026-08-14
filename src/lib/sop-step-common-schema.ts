@@ -18,8 +18,16 @@ export const SopRequiredSkillSchema = z.object({
     accepted: z.boolean().default(false),
 });
 
+/**
+ * Agent화 제안 타입의 단일 원천 (SSOT). zod 스키마(z.enum)와 TS 타입
+ * (SopAgentizationSuggestionType, sop-types.ts)이 모두 이 배열에서 파생된다 —
+ * `z.enum(['agent-candidate', ...])` 리터럴 재나열은 `npm run verify:quality`가
+ * 금지한다.
+ */
+export const SOP_AGENTIZATION_SUGGESTION_TYPES = ['agent-candidate', 'ai-assist', 'not-recommended'] as const;
+
 export const SopAgentizationSuggestionSchema = z.object({
-    type: z.enum(['agent-candidate', 'ai-assist', 'not-recommended']),
+    type: z.enum(SOP_AGENTIZATION_SUGGESTION_TYPES),
     rationale: z.string().min(1),
 });
 

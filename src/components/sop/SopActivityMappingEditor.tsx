@@ -2,6 +2,7 @@
 
 import { Link2 } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
+import { formatActivityCode } from '@/lib/sop-format';
 import type { SopStepData } from '@/lib/sop-types';
 
 export function SopActivityMappingEditor({ step }: { step: SopStepData }) {
@@ -27,7 +28,7 @@ export function SopActivityMappingEditor({ step }: { step: SopStepData }) {
             <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-zinc-200 p-2">
                 {activities.map((activity) => <label key={activity.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-zinc-50">
                     <input type="radio" name={`sub-action-activity-${step.id}`} disabled={readOnly} checked={currentActivityId === activity.id} onChange={() => setStepSourceActivities(step.id, [activity.id])} className="h-3.5 w-3.5 accent-violet-600" />
-                    <span className="font-bold text-violet-700">A{String(activity.order ?? 0).padStart(2, '0')}</span>
+                    <span className="font-bold text-violet-700">{formatActivityCode(activity.order)}</span>
                     <span className="truncate text-zinc-700">{activity.name}</span>
                 </label>)}
             </div>
@@ -48,7 +49,7 @@ export function SopActivityMappingEditor({ step }: { step: SopStepData }) {
     return <section>
         <p className="flex items-start gap-1.5 text-[11px] text-zinc-500"><Link2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600"/>이 단계가 반영한 원본 Activity를 지정합니다. 변경하면 SOP 검토·Agent화 확정이 다시 필요합니다.</p>
         <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-zinc-200 p-2">
-            {activities.map((activity) => <label key={activity.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-zinc-50"><input type="checkbox" disabled={readOnly} checked={selected.has(activity.id)} onChange={(event) => { const next = new Set(selected); if (event.target.checked) next.add(activity.id); else next.delete(activity.id); setStepSourceActivities(step.id, [...next]); }} className="h-3.5 w-3.5 accent-violet-600"/><span className="font-bold text-violet-700">A{String(activity.order ?? 0).padStart(2, '0')}</span><span className="truncate text-zinc-700">{activity.name}</span></label>)}
+            {activities.map((activity) => <label key={activity.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-zinc-50"><input type="checkbox" disabled={readOnly} checked={selected.has(activity.id)} onChange={(event) => { const next = new Set(selected); if (event.target.checked) next.add(activity.id); else next.delete(activity.id); setStepSourceActivities(step.id, [...next]); }} className="h-3.5 w-3.5 accent-violet-600"/><span className="font-bold text-violet-700">{formatActivityCode(activity.order)}</span><span className="truncate text-zinc-700">{activity.name}</span></label>)}
         </div>
     </section>;
 }

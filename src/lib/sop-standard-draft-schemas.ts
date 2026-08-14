@@ -16,7 +16,6 @@ export const SopStandardDraftRequestSchema = z.object({
     reasoning: z.string().optional(),
     apiKey: z.string().optional(),
 });
-export type SopStandardDraftRequest = z.infer<typeof SopStandardDraftRequestSchema>;
 
 /**
  * Response wrapper — deliberately NOT a field on SopDocument/SopRecord

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { FLOW_SHAPE_IDS } from './flow-shapes';
-import { SopRequiredSkillSchema, SopStepCommonFieldsSchema, SopEdgeCommonFieldsSchema, forbidDuplicateIds } from './sop-step-common-schema';
+import { SopRequiredSkillSchema, SopStepCommonFieldsSchema, SopEdgeCommonFieldsSchema, forbidDuplicateIds, SOP_AGENTIZATION_SUGGESTION_TYPES } from './sop-step-common-schema';
 
 export { SopRequiredSkillSchema };
 
@@ -35,7 +35,7 @@ const SopStepWireSchema = SopStepCommonFieldsSchema.extend({
     sourceActivityIds: z.array(z.string()).optional(),
     agentizationSuggestion: z
         .object({
-            type: z.enum(['agent-candidate', 'ai-assist', 'not-recommended']),
+            type: z.enum(SOP_AGENTIZATION_SUGGESTION_TYPES),
             // 빈 문자열 rationale은 여기서 통과시키고 정규화가 제안 자체를 제거한다.
             // 그러면 runner의 findMissingSuggestionStepIds가 repair로 다시 요구한다.
             rationale: z.string(),
@@ -260,7 +260,7 @@ export const SopSuggestionPatchSchema = z.object({
     suggestions: z.array(
         z.object({
             stepId: z.string(),
-            type: z.enum(['agent-candidate', 'ai-assist', 'not-recommended']),
+            type: z.enum(SOP_AGENTIZATION_SUGGESTION_TYPES),
             rationale: z.string(),
         })
     ),

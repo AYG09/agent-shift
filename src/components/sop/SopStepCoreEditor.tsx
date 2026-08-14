@@ -6,6 +6,7 @@ import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { FLOW_SHAPE_IDS, FLOW_SHAPES, FlowShape } from '@/lib/flow-shapes';
 import { SopReviewStatus, SopStepData } from '@/lib/sop-types';
 import { normalizeStepShapeChange } from '@/lib/graph-validation';
+import { formatStepNumber } from '@/lib/sop-format';
 import { SopInspectorSection } from './SopInspectorSection';
 
 interface SopStepCoreEditorProps {
@@ -104,7 +105,7 @@ export const SopStepCoreEditor: React.FC<SopStepCoreEditorProps> = ({ step, step
             <div className="sticky top-0 z-20 border-b border-zinc-200 bg-white/95 p-3 backdrop-blur-xs">
                 <div className="flex items-center gap-2">
                     <span className="shrink-0 whitespace-nowrap rounded-full border border-indigo-200 bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-800">
-                        Step {String(stepIndex + 1).padStart(2, '0')}
+                        Step {formatStepNumber(stepIndex + 1)}
                     </span>
                     <h3 className="min-w-0 flex-1 truncate text-sm font-bold text-zinc-900" title={step.title}>{step.title}</h3>
                     <button
