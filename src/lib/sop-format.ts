@@ -22,3 +22,18 @@ export function formatClockTime(date: Date): string {
     const pad = (value: number) => String(value).padStart(2, '0');
     return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
+
+/**
+ * 캔버스 시작/종료 노드의 표시 라벨 (고객사 목업 형식).
+ *
+ * 고객사 기대 디자인은 터미널 노드 텍스트 자체가 "시작: 정기 승진·연봉조정"처럼
+ * 역할 접두사 + 프로세스명으로 구성된다. 단계 제목이 문자 그대로 "시작"/"종료"뿐인
+ * 경우(샘플 데이터 등)에는 "시작: 시작" 같은 중복을 만들지 않고 접두사만 보여준다.
+ * 저장된 title 데이터는 바꾸지 않는다 — 표시 계층의 규칙일 뿐이다.
+ */
+export function formatTerminalNodeLabel(terminalType: 'start' | 'end', title: string): string {
+    const prefix = terminalType === 'start' ? '시작' : '종료';
+    const trimmed = title.trim();
+    if (!trimmed || trimmed === prefix) return prefix;
+    return `${prefix}: ${trimmed}`;
+}

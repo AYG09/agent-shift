@@ -1557,6 +1557,19 @@ async function run() {
         if (!fabricationResult.ok) check(fabricationResult.response.status === 400, 'The unfixed missing-suggestion failure stays a 400 with the step list');
     }
 
+    // ---------------------------------------------------------
+    // 캔버스 터미널 노드 라벨 (고객사 목업 형식): "시작: 프로세스명" 접두사 내장,
+    // 제목이 접두사뿐이면 중복 없이 접두사만. 저장 데이터(title)는 불변.
+    // ---------------------------------------------------------
+    console.log('formatTerminalNodeLabel (고객사 목업의 시작/종료 라벨 형식)...');
+    {
+        const { formatTerminalNodeLabel } = await import('../src/lib/sop-format');
+        check(formatTerminalNodeLabel('start', '정기 승진·연봉조정') === '시작: 정기 승진·연봉조정', 'A descriptive start title renders as "시작: {title}" exactly like the customer mockup');
+        check(formatTerminalNodeLabel('end', '승진·연봉조정 완료') === '종료: 승진·연봉조정 완료', 'A descriptive end title renders as "종료: {title}"');
+        check(formatTerminalNodeLabel('start', '시작') === '시작', 'A bare "시작" title never duplicates into "시작: 시작"');
+        check(formatTerminalNodeLabel('end', '  ') === '종료', 'An empty/whitespace title falls back to the prefix alone');
+    }
+
     console.log(`ALL SOP ACTIVITY–SUB ACTION / AGENTIZATION / TEMPLATE TESTS PASSED (${passed})`);
 }
 

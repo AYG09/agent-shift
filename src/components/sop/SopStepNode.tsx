@@ -6,8 +6,7 @@ import { FlowShapeRenderer } from '@/components/flow/FlowShapeRenderer';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { SopStepData } from '@/lib/sop-types';
 import { getSopNodeSize } from '@/lib/sop-node-geometry';
-import { formatActivityCode, formatStepNumber } from '@/lib/sop-format';
-import { SOP_TERMINAL_CHIP_META } from '@/lib/sop-review-status-meta';
+import { formatActivityCode, formatStepNumber, formatTerminalNodeLabel } from '@/lib/sop-format';
 import { AGENTIZATION_SUGGESTION_META, getAgentizationModeForStep, getAgentizationModeMeta } from '@/lib/sop-agentization';
 import { CheckCircle2, Clock } from 'lucide-react';
 
@@ -30,9 +29,14 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
 
     const isConfirmed = step.reviewStatus === 'confirmed';
     const isReviewed = step.reviewStatus === 'reviewed';
+    // 고객사 목업 형식: 시작/종료 노드는 어두운 필 + 흰색 텍스트 + "시작: 프로세스명"
+    // 내장 라벨로 일반 업무 노드와 즉시 구분된다 (별도 칩 태그·단계 번호 없음).
+    const isTerminalNode = Boolean(step.terminalType);
     const agentizationMode = document ? getAgentizationModeForStep(document, step.id) : undefined;
     const agentizationMeta = getAgentizationModeMeta(agentizationMode);
 
+    // 터미널은 채움색을 어두운 고정색으로 유지하고, 선택·하이라이트·검토 상태는
+    // 테두리 색으로만 표현한다 — 검토 상태별 채움색 변화는 일반 노드 전용이다.
     const strokeColor = selected
         ? '#4f46e5'
         : highlightedByActivity
@@ -41,9 +45,13 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
         ? '#10b981'
         : isReviewed
         ? '#3b82f6'
+        : isTerminalNode
+        ? '#18181b'
         : '#94a3b8';
 
-    const fillColor = selected
+    const fillColor = isTerminalNode
+        ? '#27272a'
+        : selected
         ? '#f5f3ff'
         : highlightedByActivity
         ? '#faf5ff'
@@ -111,17 +119,6 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
                     {agentizationMeta.shortLabel}
                 </span>
             )}
-            {/* 고객사 기대 디자인: 시작/종료 노드에는 "시작"/"종료" 태그가 붙어
-                어느 노드가 프로세스의 진입·완료 지점인지 한눈에 보이게 한다.
-                라벨·색상은 SOP_TERMINAL_CHIP_META(SSOT)를 따른다. */}
-            {step.terminalType && (
-                <span
-                    className={`pointer-events-none absolute left-2 top-[-11px] z-20 rounded px-1.5 py-0.5 text-[9px] font-bold shadow-sm ${SOP_TERMINAL_CHIP_META[step.terminalType].chipClass}`}
-                    title={SOP_TERMINAL_CHIP_META[step.terminalType].title}
-                >
-                    {SOP_TERMINAL_CHIP_META[step.terminalType].label}
-                </span>
-            )}
             {!step.terminalType && step.sourceActivityIds?.length ? (
                 <span
                     className={`pointer-events-none absolute right-2 top-[-11px] z-20 rounded border px-1.5 py-0.5 text-[9px] font-bold shadow-sm ${activityBadgeOrder === 'unmapped' ? 'border-amber-200 bg-white text-amber-700' : 'border-violet-200 bg-white text-violet-700'}`}
@@ -136,13 +133,17 @@ export const SopStepNode = memo(({ data, selected }: NodeProps) => {
             <div className="absolute inset-0 p-3 flex flex-col justify-center text-center items-center overflow-hidden z-10">
                 {/* Step Number & Title */}
                 <div className="flex items-center gap-1.5 justify-center max-w-full">
-                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-300 shrink-0">
-                        {formatStepNumber(stepNumber)}
-                    </span>
-                    <h4 className="text-xs font-bold text-zinc-900 truncate max-w-[150px] leading-tight">
-                        {step.title}
+                    {/* 터미널 노드는 고객사 목업 형식을 따른다: 단계 번호 없이
+                        "시작: 프로세스명" 라벨을 흰색으로 표시 (formatTerminalNodeLabel — SSOT). */}
+                    {!isTerminalNode && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-300 shrink-0">
+                            {formatStepNumber(stepNumber)}
+                        </span>
+                    )}
+                    <h4 className={`text-xs font-bold truncate max-w-[150px] leading-tight ${isTerminalNode ? 'text-white' : 'text-zinc-900'}`}>
+                        {step.terminalType ? formatTerminalNodeLabel(step.terminalType, step.title) : step.title}
                     </h4>
-                    {isConfirmed && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                    {isConfirmed && <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${isTerminalNode ? 'text-emerald-300' : 'text-emerald-600'}`} />}
                 </div>
 
             </div>

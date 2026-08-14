@@ -56,7 +56,8 @@ SOP 프로토타입 화면(`src/components/sop/**`, `src/app/sop/**`)의 디자�
 |---|---|
 | 문서 검토 상태 배지 | `SOP_REVIEW_STATUS_BADGE_CLASS` (sop-review-status-meta.ts) |
 | 단계 검토 상태 배지(라벨+클래스) | `SOP_STEP_REVIEW_STATUS_META` (sop-review-status-meta.ts) |
-| 시작/종료 터미널 칩 | `SOP_TERMINAL_CHIP_META` (sop-review-status-meta.ts) |
+| 캔버스 시작/종료 노드 | 어두운 필(`#27272a`) + 흰색 볼드 텍스트, 라벨은 `formatTerminalNodeLabel`("시작: 프로세스명") — 단계 번호·칩 태그 없음 (고객사 목업 형식) |
+| 사이드바 시작/종료 칩 | `SOP_TERMINAL_CHIP_META` (sop-review-status-meta.ts) |
 | Activity 코드(`A01`)·단계 번호(`01`) | `formatActivityCode` / `formatStepNumber` (sop-format.ts) |
 | Agent화 제안·적용 방식 배지 | `AGENTIZATION_SUGGESTION_META` / `AI_APPLICATION_MODES` (sop-agentization.ts) |
 | 라이프사이클 상태 | `SOP_LIFECYCLE_STATUS_META` (sop-lifecycle.ts) |
