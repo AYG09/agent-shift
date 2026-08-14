@@ -12,24 +12,11 @@ const UNIT_LABELS: Record<DurationUnit, string> = {
     months: '개월',
 };
 
-const UNIT_TO_MINUTES: Record<DurationUnit, number> = {
-    seconds: 1 / 60,
-    minutes: 1,
-    hours: 60,
-    days: 60 * 8, // 1 근무일 = 8시간
-    weeks: 60 * 8 * 5, // 1 근무주 = 5일
-    months: 60 * 8 * 20, // 1 근무월 = 20일
-};
 
 /** 화면 표시용 문자열. 예: { value: 30, unit: 'seconds' } → "30초" */
 export function formatDuration(duration?: Duration): string | undefined {
     if (!duration) return undefined;
     return `${duration.value}${UNIT_LABELS[duration.unit]}`;
-}
-
-/** 시간 계산용 분 단위 환산 */
-export function toMinutes(duration: Duration): number {
-    return duration.value * UNIT_TO_MINUTES[duration.unit];
 }
 
 /**

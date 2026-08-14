@@ -97,12 +97,19 @@
 **규칙**
 
 - 사용처가 없는 export/모듈은 만들지 않는다. "나중에 쓸 것"은 쓰는 시점에 추가한다.
-- 주기 점검: `npx -y ts-prune -p tsconfig.json`으로 미사용 export를 확인한다.
-  Next.js 진입점(`page.tsx`/`route.ts`/`layout.tsx`의 default·GET·POST 등)은
-  오탐이므로 제외하고 판단한다.
+- 점검 도구: `npx -y ts-prune -p tsconfig.json`. Next.js 진입점(`page.tsx`/
+  `route.ts`/`layout.tsx`의 default·GET·POST 등)은 오탐이므로 제외하고 판단한다.
+- **점검 순서**: dead code 스캔은 반드시 **그 작업 단위의 모든 리팩터링·통합이
+  끝난 뒤 마지막 단계**로 실행한다 — SSOT 통합·팩토리 추출 같은 작업 자체가
+  기존 export를 새로 고아로 만들 수 있기 때문이다. 리팩터링 전에 한 번 돌렸다면
+  후에 반드시 다시 돌린다.
+- **판정은 grep이 아니라 심볼 인지 도구로 한다**: 같은 이름의 로컬 함수가 다른
+  파일에 있으면 grep은 미사용 export를 "사용 중"으로 오판한다(2026-08 사례:
+  duration.ts의 `toMinutes` export가 export-service.ts의 동명 로컬 함수 때문에
+  사용 중으로 오판됨 — 이런 동명 이함수는 그 자체로 축 2 위반이기도 하다).
 
-**검증**: 릴리스 전 수동으로 ts-prune 실행(위 오탐 규칙 적용). 2026-08 리뷰에서
-발견된 7개 미사용 export는 제거 완료.
+**검증**: 릴리스 전 위 순서로 ts-prune 실행. 2026-08 리뷰에서 발견된 미사용
+export 8개(요청 타입 4, 헬퍼 함수 4)는 제거 완료.
 
 ---
 
