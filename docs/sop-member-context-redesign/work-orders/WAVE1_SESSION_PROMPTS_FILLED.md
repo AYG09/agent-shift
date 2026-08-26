@@ -24,8 +24,8 @@
 docs/sop-member-context-redesign/work-orders/02_WAVE1A_LOGIN_CONTEXT.md
 
 현재 worktree: C:\Users\USER\Desktop\NOCODE\agent-shift-wt\wave1a-login-context
-필수 기준: branch wave1/sop-login-context / Foundation 코드 baseline f20b619
-(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 f20b619와 동일하면 정상이다.)
+필수 기준: branch wave1/sop-login-context / Foundation 코드 baseline a59c7d1
+(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 a59c7d1과 동일하면 정상이다.)
 
 AGENTS.md, CLAUDE.md, SOP repository skill과 필수 reference 5개, final scenario work order, 품질·디자인 규칙, 재설계 엔지니어링 문서 5개, 00_MASTER_ORCHESTRATION.md, 본 작업지시서를 모두 끝까지 읽어라. docs/sop-member-context-redesign/work-orders/WAVE0_FOUNDATION_HANDOFF.md의 member intake public API도 확인하라.
 
@@ -49,8 +49,8 @@ git status, HEAD, branch를 확인하고 npm run verify:sop-customer를 실행�
 docs/sop-member-context-redesign/work-orders/03_WAVE1B_RECOMMENDATION_LOADING.md
 
 현재 worktree: C:\Users\USER\Desktop\NOCODE\agent-shift-wt\wave1b-recommendation
-필수 기준: branch wave1/sop-recommendation / Foundation 코드 baseline f20b619
-(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 f20b619와 동일하면 정상이다.)
+필수 기준: branch wave1/sop-recommendation / Foundation 코드 baseline a59c7d1
+(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 a59c7d1과 동일하면 정상이다.)
 
 AGENTS.md, CLAUDE.md, SOP repository skill과 필수 reference, final scenario work order, 품질·디자인 규칙, 재설계 엔지니어링 문서, 00 master와 본 작업지시서를 끝까지 읽고 docs/sop-member-context-redesign/work-orders/WAVE0_FOUNDATION_HANDOFF.md의 recommendation/Task clone API를 확인하라.
 
@@ -74,8 +74,8 @@ git status, HEAD, branch를 확인하고 npm run verify:sop-customer를 실행�
 docs/sop-member-context-redesign/work-orders/04_WAVE1C_SIMPLE_WORK_MAP.md
 
 현재 worktree: C:\Users\USER\Desktop\NOCODE\agent-shift-wt\wave1c-work-map-simple
-필수 기준: branch wave1/sop-work-map-simple / Foundation 코드 baseline f20b619
-(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 f20b619와 동일하면 정상이다.)
+필수 기준: branch wave1/sop-work-map-simple / Foundation 코드 baseline a59c7d1
+(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 a59c7d1과 동일하면 정상이다.)
 
 필수 repository 지침, SOP skill과 reference, final scenario, 품질·디자인 규칙, 재설계 엔지니어링 문서, 00 master, 본 작업지시서를 끝까지 읽고 docs/sop-member-context-redesign/work-orders/WAVE0_FOUNDATION_HANDOFF.md의 Work Map API를 확인하라. preflight로 git status, HEAD와 npm run verify:sop-customer를 실행하라.
 
@@ -97,8 +97,8 @@ docs/sop-member-context-redesign/work-orders/04_WAVE1C_SIMPLE_WORK_MAP.md
 docs/sop-member-context-redesign/work-orders/05_WAVE1D_DETAILED_WORK_MAP.md
 
 현재 worktree: C:\Users\USER\Desktop\NOCODE\agent-shift-wt\wave1d-work-map-detailed
-필수 기준: branch wave1/sop-work-map-detailed / Foundation 코드 baseline f20b619
-(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 f20b619와 동일하면 정상이다.)
+필수 기준: branch wave1/sop-work-map-detailed / Foundation 코드 baseline a59c7d1
+(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 a59c7d1과 동일하면 정상이다.)
 
 필수 repository 지침, SOP skill과 reference, final scenario, 품질·디자인 규칙, 재설계 엔지니어링 문서, 00 master, 본 작업지시서를 끝까지 읽고 docs/sop-member-context-redesign/work-orders/WAVE0_FOUNDATION_HANDOFF.md의 Work Map API를 확인하라. preflight로 git status, HEAD와 npm run verify:sop-customer를 실행하라.
 
@@ -120,8 +120,8 @@ docs/sop-member-context-redesign/work-orders/05_WAVE1D_DETAILED_WORK_MAP.md
 docs/sop-member-context-redesign/work-orders/06_WAVE1E_MEMBER_NODE_GENERATION.md
 
 현재 worktree: C:\Users\USER\Desktop\NOCODE\agent-shift-wt\wave1e-member-node-generation
-필수 기준: branch wave1/sop-member-node-generation / Foundation 코드 baseline f20b619
-(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 f20b619와 동일하면 정상이다.)
+필수 기준: branch wave1/sop-member-node-generation / Foundation 코드 baseline a59c7d1
+(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 a59c7d1과 동일하면 정상이다.)
 
 필수 repository 지침, SOP skill과 reference 5개, final scenario, 품질 규칙, 재설계 SPEC과 NODE_AUTHORING_AND_AGENT_CONTROL, 00 master, 본 작업지시서를 끝까지 읽고 docs/sop-member-context-redesign/work-orders/WAVE0_FOUNDATION_HANDOFF.md와 src/lib/sop-node-authoring-contract.ts의 node schema·validator를 실제 코드로 검사하라. git status, HEAD와 npm run verify:sop-customer를 먼저 실행하라.
 
@@ -143,8 +143,8 @@ docs/sop-member-context-redesign/work-orders/06_WAVE1E_MEMBER_NODE_GENERATION.md
 docs/sop-member-context-redesign/work-orders/07_WAVE1F_STANDARD_DRAFT_GENERATION.md
 
 현재 worktree: C:\Users\USER\Desktop\NOCODE\agent-shift-wt\wave1f-standard-draft-generation
-필수 기준: branch wave1/sop-standard-draft-generation / Foundation 코드 baseline f20b619
-(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 f20b619와 동일하면 정상이다.)
+필수 기준: branch wave1/sop-standard-draft-generation / Foundation 코드 baseline a59c7d1
+(worktree HEAD에는 이후 문서 전용 commit이 얹혀 있을 수 있다. 코드 diff가 a59c7d1과 동일하면 정상이다.)
 
 필수 repository 지침, SOP skill과 reference, final scenario, 품질 규칙, 재설계 SPEC과 NODE 작성 계약, 00 master, 본 작업지시서를 끝까지 읽고 docs/sop-member-context-redesign/work-orders/WAVE0_FOUNDATION_HANDOFF.md를 확인하라. 표준안 prompt는 이미 src/server/sop/sop-standard-draft-prompt.ts로 무동작변경 분리되어 있고, 공용 validator는 src/lib/sop-node-authoring-contract.ts에 있다. git status, HEAD와 npm run verify:sop-customer를 먼저 실행하라.
 
