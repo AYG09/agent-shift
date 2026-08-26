@@ -63,6 +63,16 @@ npm run verify:sop-customer
 9. 복제본의 개인정보 미포함·승인/검토/Agent화 초기화가 유지된다
 10. 기존 승인·HR·Activity–Sub Action·Agent화 시나리오 회귀 없음
 
+## 함께 처리할 baseline 결함
+
+`src/app/api/ai/route.ts`의 비-route export 정리를 이번 통합에서 함께 수행한다. 상세 지시와
+근거는 `W4_00_MASTER_PARALLEL.md`의 해당 절에 있다. 요지는 다섯 prompt builder를
+`src/server/flow/flow-prompts.ts`로 무동작변경 이동하고, route는 handler만 export하며,
+`tests/flow-branches.test.ts`의 import 경로를 갱신한 뒤 `/flow` 회귀를 증명하는 것이다.
+
+이 정리를 마친 뒤 `npx next build --webpack`도 한 번 통과시켜, Turbopack 경로에서만 우연히
+통과하던 상태가 아님을 확인한다.
+
 ## 최종 게이트
 
 ```bash

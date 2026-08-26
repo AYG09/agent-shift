@@ -61,14 +61,16 @@ onClick={() => router.push('/sop')}
 ```bash
 npx tsc --noEmit
 npm run lint
-npm run build
 npm run verify:sop-customer
 git diff --check
 git status --short
 ```
 
-`npm run build` 성공과 `git diff`가 정확히 한 줄(+주석)임을 확인한다. 실제 클릭 동작은
-W4-05 통합 세션의 브라우저 확인 항목으로 넘긴다.
+`git diff`가 정확히 한 줄(+주석)임을 확인한다.
+
+**`npm run build`는 이 worktree에서 실행하지 않는다.** 병렬 worktree의 `node_modules`가
+junction이라 Turbopack이 거부한다(`W4_00_MASTER_PARALLEL.md`의 "알려진 worktree 제약" 참고).
+빌드 검증과 실제 클릭 동작 확인은 모두 W4-05 통합 세션이 메인 worktree에서 수행한다.
 
 ## 금지
 

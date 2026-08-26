@@ -91,6 +91,24 @@ Work Map 뷰 두 개를 금지 목록에 둔 것이 이번 설계의 핵심이�
 3. **Work Map 초안의 출처 필드** — W4-01이 `MemberWorkMapDraft`에 `origin`을 추가한다.
    W4-04C는 그 값을 읽기만 하고 정의하지 않는다.
 
+## 알려진 worktree 제약 — `npm run build`는 통합 worktree에서만 실행 가능
+
+병렬 worktree의 `node_modules`는 메인 저장소로의 junction이다. Next 16의 기본 번들러인
+Turbopack은 이를 거부한다.
+
+```text
+Symlink node_modules is invalid, it points out of the filesystem root
+```
+
+W4-02A 세션이 이 실패를 보고했고 실행 관리자가 baseline에서 재현해 **코드와 무관한 인프라
+문제**임을 확인했다. 따라서:
+
+- 병렬 세션(W4-01/02A/03B/04C)의 완료 게이트에 `npm run build`를 요구하지 않는다.
+  실패해도 그 세션의 결함이 아니다.
+- 빌드 검증은 실제 `node_modules`를 가진 **메인 worktree의 W4-05 통합 단계**에서 수행한다.
+- worktree에서 굳이 빌드를 확인해야 하면 `npx next build --webpack`으로 우회할 수 있으나,
+  그 경로는 아래 별도 항목의 baseline 타입 오류에 부딪힌다.
+
 ## 각 세션의 완료 게이트
 
 ```bash
@@ -102,6 +120,30 @@ git diff --check
 ```
 
 소유 파일 밖 변경은 0건이어야 한다. 소유 테스트는 반드시 실행한다.
+
+## W4-05가 함께 처리할 baseline 결함 — `api/ai/route.ts`의 비-route export
+
+`npx next build --webpack`을 돌리면 다음에서 실패한다.
+
+```text
+.next/types/app/api/ai/route.ts: Type error
+Property 'getAsIsPrompt' is incompatible with index signature.
+```
+
+원인은 `src/app/api/ai/route.ts`가 route handler가 아닌 심볼
+(`getAsIsPrompt`, `getToBePrompt`, `getDrilldownPromptAsIs`, `getDrilldownPromptToBe`,
+`getNodeSplitPrompt`)을 export하는 것이다. Next의 생성 route 타입 검증기가 이를 거부한다.
+Turbopack 빌드는 통과하지만 webpack 빌드와, `.next/types` 산출물이 남은 상태의
+`tsc --noEmit`은 실패한다. 이 저장소에서 실제로 세 번 관측됐다.
+
+W4-05는 이 정리를 함께 수행한다 (다른 W4 세션은 이 파일 수정 금지).
+
+- 다섯 prompt builder를 route가 아닌 모듈(권장: `src/server/flow/flow-prompts.ts`)로
+  **무동작변경 이동**한다.
+- `src/app/api/ai/route.ts`는 그 모듈에서 import해 쓰고, route handler만 export한다.
+- 유일한 외부 사용처인 `tests/flow-branches.test.ts`의 import 경로를 갱신한다.
+- `npm run test:flow-branches`와 `npm run test:shapes`로 `/flow` 무회귀를 증명한다.
+- prompt 문자열·동작·schema는 한 글자도 바꾸지 않는다.
 
 ## W4-05 최종 게이트
 

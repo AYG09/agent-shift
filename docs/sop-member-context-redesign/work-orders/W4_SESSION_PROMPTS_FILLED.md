@@ -63,7 +63,7 @@ git status --short --branch, git log -1 --oneline, npm run verify:sop-customer�
 
 src/app/page.tsx 한 파일만 수정하라. SOP Prototype 버튼의 목적지를 '/sop/setup'에서 '/sop'로 바꾸고, 왜 /sop인지(Home이 세션 상태로 착지점을 판정하므로 여기서 다시 하드코딩하면 같은 결함을 재생산한다) 짧은 주석을 남겨라. 버튼 라벨·아이콘·스타일은 바꾸지 마라. '/sop/login'이나 특정 단계로 직접 연결하지 마라. 랜딩 페이지의 다른 UI는 개선하지 마라. /flow 관련 동작(프로젝트 생성·열기·삭제·이름 변경)은 일절 건드리지 마라.
 
-이 파일은 navigate를 prop으로 받지 않고 useRouter()를 직접 쓰므로 컴포넌트 테스트를 새로 만들 수 없다. 없는 테스트를 억지로 만들지 말고 npx tsc --noEmit, npm run lint, npm run build, npm run verify:sop-customer, git diff --check로 검증하라. 실제 클릭 동작은 W4-05 통합 세션의 확인 항목이다.
+이 파일은 navigate를 prop으로 받지 않고 useRouter()를 직접 쓰므로 컴포넌트 테스트를 새로 만들 수 없다. 없는 테스트를 억지로 만들지 말고 npx tsc --noEmit, npm run lint, npm run verify:sop-customer, git diff --check로 검증하라. npm run build는 이 worktree에서 실행하지 마라 — node_modules junction 때문에 Turbopack이 거부하며 코드와 무관한 인프라 문제다. 빌드 검증과 실제 클릭 동작 확인은 W4-05 통합 세션이 메인 worktree에서 수행한다.
 
 W4_00_MASTER_PARALLEL.md의 HANDOFF 형식으로 보고하고 git diff 전문을 그대로 첨부하라. /flow 관련 코드 변경 0건임을 명시하라.
 
@@ -155,7 +155,9 @@ W4-01 → W4-02A → W4-03B → W4-04C 순서로 통합하고, 각 단계 직후
 
 tests/sop-customer-scenario.test.ts에 통합 지시서의 10개 시나리오를 실행 가능한 형태로 추가하고, 새 테스트 파일을 package.json의 test:sop 체인에 등록하라. 등록하지 않으면 회귀 게이트가 그 파일을 실행하지 않는다.
 
-Work Map 뷰 두 개와 Setup Gate가 변경 0건인지, /flow와 src/app/api/ai/route.ts가 변경 0건인지 git status로 증명하라.
+Work Map 뷰 두 개와 Setup Gate가 변경 0건인지 git status로 증명하라. /flow 디렉터리도 변경 0건이어야 한다.
+
+src/app/api/ai/route.ts는 이번 통합에서 예외적으로 수정한다: 다섯 prompt builder(getAsIsPrompt, getToBePrompt, getDrilldownPromptAsIs, getDrilldownPromptToBe, getNodeSplitPrompt)를 src/server/flow/flow-prompts.ts로 무동작변경 이동하고 route는 handler만 export하게 하라. tests/flow-branches.test.ts의 import 경로를 갱신하고 npm run test:flow-branches와 npm run test:shapes로 /flow 무회귀를 증명하라. prompt 문자열·동작·schema는 한 글자도 바꾸지 마라. 이 정리 뒤 npx next build --webpack도 한 번 통과시켜라.
 
 통합 지시서의 최종 게이트 전체를 실행하고 HANDOFF 형식으로 보고하되, 소유권 레지스트리 대조 결과, 교차 지점 5개의 확인 결과, 10개 시나리오의 PASS/FAIL, 미검증 항목을 포함하라. 브라우저 도구가 없으면 시각 검증을 수행했다고 기록하지 말고 미검증으로 남겨라.
 
