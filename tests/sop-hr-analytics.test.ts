@@ -14,8 +14,9 @@ import { POST as sopApiLifecycle } from '../src/app/api/sop/[id]/lifecycle/route
 import { GET as sopApiAnalytics } from '../src/app/api/sop/analytics/route';
 import { GET as sopApiAnalyticsExport } from '../src/app/api/sop/analytics/export/route';
 import { POST as sopApiStandardDrafts } from '../src/app/api/sop/standard-drafts/route';
+import { sopRepository } from '../src/server/sop/sop-repository-memory';
 import { useSopPrototypeStore } from '../src/lib/sop-prototype-store';
-import { SAMPLE_SOP_DOCUMENT } from '../src/lib/sop-sample-data';
+import { SAMPLE_SOP_DOCUMENT, CUSTOMER_WORK_LIBRARY } from '../src/lib/sop-sample-data';
 import type { SopDocument } from '../src/lib/sop-types';
 import type { SopRecord } from '../src/lib/sop-record-schema';
 
@@ -231,6 +232,90 @@ async function run() {
         standardDraftRequest(hrHeaders(), { taskId: SAMPLE_SOP_DOCUMENT.workLibrary.taskId, sourceRecordIds: ['hr-fixture-not-approved'] })
     );
     check(notApprovedSourceAttempt.status === 400, `A non-approved (draft) sourceRecordId is rejected — standard drafts only ever use approved sources, got ${notApprovedSourceAttempt.status}`);
+
+    // ---------------------------------------------------------
+    // FUNC-2: POST /api/sop/standard-drafts success path has zero side effects at
+    // the route boundary (TST-STD-006 is already proven at the runner level by
+    // tests/sop-standard-draft-node-contract.test.ts; this proves the SAME
+    // invariant through the actual route, not just the function it calls).
+    // The real generateObject() network call is replaced via the route's own
+    // `testOnly.generate` DI seam — never exercised in this test suite.
+    // ---------------------------------------------------------
+    console.log('API: POST /api/sop/standard-drafts success path has no persistence side effects (FUNC-2)...');
+    function compliantStandardDraftSpec(verb: string, object: string) {
+        return {
+            actorRole: '채용 운영 담당자',
+            action: { verb, object },
+            completionCriteria: [`${object}에 대한 처리 결과가 기록된다`],
+            decisionCriteria: [],
+            toolPolicy: { allowedToolIds: [], forbiddenActions: [], dataAccessScope: [], requiresHumanApproval: false },
+            escalationRules: [],
+        };
+    }
+    const compliantStandardDraftObject = {
+        title: '채용 프로세스 표준 SOP (AI 초안)',
+        agentInstruction: {
+            objective: '채용 프로세스를 표준화한다',
+            successCriteria: ['모든 지원자 서류가 검토된다'],
+            globalConstraints: [],
+            glossary: [],
+        },
+        steps: [
+            { id: 's-start', title: '시작', definition: '프로세스 시작 지점입니다.', shape: 'terminal', terminalType: 'start' },
+            {
+                id: 's-1', title: '지원자 제출서류를 검토한다', definition: '접수된 지원서류를 검토하여 누락 항목을 확인한다.',
+                shape: 'process', responsibleRole: '채용 운영 담당자', executionSpec: compliantStandardDraftSpec('검토한다', '지원자 제출서류'),
+            },
+            {
+                id: 's-2', title: '검토 결과를 채용 시스템에 등록한다', definition: '검토가 끝난 결과를 ATS에 입력하여 다음 단계 담당자가 확인할 수 있게 한다.',
+                shape: 'process', responsibleRole: '채용 운영 담당자', executionSpec: compliantStandardDraftSpec('등록한다', '검토 결과'),
+            },
+            {
+                id: 's-3', title: '서류 미비 지원자에게 보완을 요청한다', definition: '누락 항목이 있는 지원자에게 보완 요청 안내를 발송한다.',
+                shape: 'process', responsibleRole: '채용 운영 담당자', executionSpec: compliantStandardDraftSpec('요청한다', '서류 보완'),
+            },
+            { id: 's-end', title: '종료', definition: '프로세스 종료 지점입니다.', shape: 'terminal', terminalType: 'end' },
+        ],
+        edges: [
+            { id: 'e-1', source: 's-start', target: 's-1', branchType: 'default' },
+            { id: 'e-2', source: 's-1', target: 's-2', branchType: 'default' },
+            { id: 'e-3', source: 's-2', target: 's-3', branchType: 'default' },
+            { id: 'e-4', source: 's-3', target: 's-end', branchType: 'default' },
+        ],
+        standardizationIssues: [],
+    };
+
+    const recordCountBefore = (await sopRepository.listAll()).length;
+    const lifecycleStatusesBefore = new Map((await sopRepository.listAll()).map((r) => [r.id, r.lifecycleStatus]));
+
+    let fakeGenerateCalls = 0;
+    const successfulStandardDraftAttempt = await sopApiStandardDrafts(
+        // hr-fixture-approved-1/2 were built via buildConfirmedDocument -> generateFromSample(),
+        // which uses the Store's default workLibrary (CUSTOMER_WORK_LIBRARY) — a DIFFERENT
+        // fixture task from SAMPLE_SOP_DOCUMENT.workLibrary (the validation-boundary tests
+        // above never notice this, since every one of them expects 400 regardless of which
+        // combined condition — approval state or taskId — actually caused it).
+        standardDraftRequest(hrHeaders(), { taskId: CUSTOMER_WORK_LIBRARY.taskId, sourceRecordIds: ['hr-fixture-approved-1', 'hr-fixture-approved-2'] }),
+        {
+            generate: async () => {
+                fakeGenerateCalls += 1;
+                return compliantStandardDraftObject;
+            },
+        }
+    );
+    check(successfulStandardDraftAttempt.status === 200, `A well-formed request with approved same-Task sources succeeds through the actual route, got ${successfulStandardDraftAttempt.status}`);
+    check(fakeGenerateCalls === 1, 'The route called the injected generate exactly once — no real network AI call was made');
+    const successfulStandardDraftBody = await successfulStandardDraftAttempt.json();
+    check(typeof successfulStandardDraftBody.document?.id === 'string', 'The success response carries a generated preview document');
+
+    const recordsAfter = await sopRepository.listAll();
+    check(recordsAfter.length === recordCountBefore, 'FUNC-2: the repository record count is unchanged after a successful standard-draft preview — nothing is persisted (TST-STD-006 at the route boundary)');
+    check(
+        recordsAfter.every((r) => lifecycleStatusesBefore.get(r.id) === r.lifecycleStatus),
+        'FUNC-2: no existing record\'s lifecycleStatus changed — the preview call confirms/approves/executes nothing'
+    );
+    const persistedPreview = await sopRepository.getById(successfulStandardDraftBody.document.id);
+    check(persistedPreview === null, 'FUNC-2: the generated preview document itself was never saved as a SopRecord');
 
     console.log(`\nALL SOP HR ANALYTICS TESTS PASSED (${passed})`);
 }

@@ -1,6 +1,7 @@
 import { buildSopGenerationRequestBody, type SopGenerationRequestBodyParams } from './sop-ai-request';
 import { generateSopViaApi, type GenerateSopViaApiParams, type GenerateSopViaApiResult } from './sop-ai-generation';
 import { withTaskScope } from './sop-task-library';
+import { toWorkLibrarySelection, type ConfirmWorkMapResult } from './sop-work-map-draft';
 import type { SopDocument, WorkLibrarySelection } from './sop-types';
 
 type Navigate = (href: string) => void;
@@ -48,6 +49,29 @@ export function enterTaskCreationPath(params: {
     const normalized = withTaskScope(params.workLibrary);
     if (normalized === params.workLibrary) return;
     params.setWorkLibrary(normalized);
+}
+
+/**
+ * The ONLY place that finishes Work Map review — the simple (`/sop/work-map/simple`,
+ * Wave 1C) and detailed (`/sop/work-map/detailed`, Wave 1D) views both call this
+ * exact function instead of each running its own confirm → generation-seam →
+ * navigate sequence. Before this, both views independently validated the draft,
+ * converted it with `toWorkLibrarySelection`, and hardcoded `navigate('/sop/setup')`
+ * — a future change to "what happens after Work Map confirmation" could land in
+ * one projection and silently miss the other (see sop-work-map-draft.ts's module
+ * docstring on why simple/detailed must never fork behavior on the shared draft).
+ */
+export function confirmWorkMapAndProceed(params: {
+    confirmWorkMap: () => ConfirmWorkMapResult | null;
+    setWorkLibrary: (patch: Partial<WorkLibrarySelection>) => void;
+    navigate: Navigate;
+}): ConfirmWorkMapResult | null {
+    const result = params.confirmWorkMap();
+    if (result?.ok) {
+        params.setWorkLibrary(toWorkLibrarySelection(result.draft));
+        params.navigate('/sop/setup');
+    }
+    return result;
 }
 
 /** Handles the Setup Gate sample action without navigating after a blocked replacement. */

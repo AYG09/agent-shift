@@ -55,6 +55,7 @@ export const SopSetupGate: React.FC = () => {
         customerReviewMode,
         setCustomerReviewMode,
         document,
+        workMapDraft,
     } = useSopPrototypeStore();
 
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -72,6 +73,19 @@ export const SopSetupGate: React.FC = () => {
     // is the SAME enterTaskCreationPath function, not a second implementation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => enterTaskCreationPath({ workLibrary, setWorkLibrary }), []);
+
+    // A member who arrived here through the new sequential flow (/sop/login →
+    // /sop/context → /sop/recommendation → /sop/work-map/*) already confirmed
+    // their Task/Activity/Skill selection and business context on those screens —
+    // showing the full login/recommendation/T-A-S editor again here would recreate
+    // exactly the duplicated-entry problem those screens exist to remove (Wave 2
+    // integration §통합 지시 3 "Setup Gate 축소"). `workMapDraft` is the reliable
+    // signal for that: only the new flow's confirmWorkMapAndProceed
+    // (sop-setup-actions.ts) ever creates one, so a legacy/old-deep-link session
+    // that never touched the new flow (workLibrary.confirmed set directly by
+    // WorkLibrarySelector's "검토 완료 · 확정") still gets the full editor below —
+    // a safe resume path that never discards that member's in-progress state.
+    const hasWorkMapDraft = !!workMapDraft;
 
     const { apiKey, model, reasoning } = useSopAiSettings();
     const selectedTask = workLibrary.taskCatalog?.find((task) => task.id === workLibrary.taskId);
@@ -338,9 +352,47 @@ export const SopSetupGate: React.FC = () => {
                     </div>
                 )}
 
-                {/* 1. 구성원 정보 Card — 읽기 전용 정보라 기본 접힘. 핵심 요약(이름·직무·조직)은
-                    헤더에 항상 표시된다. */}
+                {/* 1+2. 구성원 정보 · Task Library — 새 순차 흐름(로그인·업무맥락·추천·Work Map)을
+                    거쳐 확정한 Work Map을 갖고 들어온 세션은 그 화면들에서 이미 끝낸 입력을
+                    여기서 다시 보여주지 않는다(08 §통합 지시 3 "Setup Gate 축소"). old deep
+                    link처럼 workMapDraft 없이 들어온 세션에는 기존 전체 편집기를 그대로 둔다. */}
                 <div className="min-h-0 flex flex-col gap-4">
+                {hasWorkMapDraft ? (
+                    <section className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                        <div className="rounded-lg border border-emerald-300 bg-white p-4 shadow-sm">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="flex gap-3">
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white"><CheckCircle2 className="h-5 w-5" /></div>
+                                    <div>
+                                        <h2 className="text-base font-bold text-zinc-900">Work Map 확정됨</h2>
+                                        <p className="mt-0.5 text-xs text-zinc-600">
+                                            {memberInfo.name} · {memberInfo.jobRole} · <strong className="text-zinc-900">{workLibrary.taskName}</strong> · Activity {activitiesForGeneration.length}개 · SKILL {workLibrary.skills.length}개
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => router.push('/sop/work-map/simple')}
+                                    className="shrink-0 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                                >
+                                    Work Map 다시 보기
+                                </button>
+                            </div>
+                        </div>
+                        <SopActivityProposalPanel />
+                        {activityCoverageWarning && (
+                            <p
+                                className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800"
+                                title={activityCoverageWarning}
+                            >
+                                <AlertCircle className="mr-1 inline h-3.5 w-3.5" />
+                                <strong>실제 적용 범위 {effectiveMinSteps}~{effectiveMaxSteps}단계 (노드 상한 {effectiveMaxTotalNodes}개)</strong>
+                                {' '}— Activity {activityCount}개 반영을 위해 자동 확장됨. 자세한 내용은 오른쪽 &apos;워크플로우 구조 설정&apos; 참고 (프로토타입 구현 가정, 마우스를 올리면 전체 설명이 보입니다).
+                            </p>
+                        )}
+                    </section>
+                ) : (
+                <>
                 <section className="shrink-0 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
                     <button
                         type="button"
@@ -417,11 +469,41 @@ export const SopSetupGate: React.FC = () => {
                         </p>
                     )}
                 </section>
-
+                </>
+                )}
                 </div>
 
-                {/* 3. 업무 맥락 Textarea */}
+                {/* 3. 업무 맥락 */}
                 <aside className="min-h-0 space-y-4 overflow-y-auto pr-1">
+                {hasWorkMapDraft ? (
+                    // 새 흐름에서는 /sop/context가 이 원문의 유일한 authoritative 입력이다 —
+                    // 여기서 별도 편집 textarea를 다시 두면 Store의 context 미러가 두 번째
+                    // authoritative source처럼 보이게 된다(08 §통합 지시 5). 그래서 이미 확정된
+                    // 원문을 읽기 전용으로만 보여주고, 실제 수정은 /sop/context로 되돌아가게 한다.
+                    <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-500 text-white">
+                                    <FileText className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-semibold text-zinc-900">업무 맥락</h2>
+                                    <p className="text-xs text-zinc-500">이전 단계에서 작성해 확정한 원문입니다. 추천·생성 요청이 모두 이 원문을 그대로 사용합니다.</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => router.push('/sop/context')}
+                                className="shrink-0 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                            >
+                                업무맥락 수정
+                            </button>
+                        </div>
+                        <p className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm leading-relaxed text-zinc-700">
+                            {context || '작성된 업무 맥락이 없습니다.'}
+                        </p>
+                    </section>
+                ) : (
                 <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
                     <div className="mb-3 flex items-center gap-3">
                         <div className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-500 text-white">
@@ -468,6 +550,7 @@ export const SopSetupGate: React.FC = () => {
                         className="w-full rounded-md border border-zinc-300 bg-zinc-50 p-3 text-sm leading-relaxed text-zinc-900 focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                     />
                 </section>
+                )}
 
                 {/* 4. SOP 콘텐츠 수준 & 5. 워크플로우 구조 설정 */}
                 <section>

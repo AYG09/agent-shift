@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sopRepository } from '@/server/sop/sop-repository-memory';
 import { readSopActorContext } from '@/server/sop/sop-actor-context';
 import { respondValidated } from '@/server/sop/sop-response';
-import { generateStandardDraftDocument } from '@/server/sop/sop-standard-draft-runner';
+import { generateStandardDraftDocument, type SopStandardDraftGenerate } from '@/server/sop/sop-standard-draft-runner';
 import { SopStandardDraftRequestSchema, SopStandardDraftResponseSchema } from '@/lib/sop-standard-draft-schemas';
 import { documentContainsAuthorIdentifiers } from '@/lib/sop-template';
 import { SOP_TASK_LIBRARY_FIXTURE, createWorkLibrarySelection } from '@/lib/sop-task-library';
-import type { SopStandardDraftSourceSummary } from '@/server/sop/sop-standard-draft-prompt';
+import { sanitizeStandardDraftSource } from '@/server/sop/sop-standard-draft-prompt';
 import type { SopRecord } from '@/lib/sop-record-schema';
 
 function findJobForTask(taskId: string) {
@@ -16,16 +16,6 @@ function findJobForTask(taskId: string) {
         if (task) return { job, task };
     }
     return null;
-}
-
-/** Strips every field but step title/definition — no member identity, organization, or reviewer feedback ever reaches the AI prompt. */
-function toSanitizedSourceSummary(record: SopRecord, index: number): SopStandardDraftSourceSummary {
-    return {
-        label: `원본 ${index + 1}`,
-        steps: record.document.steps
-            .filter((step) => !step.terminalType)
-            .map((step) => ({ title: step.title, definition: step.definition })),
-    };
 }
 
 /**
@@ -37,7 +27,25 @@ function toSanitizedSourceSummary(record: SopRecord, index: number): SopStandard
  * outright rather than silently skipped, so the response can never quietly
  * include content from a record HR didn't actually mean to select.
  */
-export async function POST(request: NextRequest) {
+/**
+ * `testOnly.generate` mirrors generateStandardDraftDocument's own `generate?`
+ * DI seam one level up so this route's success path (not just its validation
+ * boundary) can be tested without ever exercising the live generateObject()
+ * network call — the same repo-wide convention runSopSetupGeneration's
+ * `generate?` param already follows for the personal-SOP path.
+ *
+ * Why this is safe in production does NOT depend on whether Next.js passes a
+ * second argument — it does pass a route context (`{ params }`) to every
+ * handler, dynamic segments or not. It is safe because that context object
+ * carries no `generate` property, so `testOnly?.generate` is undefined for
+ * every real request and generateStandardDraftDocument falls back to its real
+ * implementation exactly as before. An HTTP request cannot supply a function,
+ * so there is no way to reach the seam from outside the process. `params` is
+ * carried along (never read) only so this stays structurally compatible with
+ * the `{ params: Promise<{}> }` shape Next's generated route-type validator
+ * expects.
+ */
+export async function POST(request: NextRequest, testOnly?: { params?: Promise<Record<string, never>>; generate?: SopStandardDraftGenerate }) {
     const actorResult = readSopActorContext(request);
     if (!actorResult.ok) return actorResult.response;
     const { actor } = actorResult;
@@ -70,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
     const workLibrary = createWorkLibrarySelection(jobAndTask.job, jobAndTask.task);
 
-    const sources = sourceRecords.map(toSanitizedSourceSummary);
+    const sources = sourceRecords.map(sanitizeStandardDraftSource);
     const runResult = await generateStandardDraftDocument({
         id: `sop-standard-draft-${randomUUID()}`,
         taskName: jobAndTask.task.name,
@@ -80,6 +88,7 @@ export async function POST(request: NextRequest) {
         model: parsed.data.model,
         reasoning: parsed.data.reasoning,
         apiKey: parsed.data.apiKey,
+        generate: testOnly?.generate,
     });
     if (!runResult.ok) {
         return NextResponse.json({ error: runResult.error }, { status: 502 });
@@ -87,7 +96,14 @@ export async function POST(request: NextRequest) {
 
     return respondValidated(
         SopStandardDraftResponseSchema,
-        { document: runResult.document, sourceRecordIds: parsed.data.sourceRecordIds, taskId: parsed.data.taskId, generatedAt: new Date().toISOString() },
+        {
+            document: runResult.document,
+            sourceRecordIds: parsed.data.sourceRecordIds,
+            taskId: parsed.data.taskId,
+            generatedAt: new Date().toISOString(),
+            qualityReport: runResult.qualityReport,
+            standardizationIssues: runResult.standardizationIssues,
+        },
         200
     );
 }

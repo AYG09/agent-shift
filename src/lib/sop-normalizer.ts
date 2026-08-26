@@ -14,6 +14,8 @@ export function createSopDocumentFromGeneration(params: {
     isSampleData?: boolean;
     /** Set only when this generation actually requested the Activity–Sub Action structure — never inferred. */
     structureVersion?: 'activity-subaction-v1';
+    /** Set only when this generation was actually produced/validated under the node-authoring contract — never inferred, mirroring structureVersion above. */
+    instructionContractVersion?: SopDocument['instructionContractVersion'];
 }): SopDocument {
     // A raw AI response is never used as-is; it must pass Zod validation first.
     const parseResult = SopGenerationResponseSchema.safeParse(params.rawResponse);
@@ -71,6 +73,7 @@ export function createSopDocumentFromGeneration(params: {
             subActionOrigin: s.subActionOrigin,
             subActionOriginRationale: s.subActionOriginRationale,
             agentizationSuggestion: s.agentizationSuggestion,
+            executionSpec: s.executionSpec,
             position: s.position && (s.position.x !== 0 || s.position.y !== 0) ? s.position : { x: 0, y: 0 },
             reviewStatus: 'ai-draft' as const,
         };
@@ -112,5 +115,7 @@ export function createSopDocumentFromGeneration(params: {
         updatedAt: now,
         isSampleData: params.isSampleData || false,
         structureVersion: params.structureVersion,
+        agentInstruction: parsedData.agentInstruction,
+        instructionContractVersion: params.instructionContractVersion,
     };
 }

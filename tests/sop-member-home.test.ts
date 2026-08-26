@@ -11,6 +11,7 @@ import { WorkLibrarySelector } from '../src/components/sop/WorkLibrarySelector';
 import { SAMPLE_SOP_DOCUMENT, CUSTOMER_WORK_LIBRARY, buildTaskGateSampleDocument } from '../src/lib/sop-sample-data';
 import { withTaskScope, getScopedActivities } from '../src/lib/sop-task-library';
 import { enterTaskCreationPath } from '../src/lib/sop-setup-actions';
+import { SOP_INTAKE_ROUTES } from '../src/lib/sop-member-intake';
 import { lookupExistingSopRecord, saveSopDocumentToServer } from '../src/lib/sop-server-save';
 import { computeSubActionCapacity } from '../src/lib/sop-subaction-capacity';
 import { POST as sopApiCreate } from '../src/app/api/sop/route';
@@ -313,7 +314,11 @@ async function run() {
     act(() => {
         taskCardButton!.props.onClick({ preventDefault: () => {} });
     });
-    check(navigations.at(-1) === '/sop/setup', 'Task 기반 생성 카드를 클릭하면 /sop/setup으로 이동함');
+    // 08 §통합 지시 1·2: Task 기반 생성의 새 진입점은 /sop/setup의 혼합 화면이 아니라
+    // 새 순차 흐름이다. 이 테스트는 anonymous 기본 상태에서 시작하므로 /sop/login으로
+    // 이동한다 — 이미 로그인한 구성원의 resolvePostLoginRoute 분기는
+    // tests/sop-member-login-context.test.tsx가 별도로 증명한다.
+    check(navigations.at(-1) === SOP_INTAKE_ROUTES.login, 'Task 기반 생성 카드를 클릭하면(비로그인) /sop/login으로 이동함');
 
     const allInputs = homeRenderer.root.findAllByType('input');
     check(!allInputs.some((i) => i.props.type === 'file'), 'TBD(실무 자료 기반 생성) 카드에는 파일 input이 전혀 없음');
@@ -325,7 +330,7 @@ async function run() {
     });
     await flushEffects();
     check(fetchCalls.length === fetchCallCountBeforeTbdClick, 'TBD 카드를 클릭해도 네트워크(API) 호출이 전혀 발생하지 않음');
-    check(navigations.length === 1, 'TBD 카드를 클릭해도 아무 곳으로도 이동하지 않음 (여전히 /sop/setup 1건만 기록됨)');
+    check(navigations.length === 1, 'TBD 카드를 클릭해도 아무 곳으로도 이동하지 않음 (여전히 /sop/login 1건만 기록됨)');
 
     act(() => {
         homeRenderer.unmount();

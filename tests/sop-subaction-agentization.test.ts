@@ -67,6 +67,21 @@ async function run() {
     check(activities.length >= 3, 'Fixture sanity check: the sample Task exposes at least 3 Activities to build Sub Action coverage cases from');
     const [actA, actB, actC] = activities;
     const allowedIds = activities.map((a) => a.id);
+    // Wave 1E made executionSpec mandatory on every business node of an
+    // activity-subaction-v1 document (docs/.../NODE_AUTHORING_AND_AGENT_CONTROL.md).
+    // The coverage/origin/decomposition/suggestion-patch fixtures below are NOT
+    // testing that contract, so they attach this neutral, always-grounded spec to stay
+    // node-authoring-clean and keep exercising exactly the ONE defect each test names —
+    // otherwise the node-authoring repair stage would intercept their single repair
+    // attempt before the coverage/origin/decomposition stage ever runs.
+    const NEUTRAL_EXECUTION_SPEC = {
+        actorRole: '테스터',
+        action: { verb: '수행한다', object: '업무를' },
+        completionCriteria: ['업무 수행 결과가 기록된다.'],
+        decisionCriteria: [],
+        toolPolicy: { allowedToolIds: [], forbiddenActions: [], dataAccessScope: [], requiresHumanApproval: false },
+        escalationRules: [],
+    };
 
     // ---------------------------------------------------------
     // Activity–Sub Action coverage validation (pure domain function)
@@ -628,7 +643,7 @@ async function run() {
         title: '깨진 SOP',
         steps: [
             { id: 'start', title: '시작', definition: '시작 단계의 상세 정의입니다.', shape: 'terminal', terminalType: 'start' },
-            { id: 'work', title: '작업', definition: '작업을 수행하는 단계입니다.', shape: 'process', sourceActivityIds: ['not-a-real-activity'], subActionOrder: 1 },
+            { id: 'work', title: '작업', definition: '작업을 수행하는 단계입니다.', shape: 'process', sourceActivityIds: ['not-a-real-activity'], subActionOrder: 1, executionSpec: NEUTRAL_EXECUTION_SPEC },
             { id: 'end', title: '종료', definition: '종료 단계의 상세 정의입니다.', shape: 'terminal', terminalType: 'end' },
         ],
         edges: [
@@ -705,6 +720,7 @@ async function run() {
                 // 구조화 출력 모델이 기계적으로 채우는 잔여 rationale — 정규화로 제거되어야 한다.
                 subActionOriginRationale: '잔여 근거',
                 agentizationSuggestion: { type: 'ai-assist', rationale: '사람의 판단을 AI가 지원합니다.' },
+                executionSpec: NEUTRAL_EXECUTION_SPEC,
             },
             { id: 'end', title: '종료', definition: '종료 단계의 상세 정의입니다.', shape: 'terminal', terminalType: 'end' },
         ],
@@ -750,11 +766,13 @@ async function run() {
                 id: 'sub-1', title: '기준 확인', definition: '수행 기준을 확인하는 단계입니다.', shape: 'process',
                 sourceActivityIds: [actA.id], subActionOrder: 1, subActionOrigin: 'activity-derived',
                 agentizationSuggestion: { type: 'ai-assist', rationale: '사람의 판단을 AI가 지원합니다.' },
+                executionSpec: NEUTRAL_EXECUTION_SPEC,
             },
             {
                 id: 'sub-2', title: '실행 결과 정리', definition: '실행 결과를 정리해 기록하는 단계입니다.', shape: 'process',
                 sourceActivityIds: [actA.id], subActionOrder: 2, subActionOrigin: 'activity-derived',
                 agentizationSuggestion: { type: 'agent-candidate', rationale: '규칙 기반으로 자동화할 수 있습니다.' },
+                executionSpec: NEUTRAL_EXECUTION_SPEC,
             },
             underDecomposedObject.steps[2],
         ],
@@ -1494,8 +1512,8 @@ async function run() {
             title: '제안 누락 SOP',
             steps: [
                 { id: 'p-start', title: '시작', definition: '시작 단계의 상세 정의입니다.', shape: 'terminal', terminalType: 'start' },
-                { id: 'p-work-1', title: '작업 1', definition: '첫 번째 작업 단계입니다.', shape: 'process', sourceActivityIds: [actA.id], subActionOrder: 1, subActionOrigin: 'activity-derived' },
-                { id: 'p-work-2', title: '작업 2', definition: '두 번째 작업 단계입니다.', shape: 'process', sourceActivityIds: [actA.id], subActionOrder: 2, subActionOrigin: 'activity-derived' },
+                { id: 'p-work-1', title: '작업 1', definition: '첫 번째 작업 단계입니다.', shape: 'process', sourceActivityIds: [actA.id], subActionOrder: 1, subActionOrigin: 'activity-derived', executionSpec: NEUTRAL_EXECUTION_SPEC },
+                { id: 'p-work-2', title: '작업 2', definition: '두 번째 작업 단계입니다.', shape: 'process', sourceActivityIds: [actA.id], subActionOrder: 2, subActionOrigin: 'activity-derived', executionSpec: NEUTRAL_EXECUTION_SPEC },
                 { id: 'p-end', title: '종료', definition: '종료 단계의 상세 정의입니다.', shape: 'terminal', terminalType: 'end' },
             ],
             edges: [

@@ -59,6 +59,10 @@ export async function recommendTasksViaApi(params: {
     apiKey?: string | null;
     model?: string | null;
     reasoning?: string | null;
+    /** 취소 버튼이 실제 네트워크 요청을 중단할 수 있게 하는 선택적 signal. */
+    signal?: AbortSignal;
+    /** 테스트가 실제 네트워크 호출 없이 응답을 주입할 수 있게 하는 선택적 fetch 대체 구현. */
+    fetchImpl?: typeof fetch;
 }): Promise<SopTaskRecommendationResponse> {
     const request = SopTaskRecommendationRequestSchema.parse({
         member: params.member,
@@ -69,10 +73,11 @@ export async function recommendTasksViaApi(params: {
         ...(params.model ? { model: params.model } : {}),
         ...(params.reasoning ? { reasoning: params.reasoning } : {}),
     });
-    const response = await fetch('/api/sop/task-recommendations', {
+    const response = await (params.fetchImpl ?? fetch)('/api/sop/task-recommendations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
+        ...(params.signal ? { signal: params.signal } : {}),
     });
     const payload: unknown = await response.json();
     if (!response.ok) {

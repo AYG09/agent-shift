@@ -59,6 +59,34 @@ export function getSopPrompt(params: {
    - 예시 2: "Auto 및 신규 응용처 고객사와 협상하여 샘플 공급 및 초기 물량 확보를 위한 비즈니스 계약을 추진함"은 "고객사 공급 조건 협상 → 비즈니스 계약 추진" 2단계입니다. 샘플 공급과 초기 물량 확보는 이 문장만으로는 목적/예상 outputs이므로 실제 공급·물량 배정 업무가 범위에 명시되지 않았다면 별도 노드로 만들지 마세요.`
         : '';
 
+    // Agent-ready node authoring contract (docs/sop-member-context-redesign/NODE_AUTHORING_AND_AGENT_CONTROL.md).
+    // Gated to the new Activity–Sub Action member Task path only — a legacy Activity-scope
+    // request never gets asked for agentInstruction/executionSpec, so its prompt and the
+    // runner's validation stay byte-for-byte unchanged (no regression on that path).
+    const missionInstruction = isSubActionStructure
+        ? `## Mission 작성 지침 (문서 최상위 agentInstruction, node마다 반복하지 않음)
+- objective: 이 Task가 달성해야 하는 업무 결과를 위 Task 정의와 업무 맥락에서만 도출하세요.
+- successCriteria: 완료를 확인할 수 있는 관찰 가능한 기준 목록.
+- globalConstraints: SOP 전체에 적용되는 금지·준수사항 (입력에 근거가 있을 때만).
+- glossary: 본문에서 사용하는 정의되지 않은 전문 용어·사내 약어·시스템 약어를 처음 등장 전에 정의하세요.
+- 입력에 없는 KPI, SLA, 법적 의무를 새로 만들지 마세요.`
+        : '';
+
+    const agentReadyPrinciple = isSubActionStructure
+        ? `5. **Agent-ready 실행 명세 작성 원칙 (필수)**:
+   - terminal(시작/종료) 단계에는 executionSpec을 절대 넣지 마세요.
+   - terminal이 아닌 모든 Sub Action에는 executionSpec을 채우세요:
+     - actorRole: 이 단계를 실제로 수행하는 책임 역할(사람/AI/정보시스템 중 실제 수행 주체)을 명시하세요. "검토되어야 한다"·"처리된다"처럼 행위자가 사라지는 피동 표현 대신, "{actorRole}이(가) {대상}을(를) {행동}한다"는 능동 구조로 작성하세요.
+     - action: { verb, object }는 title과 동일하게 "대상 + 구체적 행동 동사" 의미를 구조화한 것입니다.
+     - completionCriteria: 관찰 가능한 완료 기준을 1개 이상 배열로 작성하세요 (예: "누락 항목과 충족 항목이 구분된 검토 결과가 기록된다"). "적절히 처리됨"처럼 관찰 불가능한 기준은 쓰지 마세요.
+     - decision 노드(shape: 'decision')는 decisionCriteria를 1개 이상 작성하세요. 각 조건은 관찰 가능한 값·상태·승인 여부로 표현하고, "필요 시"·"적절히"·"가능한 경우"·"가급적"·"신속히"·"고액"·"이상 징후" 같은 표현만으로 조건을 만들지 마세요. sourceType은 그 조건의 실제 근거 위치(work-map=Activity/SKILL 정의, member-context=업무 맥락, human-confirmed=아직 조직 기준이 없어 사람 확인이 필요함) 중 하나를 선택하세요.
+     - 수치·금액·기간·비율·건수 기준은 위 Task 정의·Activity 설명·업무 맥락에 실제로 등장하는 값만 사용하세요. 80%, SLA, 금액, confidence threshold 등 입력에 없는 수치를 새로 만들지 마세요. 근거가 없으면 수치를 쓰지 말고 completionCriteria/decisionCriteria를 정성적 관찰 기준으로 작성하거나 escalationRules로 사람 확인을 요청하세요.
+     - toolPolicy: 이번 생성에는 등록된 tool registry가 없습니다. allowedToolIds와 dataAccessScope는 항상 빈 배열로 두고, 존재하지 않는 tool ID나 권한을 절대 발명하지 마세요. 이메일 발송·외부 게시·승인·삭제·금전/계약/고용 관련 고영향 행동이 이 단계에 있다면 forbiddenActions에 금지 문구로 남기고 requiresHumanApproval: true로 표시하세요. 그렇지 않으면 requiresHumanApproval: false로 두세요.
+     - escalationRules: 예외·기준 미확정·권한 부족·개인정보/고용/계약 등 사람 판단이 필요한 상황이 Task 정의나 업무 맥락에 실제로 근거가 있을 때만 추가하세요. trigger는 관찰 가능한 조건으로 쓰고, targetRole은 입력에 실제로 언급된 역할만 사용하며 없으면 비워 두세요 (임의로 "팀장"·"SME" 등을 발명하지 마세요). requiredEvidence에는 사람이 판단할 때 필요한 근거를 나열하세요.
+   - 정의되지 않은 전문 용어·사내 약어·시스템 약어는 처음 등장하기 전에 문서 최상위 agentInstruction.glossary에 정의를 추가하세요.
+   - 피동 표현("되어야 한다", "될 수 있다", "처리된다", "검토된다", "수행된다", "진행된다") 대신 책임 주체가 드러나는 능동태로 definition과 completionCriteria를 작성하세요.`
+        : '';
+
     const activityTrackingPrinciple = isSubActionStructure
         ? `3. **Activity → Sub Action 매핑 원칙 (필수)**:
    - 이 SOP는 Activity–Sub Action 구조입니다. 시작/종료 terminal을 제외한 모든 업무 단계는 정확히 하나의 Sub Action이며, 정확히 하나의 Activity에만 속합니다. 노드의 단위는 Activity가 아니라 Sub Action입니다.
@@ -88,7 +116,7 @@ ${activitiesList || `1. ${params.activityName || '상세 업무'}`}
 ${skillsList || '없음'}
 - 업무 맥락:
 ${params.context || '없음'}
-
+${missionInstruction ? `\n${missionInstruction}\n` : ''}
 ## 설정 조건
 - 업무 분해 수준: ${params.detailLevel || 'standard'} — ${(SOP_DETAIL_LEVEL_GUIDE[params.detailLevel || 'standard'] || SOP_DETAIL_LEVEL_GUIDE.standard).promptGuide}
 - 주요 단계 수 범위: ${minSteps} ~ ${maxSteps}단계 (시작·종료 노드는 제외한 개수입니다)${isSubActionStructure ? '\n  이 범위는 Activity당 기본 2~3개의 Sub Action 분해를 전제로 산정되었습니다. 단계 수를 줄이려고 여러 Activity를 하나의 단계에 합치거나 Activity를 요약 1노드로 축약하지 마세요.' : ''}
@@ -111,7 +139,8 @@ ${(SOP_BRANCH_POLICY_GUIDE[branchPolicy] || SOP_BRANCH_POLICY_GUIDE.auto).prompt
    - 반드시 필요한 추가 SKILL이 있다면 제안하되, source: 'ai-suggested', accepted: false로 표시하고 이유(reason)를 명시하세요.
 ${activityTrackingPrinciple}
 ${subActionSemanticsPrinciple}
-${isSubActionStructure ? '5' : '4'}. **도형 및 흐름 구조**:
+${agentReadyPrinciple}
+${isSubActionStructure ? '6' : '4'}. **도형 및 흐름 구조**:
    - 시작 단계는 반드시 shape: 'terminal', terminalType: 'start'로 정확히 1개만 작성하세요.
    - 종료 단계는 반드시 shape: 'terminal', terminalType: 'end'로 정확히 1개만 작성하세요.
      (terminalType을 생략하면 오류로 처리되며, 배열에서의 위치로 시작/종료를 추정하지 않습니다.

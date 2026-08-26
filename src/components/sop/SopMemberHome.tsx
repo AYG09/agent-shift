@@ -14,10 +14,11 @@ import {
 } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
 import { SopRoleNav } from './SopRoleNav';
+import { useSopStoreHydrated } from './SopMemberRouteGuard';
 import { listMySopRecords, requestSopApproval } from '@/lib/sop-record-client';
-import { enterTaskCreationPath } from '@/lib/sop-setup-actions';
 import { buildSopStatusRows, computeSopStatusCounts, computeMemberTaskActivitySkillCounts, type SopStatusCounts } from '@/lib/sop-member-home';
 import { SOP_LIFECYCLE_STATUS_META, SOP_MEMBER_SUMMARY_BUCKET_META, type SopMemberSummaryBucket } from '@/lib/sop-lifecycle';
+import { SOP_INTAKE_ROUTES, isAuthenticated, resolvePostLoginRoute } from '@/lib/sop-member-intake';
 import type { SopRecord } from '@/lib/sop-record-schema';
 import { SopColleagueTemplatePicker } from './SopColleagueTemplatePicker';
 import { SopOwnPriorPicker } from './SopOwnPriorPicker';
@@ -41,10 +42,13 @@ export function SopMemberHome() {
 export function SopMemberHomeView({ navigate, fetchImpl }: { navigate: (href: string) => void; fetchImpl?: typeof fetch }) {
     const memberInfo = useSopPrototypeStore((state) => state.memberInfo);
     const localDraft = useSopPrototypeStore((state) => state.document);
-    const workLibrary = useSopPrototypeStore((state) => state.workLibrary);
-    const setWorkLibrary = useSopPrototypeStore((state) => state.setWorkLibrary);
     const setDocument = useSopPrototypeStore((state) => state.setDocument);
     const setCustomerReviewMode = useSopPrototypeStore((state) => state.setCustomerReviewMode);
+    const memberSession = useSopPrototypeStore((state) => state.memberSession);
+    const memberContext = useSopPrototypeStore((state) => state.memberContext);
+    const taskRecommendation = useSopPrototypeStore((state) => state.taskRecommendation);
+    const hasWorkMapDraft = useSopPrototypeStore((state) => !!state.workMapDraft);
+    const hydrated = useSopStoreHydrated();
 
     const [records, setRecords] = useState<SopRecord[] | null>(null);
     const [recordsError, setRecordsError] = useState<string | null>(null);
@@ -97,6 +101,22 @@ export function SopMemberHomeView({ navigate, fetchImpl }: { navigate: (href: st
         if (setDocument(record.document)) {
             navigate('/sop/workspace');
         }
+    };
+
+    // Home의 "Task 기반 생성" 카드는 더 이상 /sop/setup의 혼합 화면으로 직접
+    // 들어가지 않는다 — 새 순차 흐름(로그인 → 업무맥락 → 추천 → Work Map)이 그
+    // 입구다(08 §통합 지시 1·2). 비로그인 구성원은 /sop/login에서 시작하고,
+    // 이미 로그인한 구성원은 resolvePostLoginRoute(SopMemberLoginGateView의
+    // "계속 진행" 버튼과 같은 함수)가 계산한 진행 지점(업무맥락/추천/Work Map)으로
+    // 바로 이어서 들어간다 — 로그인 화면을 다시 거치지 않는다. hydration이 끝나기
+    // 전에는 memberSession이 아직 복원 전(anonymous 기본값)이라 신뢰할 수 없으므로,
+    // 그 사이의 클릭은 항상 안전한 기본값인 로그인 화면으로 보낸다.
+    const handleTaskBasedCreation = () => {
+        if (!hydrated || !isAuthenticated(memberSession)) {
+            navigate(SOP_INTAKE_ROUTES.login);
+            return;
+        }
+        navigate(resolvePostLoginRoute({ session: memberSession, memberContext, recommendation: taskRecommendation, hasWorkMapDraft }));
     };
 
     return (
@@ -255,10 +275,7 @@ export function SopMemberHomeView({ navigate, fetchImpl }: { navigate: (href: st
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <button
                             type="button"
-                            onClick={() => {
-                                enterTaskCreationPath({ workLibrary, setWorkLibrary });
-                                navigate('/sop/setup');
-                            }}
+                            onClick={handleTaskBasedCreation}
                             className="flex flex-col items-start gap-2 rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
                         >
                             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white"><Sparkles className="h-5 w-5" /></div>
