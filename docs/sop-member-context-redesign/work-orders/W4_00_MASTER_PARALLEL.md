@@ -109,6 +109,24 @@ W4-02A 세션이 이 실패를 보고했고 실행 관리자가 baseline에서 �
 - worktree에서 굳이 빌드를 확인해야 하면 `npx next build --webpack`으로 우회할 수 있으나,
   그 경로는 아래 별도 항목의 baseline 타입 오류에 부딪힌다.
 
+## 사용 가능한 디자인·브라우저 능력 (2026-08-26 확인)
+
+이전 wave들이 `DESIGN_CAPABILITY_BLOCKED`로 남겼던 항목이 **실제로 열렸다**. 실행 관리자가
+프로덕션에 붙여 동작을 확인했다.
+
+| 능력 | 도구 |
+|---|---|
+| 브라우저 렌더링·조작·스크린샷 | `playwright` MCP, `chrome-devtools` MCP |
+| 접근성 감사 (focus·키보드·ARIA·명암비) | `chrome-devtools-mcp:a11y-debugging` 스킬, `lighthouse_audit` |
+| 디자인 탐색·시안 | `frontend-design` 스킬, `claude-design` MCP, `stitch` MCP |
+
+따라서 **`DESIGN_CAPABILITY_BLOCKED`는 더 이상 기본 회피 경로가 아니다.** 도구가 실제로
+실패한 경우에만 그 사유와 원문 오류를 함께 보고한다. 호출하지 않고 그 값을 쓰는 것은
+허위 보고다.
+
+주의: `browser_run_code_unsafe`는 어떤 세션도 사용하지 않는다. 브라우저 MCP가 저장소에
+남기는 `.playwright-mcp/` 산출물은 `.gitignore`에 등록되어 있으므로 커밋하지 않는다.
+
 ## 각 세션의 완료 게이트
 
 ```bash

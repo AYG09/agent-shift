@@ -17,9 +17,18 @@ git log -1 --oneline
 npm run verify:sop-customer
 ```
 
-구현 전에 Claude 환경에서 실제 제공되는 디자인 검토 기능 또는 design skill을 호출해 Home의
-정보 위계와 시작점 카드 밀도를 검토한다. 사용할 수 없으면 `DESIGN_CAPABILITY_BLOCKED`로
-정확히 보고하고 사용했다고 주장하지 마라.
+구현 전에 **디자인 능력을 실제로 호출한다**(`W4_00_MASTER_PARALLEL.md`의 "사용 가능한
+디자인·브라우저 능력" 참고). 최소한 `frontend-design` 스킬로 시작점 그룹의 정보 위계와 카드
+밀도를 검토하고, 필요하면 `claude-design` MCP로 시안을 만들어 비교한다. 호출한 도구 이름,
+받은 핵심 권고, 채택·기각 이유를 handoff에 남긴다.
+
+구현 후에는 `playwright` 또는 `chrome-devtools` MCP로 **실제 브라우저에서 확인한다** —
+1440×900과 1920×1080에서 Home을 렌더하고, 접근성 트리 스냅샷으로 신원 5개·상태별 건수·
+T/A/S 수·시작점 4장이 모두 잡히는지 본다. `chrome-devtools-mcp:a11y-debugging`으로 키보드
+이동과 focus 표시도 확인한다.
+
+도구가 실제로 실패한 경우에만 그 사유와 원문 오류를 적는다. 호출하지 않고
+`DESIGN_CAPABILITY_BLOCKED`를 쓰지 마라.
 
 ## 배타적 소유 파일
 

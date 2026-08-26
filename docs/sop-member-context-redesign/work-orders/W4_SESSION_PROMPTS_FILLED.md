@@ -5,6 +5,8 @@
 ## 공통 사실
 
 - 코드 baseline commit: `ae1297b` (구성원 진입 재설계 1차가 프로덕션에 반영된 commit)
+- **W4-01 Foundation commit: `5e98777`** — W4-03B와 W4-04C는 이 commit이 반영된 worktree에서 시작한다.
+- 브라우저(`playwright`, `chrome-devtools`)와 디자인(`frontend-design`, `claude-design`, `stitch`) 능력이 실제로 연결되어 있다. `DESIGN_CAPABILITY_BLOCKED`는 더 이상 기본 회피 경로가 아니다.
 - 작업지시서 commit: `f2cbca1` 이상 (이후 문서 전용 commit이 더 얹힐 수 있다 — 코드 변경은 없다)
 - 네 worktree는 모두 `node_modules` junction이 걸려 있어 `npm run ...`이 바로 동작한다.
 - 어떤 세션도 push하지 않는다. commit은 사용자가 그 세션에서 명시적으로 승인했을 때만 한다.
@@ -81,13 +83,13 @@ W4_00_MASTER_PARALLEL.md의 HANDOFF 형식으로 보고하고 git diff 전문을
 docs/sop-member-context-redesign/work-orders/W4_03B_HOME_LANDING_AND_START_POINTS.md
 
 현재 worktree: C:\Users\USER\Desktop\NOCODE\agent-shift-wt\w4b-home-landing
-필수 기준: branch w4/w4b-home-landing / 코드 baseline ae1297b + W4-01 Foundation handoff
+필수 기준: branch w4/w4b-home-landing / W4-01 Foundation commit 5e98777이 반영된 상태
 
 AGENTS.md, CLAUDE.md, SOP repository skill과 필수 reference 5개(특히 final-system-scenario-contract.md 2.1과 2.5), docs/QUALITY_CONVENTIONS.md, docs/DESIGN_CONVENTIONS.md, W4-01이 갱신한 SPEC.md·CONTEXT.md, WAVE0_FOUNDATION_HANDOFF.md, W4-01 handoff, W4_00_MASTER_PARALLEL.md, 본 작업지시서를 끝까지 읽어라.
 
 git status --short --branch, git log -1 --oneline, npm run verify:sop-customer를 먼저 실행하라. W4-01 Foundation이 반영되지 않은 baseline이면 시작하지 말고 중단하라.
 
-구현 전에 Claude 환경에서 실제 제공되는 디자인 검토 기능 또는 design skill을 호출해 Home의 정보 위계와 시작점 카드 밀도를 검토하라. 사용할 수 없으면 DESIGN_CAPABILITY_BLOCKED로 정확히 보고하고 사용했다고 주장하지 마라.
+구현 전에 frontend-design 스킬로 시작점 그룹의 정보 위계와 카드 밀도를 실제로 검토하고, 필요하면 claude-design MCP로 시안을 만들어 비교하라. 구현 후에는 playwright 또는 chrome-devtools MCP로 1440x900과 1920x1080에서 Home을 실제 렌더해 확인하고, chrome-devtools-mcp:a11y-debugging으로 키보드 이동과 focus 표시를 확인하라. 이 도구들은 이 환경에 연결되어 있다 — 도구가 실제로 실패한 경우에만 그 원문 오류를 적어라. 호출하지 않고 DESIGN_CAPABILITY_BLOCKED를 쓰지 마라. browser_run_code_unsafe는 사용하지 마라.
 
 본 작업지시서의 배타적 소유 파일만 수정하라. picker 내부 파일, sop-setup-actions.ts, Work Map 뷰, Setup Gate, Foundation 도메인·Store, src/app/page.tsx는 건드리지 마라. 공용 API가 부족하면 복제 구현 대신 FOUNDATION_CHANGE_REQUEST를 작성하라.
 
@@ -109,7 +111,7 @@ git status --short --branch, git log -1 --oneline, npm run verify:sop-customer�
 docs/sop-member-context-redesign/work-orders/W4_04C_CLONE_WORKMAP_ENTRY.md
 
 현재 worktree: C:\Users\USER\Desktop\NOCODE\agent-shift-wt\w4c-clone-workmap
-필수 기준: branch w4/w4c-clone-workmap / 코드 baseline ae1297b + W4-01 Foundation handoff
+필수 기준: branch w4/w4c-clone-workmap / W4-01 Foundation commit 5e98777이 반영된 상태
 
 AGENTS.md, CLAUDE.md, SOP repository skill과 필수 reference 5개(특히 final-system-scenario-contract.md 2.3과 2.4, member-home-subaction-contract.md 2.3), W4-01이 갱신한 SPEC.md, WAVE0_FOUNDATION_HANDOFF.md, W4-01 handoff, W4_00_MASTER_PARALLEL.md, 본 작업지시서를 끝까지 읽어라.
 
@@ -117,7 +119,9 @@ git status --short --branch, git log -1 --oneline, npm run verify:sop-customer�
 
 본 작업지시서의 배타적 소유 파일만 수정하라. SopMemberHome.tsx, app/sop/page.tsx, 로그인 게이트는 W4-03B 소유이니 건드리지 마라. Work Map 뷰 두 개와 Setup Gate, Foundation 도메인·Store도 수정 금지다.
 
-두 picker의 props 시그니처를 바꾸지 마라 — W4-03B가 그 계약대로 마운트한다. confirmWorkMapAndProceed의 호출 시그니처도 바꾸지 마라 — Work Map 뷰가 그 형태로 호출하며 그 파일은 수정 금지다. 출처 분기는 confirmWorkMap()이 돌려주는 result.draft의 origin을 읽어 함수 내부에서만 처리하라.
+두 picker의 props 시그니처를 바꾸지 마라 — W4-03B가 그 계약대로 마운트한다. confirmWorkMapAndProceed의 호출 시그니처도 바꾸지 마라 — Work Map 뷰가 그 형태로 호출하며 그 파일은 수정 금지다.
+
+adoptClonedWorkMap(document)에는 origin을 넘기지 마라 — Store가 resolveCreationSource(document)로 스스로 판정한다. 그리고 출처 분기에서 draft.origin을 직접 읽지 말고 반드시 selectWorkMapDraftOrigin(result.draft)을 거쳐라. 직접 읽으면 origin 필드가 없는 legacy 초안에서 undefined가 나와 분기가 깨진다.
 
 복제본은 이미 완성된 SOP를 갖고 있으므로 재생성하면 원본 내용이 사라진다. 복제 계열 origin은 Work Map 편집 후 /sop/workspace로 보내고 생성 API를 호출하지 마라. workLibrary 스냅샷에서 Task를 찾을 수 없는 legacy 문서는 복제 자체를 실패시키지 말고 기존대로 /sop/workspace로 fallback하라. 동료 복제의 개인정보 제거와 승인·검토·Agent화 초기화 규칙은 절대 완화하지 마라.
 
@@ -139,7 +143,7 @@ tests/sop-member-home.test.ts는 읽기·실행만 하라(W4-03B 소유). 그 �
 docs/sop-member-context-redesign/work-orders/W4_05_INTEGRATION.md
 
 통합 worktree: C:\Users\USER\Desktop\NOCODE\agent-shift (branch wave0/sop-foundation)
-코드 baseline: ae1297b
+코드 baseline: ae1297b / W4-01 Foundation commit: 5e98777
 W4-01 handoff / worktree: C:\Users\USER\Desktop\NOCODE\agent-shift-wt\w4-foundation
 W4-02A handoff / worktree: C:\Users\USER\Desktop\NOCODE\agent-shift-wt\w4a-landing-entry
 W4-03B handoff / worktree: C:\Users\USER\Desktop\NOCODE\agent-shift-wt\w4b-home-landing
@@ -159,7 +163,7 @@ Work Map 뷰 두 개와 Setup Gate가 변경 0건인지 git status로 증명하�
 
 src/app/api/ai/route.ts는 이번 통합에서 예외적으로 수정한다: 다섯 prompt builder(getAsIsPrompt, getToBePrompt, getDrilldownPromptAsIs, getDrilldownPromptToBe, getNodeSplitPrompt)를 src/server/flow/flow-prompts.ts로 무동작변경 이동하고 route는 handler만 export하게 하라. tests/flow-branches.test.ts의 import 경로를 갱신하고 npm run test:flow-branches와 npm run test:shapes로 /flow 무회귀를 증명하라. prompt 문자열·동작·schema는 한 글자도 바꾸지 마라. 이 정리 뒤 npx next build --webpack도 한 번 통과시켜라.
 
-통합 지시서의 최종 게이트 전체를 실행하고 HANDOFF 형식으로 보고하되, 소유권 레지스트리 대조 결과, 교차 지점 5개의 확인 결과, 10개 시나리오의 PASS/FAIL, 미검증 항목을 포함하라. 브라우저 도구가 없으면 시각 검증을 수행했다고 기록하지 말고 미검증으로 남겨라.
+통합 지시서의 최종 게이트 전체를 실행하고 HANDOFF 형식으로 보고하되, 소유권 레지스트리 대조 결과, 교차 지점 5개의 확인 결과, 10개 시나리오의 PASS/FAIL, 미검증 항목을 포함하라. 브라우저 검증은 이번에는 필수 게이트다 — playwright와 chrome-devtools MCP가 연결되어 있다. 1440x900과 1920x1080에서 전체 흐름을 실제로 돌리고, chrome-devtools-mcp:a11y-debugging으로 3A 접근성 수정 5건 중 아직 실증되지 않은 넷(A11Y-1/3/4/5)을 확인하라. 확인은 로컬 npm run dev 또는 vercel deploy preview로 하고 프로덕션(main)에 올려서 하지 마라. 도구가 실제로 실패하면 원문 오류를 적고 미검증으로 남겨라.
 
 명시적 권한 없이는 commit·push하지 마라.
 ```

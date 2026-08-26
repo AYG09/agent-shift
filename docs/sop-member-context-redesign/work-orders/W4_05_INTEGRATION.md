@@ -91,15 +91,35 @@ git status --short
 새 테스트 파일은 `package.json`의 `test:sop` 체인에 등록한다. 등록하지 않으면 회귀 게이트가
 그 파일을 실행하지 않는다.
 
-## 브라우저 확인 (도구가 있는 경우)
+## 브라우저 확인 (필수 게이트)
 
-1440×900과 1920×1080, zoom 100%에서 확인한다. 도구가 없으면 수행했다고 기록하지 말고
-미검증으로 남긴다.
+`playwright` 또는 `chrome-devtools` MCP가 이 환경에 연결되어 있으므로 **선택 항목이 아니다.**
+Wave 3 이후 계속 미검증으로 남아 있던 항목을 이번에 닫는다. 1440×900과 1920×1080, zoom
+100%에서 각각 확인하고 접근성 트리 스냅샷을 증거로 남긴다.
 
-- 랜딩 버튼 → `/sop` → (신규) 업무맥락 / (복귀) Home
-- Home의 시작점 세 개가 각각 올바른 시작점으로 진입
-- 동료·과거 복제가 Work Map을 거쳐 Workspace에 도달
-- footer·drawer가 마지막 콘텐츠를 가리지 않음
+흐름:
+
+- 랜딩 버튼 → `/sop` → (신규 구성원) 업무맥락 / (복귀 구성원) Home
+- Home의 시작점 세 개가 각각 올바른 시작점으로 진입, 네 번째는 비활성
+- 동료·과거 복제가 Work Map(simple)을 거쳐 Workspace에 도달, 재생성 없음
+- Task 경로는 종전대로 Work Map → `/sop/setup` 생성
+
+접근성 (`chrome-devtools-mcp:a11y-debugging` 사용):
+
+- 키보드만으로 로그인 → context 제출 → 추천 확인 → Work Map 완료까지 이동 가능
+- 3A 보완의 접근성 수정 5건을 실제 브라우저에서 실증한다. A11Y-2(업무맥락 textarea의
+  accessible name)는 실행 관리자가 이미 확인했으므로, 나머지 넷을 확인한다:
+  A11Y-1 Work Map 상세의 Skill 설명 focus 표시 / A11Y-3 Task 정의 필드의 accessible name과
+  오류 연결 / A11Y-4 reduced-motion에서 스피너 정지 / A11Y-5 "Task 직접 찾기" 토글의
+  `aria-expanded` 전환
+- fixed footer·drawer가 마지막 콘텐츠를 가리지 않음
+
+로컬 `npm run dev`로 확인해도 되고, `vercel deploy`(preview)로 배포해 확인해도 된다 —
+**프로덕션(`main`)에 올려서 확인하지 마라.** Vercel CLI는 설치·로그인·프로젝트 연결이 이미
+끝나 있다.
+
+도구가 실제로 실패하면 그 원문 오류를 적고 미검증으로 남긴다. 호출하지 않고 수행했다고
+기록하는 것은 허위 보고다.
 
 ## 금지
 

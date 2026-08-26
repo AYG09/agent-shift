@@ -46,12 +46,16 @@ tests/sop-clone-work-map-entry.test.tsx        # 신규
 
 1. 기존대로 독립 문서를 만들고 Store에 넣는다(현재 동작 유지 — 새 ID, 소유권, 승인·검토·
    Agent화 상태 초기화, 동료 개인정보 미복사).
-2. W4-01이 제공한 `adoptClonedWorkMap(document)`를 호출한다. `origin`은 동료 경로가
-   `'colleague-template'`, 과거 경로가 `'own-prior'`다.
+2. W4-01이 제공한 `adoptClonedWorkMap(document)`를 호출한다. **origin을 인자로 넘기지
+   않는다** — Store가 `resolveCreationSource(document)`로 스스로 판정한다. 과거 문서는
+   `sop-prior-clone.ts`가 찍는 `creationSource: 'own-prior'`로, 동료 복제본은
+   `sop-template.ts`가 찍는 `sourceTemplateId`의 fallback으로 각각 해소된다. 두 picker는
+   어떤 인자도 추가로 조립하지 않는다.
 3. 성공하면 `/sop/work-map/simple`로 이동한다.
-4. **실패하면(`false`) 기존대로 `/sop/workspace`로 이동한다.** 복제된 문서의 workLibrary
-   스냅샷에 선택 Task가 없는 legacy 기록이 있을 수 있고, 그 경우 복제 자체를 실패로 만들면
-   안 된다. 이 fallback을 코드 주석으로 남긴다.
+4. **실패하면(`false`) 기존대로 `/sop/workspace`로 이동한다.** `false`가 나오는 경우는
+   세 가지다: 문서 origin이 `'task'`(복제 대상이 아님), workLibrary 스냅샷에서 선택 Task를
+   찾을 수 없는 legacy 기록, 고객 검토 모드. 어느 경우든 복제 자체를 실패로 만들면 안 된다.
+   이 fallback을 코드 주석으로 남긴다.
 
 문서 생성·정제 로직은 그대로 둔다. 이번 변경은 **복제 이후 어디로 가는가**와 초안 채택뿐이다.
 
@@ -64,9 +68,11 @@ tests/sop-clone-work-map-entry.test.tsx        # 신규
 - `origin`이 복제 계열 → `setWorkLibrary`는 그대로 호출하되(이후 생성 범위 일관성 유지)
   `/sop/workspace`로 이동한다. **생성 API를 호출하지 않는다.**
 - **호출 시그니처 `{ confirmWorkMap, setWorkLibrary, navigate }`를 바꾸지 마라.** Work Map
-  뷰 두 개가 이 형태로 호출하며 그 파일은 수정 금지다. `origin`은
-  `confirmWorkMap()`이 돌려주는 `result.draft`에서 읽는다.
-- `origin`이 없는 legacy 초안은 W4-01의 규칙대로 `'task-recommendation'`으로 간주한다.
+  뷰 두 개가 이 형태로 호출하며 그 파일은 수정 금지다.
+- origin은 **`draft.origin`을 직접 읽지 말고 반드시
+  `selectWorkMapDraftOrigin(result.draft)`(W4-01 제공)를 거친다.** 이 accessor가 SSOT이며,
+  `origin` 필드가 없는 legacy 초안을 `'task-recommendation'`으로 보는 규칙도 여기에 있다.
+  직접 읽으면 legacy 초안에서 `undefined`가 나와 분기가 깨진다.
 
 복제본을 일부러 재생성하고 싶은 경우는 이번 범위가 아니다. 기존 `/sop/setup` 경로가 그대로
 남아 있으므로 그 요구가 확정되면 그때 다룬다.
@@ -86,17 +92,19 @@ tests/sop-clone-work-map-entry.test.tsx        # 신규
 `tests/sop-clone-work-map-entry.test.tsx`(신규)에 실행 가능한 단언을 넣는다. 소스 문자열
 검색으로 대체하지 않는다.
 
-- 동료 템플릿 복제 성공 → `workMapDraft`가 생기고 `origin === 'colleague-template'`이며
-  `/sop/work-map/simple`로 이동한다
-- 과거 문서 복제 성공 → `origin === 'own-prior'`, 같은 경로로 이동한다
+- 동료 템플릿 복제 성공 → `workMapDraft`가 생기고
+  `selectWorkMapDraftOrigin(draft) === 'colleague-template'`이며 `/sop/work-map/simple`로 이동한다
+- 과거 문서 복제 성공 → `selectWorkMapDraftOrigin(draft) === 'own-prior'`, 같은 경로로 이동한다
+- `adoptClonedWorkMap`에 origin 인자를 넘기지 않는다(시그니처는 문서 하나뿐이다)
 - 복제 후 Work Map route 가드가 통과한다(W4-01이 확정 context를 채웠기 때문)
 - 복제된 초안을 편집해도 **원본 record/문서가 변하지 않는다**
 - 동료 복제본에 원본 구성원의 이름·사번·조직·피드백이 없다(기존 계약 회귀 방지)
 - 복제본의 승인·검토·Agent화 확정 상태가 초기화되어 있다(기존 계약 회귀 방지)
 - workLibrary 스냅샷에서 Task를 찾을 수 없는 문서는 `/sop/workspace`로 fallback 이동한다
-- `confirmWorkMapAndProceed`: `origin`이 복제 계열이면 `/sop/workspace`로 가고 생성이
+- `confirmWorkMapAndProceed`: origin이 복제 계열이면 `/sop/workspace`로 가고 생성이
   호출되지 않는다 / `'task-recommendation'`이면 기존대로 `/sop/setup`으로 간다 /
-  `origin` 없는 초안은 `'task-recommendation'`으로 취급된다
+  `origin` 필드가 없는 legacy 초안은 `selectWorkMapDraftOrigin`을 통해
+  `'task-recommendation'`으로 취급된다
 
 ```bash
 npx tsx tests/sop-clone-work-map-entry.test.tsx
