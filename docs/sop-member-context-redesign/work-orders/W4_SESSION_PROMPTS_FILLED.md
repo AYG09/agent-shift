@@ -163,7 +163,9 @@ Work Map 뷰 두 개와 Setup Gate가 변경 0건인지 git status로 증명하�
 
 src/app/api/ai/route.ts는 이번 통합에서 예외적으로 수정한다: 다섯 prompt builder(getAsIsPrompt, getToBePrompt, getDrilldownPromptAsIs, getDrilldownPromptToBe, getNodeSplitPrompt)를 src/server/flow/flow-prompts.ts로 무동작변경 이동하고 route는 handler만 export하게 하라. tests/flow-branches.test.ts의 import 경로를 갱신하고 npm run test:flow-branches와 npm run test:shapes로 /flow 무회귀를 증명하라. prompt 문자열·동작·schema는 한 글자도 바꾸지 마라. 이 정리 뒤 npx next build --webpack도 한 번 통과시켜라.
 
-통합 지시서의 최종 게이트 전체를 실행하고 HANDOFF 형식으로 보고하되, 소유권 레지스트리 대조 결과, 교차 지점 5개의 확인 결과, 10개 시나리오의 PASS/FAIL, 미검증 항목을 포함하라. 브라우저 검증은 이번에는 필수 게이트다 — playwright와 chrome-devtools MCP가 연결되어 있다. 1440x900과 1920x1080에서 전체 흐름을 실제로 돌리고, chrome-devtools-mcp:a11y-debugging으로 3A 접근성 수정 5건 중 아직 실증되지 않은 넷(A11Y-1/3/4/5)을 확인하라. 확인은 로컬 npm run dev 또는 vercel deploy preview로 하고 프로덕션(main)에 올려서 하지 마라. 도구가 실제로 실패하면 원문 오류를 적고 미검증으로 남겨라.
+통합 지시서의 최종 게이트 전체를 실행하고 HANDOFF 형식으로 보고하되, 소유권 레지스트리 대조 결과, 교차 지점 5개의 확인 결과, 10개 시나리오의 PASS/FAIL, 미검증 항목을 포함하라. docs/sop-member-context-redesign/work-orders/W4_BASELINE_A11Y_EVIDENCE.md를 먼저 읽어라 — 통합 전 프로덕션에서 실측한 접근성 5건의 기준선(클래스 문자열·ARIA 속성값·focus 이동 여부)과 흐름 동작, 그리고 프로덕션에 AI API KEY가 없어 추천 성공 경로를 검증할 수 없다는 환경 제약이 적혀 있다. 통합 후 같은 방식으로 다시 측정해 그 값과 대조하고 다르면 회귀로 보고하라.
+
+브라우저 검증은 이번에는 필수 게이트다 — playwright와 chrome-devtools MCP가 연결되어 있다. 1440x900과 1920x1080에서 전체 흐름을 실제로 돌리고, chrome-devtools-mcp:a11y-debugging으로 3A 접근성 수정 5건 중 아직 실증되지 않은 넷(A11Y-1/3/4/5)을 확인하라. 확인은 로컬 npm run dev 또는 vercel deploy preview로 하고 프로덕션(main)에 올려서 하지 마라. 도구가 실제로 실패하면 원문 오류를 적고 미검증으로 남겨라.
 
 명시적 권한 없이는 commit·push하지 마라.
 ```

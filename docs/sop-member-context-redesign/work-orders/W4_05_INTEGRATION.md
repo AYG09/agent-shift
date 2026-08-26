@@ -7,6 +7,10 @@ W4-01/02A/03B/04C의 검증된 결과를 하나의 흐름으로 순차 통합하
 
 ## 시작 조건
 
+**`W4_BASELINE_A11Y_EVIDENCE.md`를 먼저 읽는다.** 통합 전 프로덕션에서 실측한 접근성
+기준선과 흐름 동작, 그리고 "프로덕션에 AI API KEY가 없어 추천 성공 경로는 검증할 수 없다"는
+환경 제약이 그 문서에 있다.
+
 다음이 모두 있어야 시작한다.
 
 - 네 세션의 HANDOFF와 changed-file 목록, 테스트 결과
@@ -107,11 +111,10 @@ Wave 3 이후 계속 미검증으로 남아 있던 항목을 이번에 닫는다
 접근성 (`chrome-devtools-mcp:a11y-debugging` 사용):
 
 - 키보드만으로 로그인 → context 제출 → 추천 확인 → Work Map 완료까지 이동 가능
-- 3A 보완의 접근성 수정 5건을 실제 브라우저에서 실증한다. A11Y-2(업무맥락 textarea의
-  accessible name)는 실행 관리자가 이미 확인했으므로, 나머지 넷을 확인한다:
-  A11Y-1 Work Map 상세의 Skill 설명 focus 표시 / A11Y-3 Task 정의 필드의 accessible name과
-  오류 연결 / A11Y-4 reduced-motion에서 스피너 정지 / A11Y-5 "Task 직접 찾기" 토글의
-  `aria-expanded` 전환
+- 접근성 5건(A11Y-1~5)은 **통합 전 프로덕션 기준선이 이미 측정되어 있다** —
+  `W4_BASELINE_A11Y_EVIDENCE.md`에 각 항목의 실측값(클래스 문자열, ARIA 속성값, focus 이동
+  여부)이 그대로 적혀 있다. 통합 후 같은 방식으로 다시 측정해 **그 값과 대조**하고, 다르면
+  회귀로 보고한다. 그 문서의 "대조 방법" 절이 이번 라운드에서 깨지기 쉬운 지점을 지목한다.
 - fixed footer·drawer가 마지막 콘텐츠를 가리지 않음
 
 로컬 `npm run dev`로 확인해도 되고, `vercel deploy`(preview)로 배포해 확인해도 된다 —
