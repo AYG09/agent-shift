@@ -7,7 +7,7 @@ import { resolveGenerationModel, buildReasoningProviderOptions } from '@/server/
 import { SopGenerationWireSchema } from '@/lib/sop-schemas';
 import { runSopValidationPipeline } from '@/lib/sop-generation-pipeline';
 import { createSopDocumentFromGeneration } from '@/lib/sop-normalizer';
-import { getStandardDraftPrompt, type SopStandardDraftSourceSummary } from './sop-prompt';
+import { getStandardDraftPrompt, type SopStandardDraftSourceSummary } from './sop-standard-draft-prompt';
 import type { SopDocument, SopMember, WorkLibrarySelection } from '@/lib/sop-types';
 import type { SopStructuralConstraints } from '@/lib/graph-validation';
 

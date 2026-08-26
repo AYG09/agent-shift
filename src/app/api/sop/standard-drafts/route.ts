@@ -7,7 +7,7 @@ import { generateStandardDraftDocument } from '@/server/sop/sop-standard-draft-r
 import { SopStandardDraftRequestSchema, SopStandardDraftResponseSchema } from '@/lib/sop-standard-draft-schemas';
 import { documentContainsAuthorIdentifiers } from '@/lib/sop-template';
 import { SOP_TASK_LIBRARY_FIXTURE, createWorkLibrarySelection } from '@/lib/sop-task-library';
-import type { SopStandardDraftSourceSummary } from '@/server/sop/sop-prompt';
+import type { SopStandardDraftSourceSummary } from '@/server/sop/sop-standard-draft-prompt';
 import type { SopRecord } from '@/lib/sop-record-schema';
 
 function findJobForTask(taskId: string) {

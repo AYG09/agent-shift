@@ -61,6 +61,21 @@ export function withTaskScope(selection: WorkLibrarySelection): WorkLibrarySelec
     return { ...normalized, skills: getScopedSkills(normalized) };
 }
 
+/**
+ * 읽기 전용 Task Library 전체에서 Task를 ID로 찾는다 (소속 Job과 함께).
+ *
+ * 추천 응답이나 수동 선택이 돌려주는 것은 Task ID 하나뿐인데, member-owned Work Map
+ * 초안을 만들려면 Job 메타데이터(생성 request의 scope 식별자)까지 필요하다. 화면이
+ * fixture를 직접 훑지 않도록 여기서 한 번만 제공한다.
+ */
+export function findTaskLibraryTaskById(taskId: string): { job: SopTaskLibraryJob; task: WorkLibraryTask } | undefined {
+    for (const job of SOP_TASK_LIBRARY_FIXTURE.jobs) {
+        const task = job.tasks.find((candidate) => candidate.id === taskId);
+        if (task) return { job, task };
+    }
+    return undefined;
+}
+
 export function createWorkLibrarySelection(job: SopTaskLibraryJob, task: WorkLibraryTask): WorkLibrarySelection {
     const firstActivity = [...task.activities].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))[0];
     const selection: WorkLibrarySelection = {

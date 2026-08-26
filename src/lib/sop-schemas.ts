@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FLOW_SHAPE_IDS } from './flow-shapes';
 import { SopRequiredSkillSchema, SopStepCommonFieldsSchema, SopEdgeCommonFieldsSchema, forbidDuplicateIds, SOP_AGENTIZATION_SUGGESTION_TYPES } from './sop-step-common-schema';
+import { SopAgentInstructionSpecSchema, SopAgentInstructionSpecWireSchema, SopNodeExecutionSpecWireSchema } from './sop-node-authoring-contract';
 
 export { SopRequiredSkillSchema };
 
@@ -33,6 +34,10 @@ const SopStepWireSchema = SopStepCommonFieldsSchema.extend({
     subActionOriginRationale: z.string().optional(),
     subActionOrder: z.number().optional(),
     sourceActivityIds: z.array(z.string()).optional(),
+    // 실행 명세도 같은 이유로 와이어에서만 관대하다: 필드 하나의 누락이 응답 전체를
+    // 파싱 시점에 죽이면 repair 루프가 돌 기회 자체가 사라진다. 완결성은
+    // validateSopNodeAuthoring의 blocking issue → repair 루프가 요구한다.
+    executionSpec: SopNodeExecutionSpecWireSchema.optional(),
     agentizationSuggestion: z
         .object({
             type: z.enum(SOP_AGENTIZATION_SUGGESTION_TYPES),
@@ -62,6 +67,7 @@ export const SopGenerationWireSchema = z
     .object({
         title: z.string().min(1),
         summary: z.string().optional(),
+        agentInstruction: SopAgentInstructionSpecWireSchema.optional(),
         steps: z.array(SopStepWireSchema),
         edges: z.array(SopEdgeCommonFieldsSchema),
         _graphWarnings: z.array(z.string()).optional(),
@@ -200,6 +206,9 @@ export function normalizeSopGenerationObject(object: unknown): unknown {
             delete next.subActionOrigin;
             delete next.subActionOriginRationale;
             delete next.agentizationSuggestion;
+            // terminal은 업무 실행 단계가 아니다 — 실행 명세가 남으면 Agent화·품질
+            // 검증이 시작/종료 노드를 업무 노드로 오인한다.
+            delete next.executionSpec;
         }
         return next;
     });
@@ -269,6 +278,8 @@ export const SopSuggestionPatchSchema = z.object({
 export const SopGenerationResponseSchema = z.object({
     title: z.string().min(1),
     summary: z.string().optional(),
+    /** 문서 수준 Mission. 게이트에서는 완결된 형태만 통과한다 (와이어는 관대). */
+    agentInstruction: SopAgentInstructionSpecSchema.optional(),
     steps: z.array(SopStepAiSchema).min(1),
     edges: z.array(SopEdgeAiSchema),
     _graphWarnings: z.array(z.string()).optional(),

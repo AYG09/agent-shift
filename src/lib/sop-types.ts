@@ -1,4 +1,5 @@
 import { type FlowShape } from './flow-shapes';
+import type { SopAgentInstructionSpec, SopNodeExecutionSpec, SopNodeInstructionContractVersion } from './sop-node-authoring-contract';
 
 export type SopReviewStatus = 'ai-draft' | 'reviewed' | 'confirmed';
 export type SopAgentizationScope = 'workflow' | 'steps';
@@ -149,6 +150,15 @@ export interface SopStepData {
      * field's docstring. Never present on a terminal step.
      */
     agentizationSuggestion?: SopAgentizationSuggestion;
+    /**
+     * Agent-ready 실행 명세 (책임 역할, 실행 행동, 완료·분기 기준, tool policy,
+     * escalation). Additive-optional: legacy 문서에는 없고, 없다는 이유로 문서가
+     * 깨지지 않는다. terminal과 순수 control node에는 두지 않는다.
+     *
+     * 이 필드가 채워졌다는 것이 Agent화 확정이나 tool 실행 권한을 뜻하지 않는다 —
+     * 그 셋은 서로 다른 필드와 전이로 유지된다 (REQ-AOP-003).
+     */
+    executionSpec?: SopNodeExecutionSpec;
     position: { x: number; y: number };
     reviewStatus: SopReviewStatus;
 }
@@ -199,6 +209,17 @@ export interface SopDocument {
      * was not actually generated/migrated into the new shape.
      */
     structureVersion?: 'activity-subaction-v1';
+    /**
+     * 문서 수준 Mission (목표·성공 기준·전역 제약·glossary). node마다 복제하지
+     * 않는다. Additive-optional — legacy 문서에는 없다.
+     */
+    agentInstruction?: SopAgentInstructionSpec;
+    /**
+     * node 작성 계약 버전. `structureVersion`과 같은 규칙을 따른다: 실제로 그
+     * 계약으로 생성·검증된 문서에만 찍고, 마이그레이션이 legacy 문서에 소급해서
+     * 찍지 않는다 (NODE_AUTHORING_AND_AGENT_CONTROL.md §4.4).
+     */
+    instructionContractVersion?: SopNodeInstructionContractVersion;
     /** Provenance only — set once when a colleague-template clone is first saved. Never re-derived. */
     sourceTemplateId?: string;
     /** Provenance only — set once when an own-prior clone is first saved. Never set together with sourceTemplateId; never re-derived. */

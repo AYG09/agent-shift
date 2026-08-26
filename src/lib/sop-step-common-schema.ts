@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SopNodeExecutionSpecSchema } from './sop-node-authoring-contract';
 
 /**
  * Structural step/edge fields with identical requirements whether the data
@@ -55,6 +56,13 @@ export const SopStepCommonFieldsSchema = z.object({
     subActionOrigin: z.enum(['activity-derived', 'context-derived']).optional(),
     subActionOriginRationale: z.string().min(1).optional(),
     agentizationSuggestion: SopAgentizationSuggestionSchema.optional(),
+    /**
+     * Agent-ready 실행 명세 (sop-node-authoring-contract.ts가 값 집합·구조의 원천).
+     * 여기서는 완결성이 아니라 **타입 안전성**만 요구한다 — 생성 와이어는 더 관대한
+     * SopNodeExecutionSpecWireSchema로 덮어쓰고(sop-schemas.ts), 품질 판정은
+     * validateSopNodeAuthoring이 별도로 수행한다.
+     */
+    executionSpec: SopNodeExecutionSpecSchema.optional(),
 });
 
 export const SopEdgeCommonFieldsSchema = z.object({

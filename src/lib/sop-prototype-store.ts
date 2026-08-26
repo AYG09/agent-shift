@@ -13,7 +13,27 @@ import {
     SopAiApplicationMode,
 } from './sop-types';
 import { CUSTOMER_SOP_MEMBER, CUSTOMER_WORK_LIBRARY, buildTaskGateSampleDocument } from './sop-sample-data';
-import { createTaskLibrarySelectionForRole, getScopedSkills, withCatalogActivityOrders } from './sop-task-library';
+import { createTaskLibrarySelectionForRole, findTaskLibraryTaskById, getScopedSkills, withCatalogActivityOrders } from './sop-task-library';
+import {
+    ANONYMOUS_MEMBER_SESSION,
+    EMPTY_MEMBER_CONTEXT,
+    IDLE_TASK_RECOMMENDATION,
+    LEGACY_SAMPLE_CONTEXT_SENTENCE,
+    authenticateMemberSession,
+    confirmMemberContext,
+    isSameMember,
+    isStaleRecommendationResponse,
+    migrateMemberIntakeState,
+    normalizeWorkContext,
+    validateMemberIdentity,
+    type MemberContextState,
+    type MemberIdentityValidation,
+    type PrototypeMemberSession,
+    type TaskRecommendationCandidateState,
+    type TaskRecommendationState,
+} from './sop-member-intake';
+import * as workMapDraft from './sop-work-map-draft';
+import type { MemberWorkMapDraft } from './sop-work-map-draft';
 import {
     resetAgentizationConfirmation,
     withAgentizationScope,
@@ -63,11 +83,27 @@ function withWorkLibraryCatalog(library: unknown): WorkLibrarySelection | undefi
 }
 
 interface SopPrototypeState {
+    // 구성원 intake (재설계 흐름: 로그인 → 업무맥락 → 추천 → Work Map)
+    /** 프로토타입 로그인 세션. 기본값은 언제나 anonymous — memberInfo 샘플은 인증 근거가 아니다. */
+    memberSession: PrototypeMemberSession;
+    /** 추천과 SOP 생성이 함께 읽는 **단일** 업무맥락 (SSOT). */
+    memberContext: MemberContextState;
+    taskRecommendation: TaskRecommendationState;
+    /** 확정 Task를 복제한 member-owned Work Map. simple/detailed가 함께 읽고 함께 고친다. */
+    workMapDraft: MemberWorkMapDraft | null;
+
     // Setup Gate States
     memberInfo: SopMember;
     workLibrary: WorkLibrarySelection;
+    /**
+     * @deprecated `memberContext.draft`의 읽기 전용 미러. 기존 Gate 화면이 계속
+     * 동작하도록 남겨 둔 호환 뷰이며, 쓰기는 항상 setContext/
+     * setTaskRecommendationInput을 통해 단일 원본으로 들어간다. Wave 2가 화면을
+     * 연결하면서 이 미러의 사용처를 정리한다.
+     */
     context: string;
     setupConfig: SopSetupConfig;
+    /** @deprecated `context`와 같은 미러. 두 입력은 더 이상 독립된 원본이 아니다. */
     taskRecommendationInput: string;
 
     // Workspace Active Document
@@ -92,6 +128,35 @@ interface SopPrototypeState {
     setContext: (context: string) => void;
     setSetupConfig: (config: Partial<SopSetupConfig>) => void;
     setTaskRecommendationInput: (input: string) => void;
+
+    // Actions - 구성원 intake
+    /** 검증 실패 시 field error를 돌려주고 세션을 만들지 않는다. */
+    submitMemberIdentity: (input: Partial<SopMember>) => MemberIdentityValidation;
+    /** 저장된 SOP record는 건드리지 않고 intake 세션과 미확정 초안만 정리한다. */
+    signOutMember: () => void;
+    setMemberContextDraft: (draft: string) => void;
+    /** 공백 입력이면 null을 돌려주고 아무 상태도 만들지 않는다 (TST-REC-001). */
+    submitMemberContext: () => { contextKey: string } | null;
+    /** 같은 contextKey로 이미 요청이 진행 중이면 false — 중복 호출 방지 (TST-STATE-003). */
+    beginTaskRecommendationRequest: (contextKey: string) => boolean;
+    applyTaskRecommendations: (contextKey: string, candidates: TaskRecommendationCandidateState[]) => boolean;
+    failTaskRecommendation: (contextKey: string, error: string) => boolean;
+    cancelTaskRecommendation: () => void;
+    /** 추천 성공이 아니라 이 명시적 확정만이 Work Map을 만든다 (REQ-REC-004). */
+    confirmRecommendedTask: (taskId: string) => boolean;
+
+    // Actions - Work Map 초안 (simple/detailed 공용)
+    updateWorkMapTask: (patch: { name?: string; description?: string }) => void;
+    updateWorkMapActivity: (activityId: string, patch: { name?: string; description?: string }) => void;
+    addWorkMapActivity: (input?: { name?: string; description?: string }) => string | null;
+    deleteWorkMapActivity: (activityId: string) => void;
+    moveWorkMapActivity: (activityId: string, direction: 'up' | 'down') => void;
+    updateWorkMapSkill: (activityId: string, skillId: string, patch: { name?: string; description?: string }) => void;
+    addWorkMapSkill: (activityId: string, input?: { name?: string; description?: string }) => string | null;
+    deleteWorkMapSkill: (activityId: string, skillId: string) => void;
+    confirmWorkMap: () => ReturnType<typeof workMapDraft.confirmWorkMapDraft> | null;
+    reopenWorkMap: () => void;
+    discardWorkMapDraft: () => void;
     /** Returns null when customer review mode keeps the current document read-only. */
     generateFromSample: () => SopDocument | null;
     /** Returns false when customer review mode keeps the current document read-only. */
@@ -166,7 +231,7 @@ function removeLegacySetupSourceType(config: unknown): SopSetupConfig | undefine
 }
 
 /**
- * Pure legacy -> v5 persistence migration.
+ * Pure legacy -> v6 persistence migration.
  * v4: removes obsolete scope state and derives missing Activity order.
  * v5: introduces `memberInfo.grade` and `SopDocument.structureVersion` /
  * per-step `subActionOrder`/`agentizationSuggestion` — all additive-optional
@@ -176,6 +241,15 @@ function removeLegacySetupSourceType(config: unknown): SopSetupConfig | undefine
  * only ever be set by an actual Activity–Sub Action generation/clone, never by
  * a migration pass, or a legacy document would be silently disguised as the
  * newer structure (see member-home-subaction-contract.md §2.4).
+ *
+ * v6: 두 개의 독립된 업무맥락 문자열(`taskRecommendationInput`, `context`)을
+ * 하나의 권위 있는 `memberContext`로 합치고, 프로토타입 로그인 세션·추천 상태·
+ * Work Map 초안을 추가한다. 합치는 규칙은 sop-member-intake.ts의
+ * migrateMemberIntakeState가 원천이다(Store가 재구현하지 않는다): 구성원이 직접 쓴
+ * 추천 입력이 우선이고, fixture의 샘플 안내 문장은 실제 업무맥락으로 승격하지
+ * 않으며, 자동 제출하지 않고, 채택되지 않은 legacy 원문도 보존한다. 세션은
+ * 항상 `anonymous`로 마이그레이션된다 — 저장된 memberInfo 샘플은 로그인 폼의
+ * 빠른 입력값일 뿐 누군가 로그인했다는 근거가 아니다 (SPEC §3.1).
  */
 export function migrateSopPrototypePersistedState(persistedState: unknown): unknown {
     if (!persistedState || typeof persistedState !== 'object') return persistedState;
@@ -188,12 +262,21 @@ export function migrateSopPrototypePersistedState(persistedState: unknown): unkn
             setupConfig: removeLegacySetupSourceType((state.document as SopDocument).setupConfig),
         }
         : state.document;
+    const intake = migrateMemberIntakeState({ taskRecommendationInput: state.taskRecommendationInput, context: state.context });
     return {
         ...state,
         workLibrary: workLibrary || CUSTOMER_WORK_LIBRARY,
         setupConfig: removeLegacySetupSourceType(state.setupConfig) || DEFAULT_SETUP_CONFIG,
         document,
         customerReviewMode: state.customerReviewMode || false,
+        memberSession: intake.session,
+        memberContext: intake.memberContext,
+        taskRecommendation: intake.recommendation,
+        // 확정 Task를 다시 고르기 전까지 Work Map은 없다. legacy 상태에는 member-owned
+        // 스냅샷이라는 개념 자체가 없었으므로 추측해서 만들지 않는다.
+        workMapDraft: null,
+        context: intake.memberContext.draft,
+        taskRecommendationInput: intake.memberContext.draft,
     };
 }
 
@@ -245,11 +328,41 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 });
             };
 
+            // 미러 필드(context / taskRecommendationInput)를 단일 원본과 함께 갱신하는
+            // 유일한 경로. 두 legacy 입력이 서로 다른 값을 갖는 상태를 만들지 않는다.
+            const writeContextDraft = (draft: string) => {
+                set((state) => ({
+                    memberContext: { ...state.memberContext, draft },
+                    context: draft,
+                    taskRecommendationInput: draft,
+                }));
+            };
+
+            const clearIntakeProgress = () => ({
+                memberContext: { ...EMPTY_MEMBER_CONTEXT },
+                taskRecommendation: { ...IDLE_TASK_RECOMMENDATION },
+                workMapDraft: null,
+                context: '',
+                taskRecommendationInput: '',
+            });
+
+            // Work Map mutation 공통 배선: 초안이 없으면 아무 것도 하지 않고, 있으면
+            // 순수 함수 결과를 그대로 반영한다(confirmed 해제는 순수 함수가 담당).
+            const applyWorkMapMutation = (mutate: (draft: MemberWorkMapDraft) => MemberWorkMapDraft) => {
+                const current = get().workMapDraft;
+                if (!current) return;
+                set({ workMapDraft: mutate(current) });
+            };
+
             return {
+                memberSession: { ...ANONYMOUS_MEMBER_SESSION },
+                memberContext: { ...EMPTY_MEMBER_CONTEXT },
+                taskRecommendation: { ...IDLE_TASK_RECOMMENDATION },
+                workMapDraft: null,
+
                 memberInfo: CUSTOMER_SOP_MEMBER,
                 workLibrary: CUSTOMER_WORK_LIBRARY,
-                context:
-                    '실제 업무 순서, 승인 조건, 예외 상황, 사용 시스템, 반드시 지켜야 할 기준, 협업 방식과 자주 되돌아가는 단계를 검토하여 SOP를 구체화합니다.',
+                context: LEGACY_SAMPLE_CONTEXT_SENTENCE,
                 setupConfig: DEFAULT_SETUP_CONFIG,
                 taskRecommendationInput: '',
 
@@ -297,12 +410,141 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 reopenWorkLibrary: () =>
                     set((state) => ({ workLibrary: { ...state.workLibrary, confirmed: false } })),
 
-                setContext: (context) => set({ context }),
+                setContext: (context) => writeContextDraft(context),
 
                 setSetupConfig: (partial) =>
                     set((state) => ({ setupConfig: { ...state.setupConfig, ...partial } })),
 
-                setTaskRecommendationInput: (taskRecommendationInput) => set({ taskRecommendationInput }),
+                setTaskRecommendationInput: (input) => writeContextDraft(input),
+
+                submitMemberIdentity: (input) => {
+                    const validation = validateMemberIdentity(input);
+                    if (!validation.ok) return validation;
+                    const previous = get().memberSession.member;
+                    // 다른 구성원으로 바뀌면 이전 구성원의 미확정 intake 진행 상태를
+                    // 물려주지 않는다 (§4.2). 저장된 SOP record는 건드리지 않는다.
+                    const reset = isSameMember(previous, validation.member) ? {} : clearIntakeProgress();
+                    set({
+                        ...reset,
+                        memberSession: authenticateMemberSession(validation.member, new Date().toISOString()),
+                        memberInfo: { ...get().memberInfo, ...validation.member },
+                    });
+                    return validation;
+                },
+
+                signOutMember: () =>
+                    set({ ...clearIntakeProgress(), memberSession: { ...ANONYMOUS_MEMBER_SESSION } }),
+
+                setMemberContextDraft: (draft) => writeContextDraft(draft),
+
+                submitMemberContext: () => {
+                    const state = get();
+                    const result = confirmMemberContext({
+                        context: state.memberContext,
+                        recommendation: state.taskRecommendation,
+                        hasWorkMapDraft: !!state.workMapDraft,
+                        now: new Date().toISOString(),
+                    });
+                    if (!result) return null;
+                    set({
+                        memberContext: result.context,
+                        taskRecommendation: result.recommendation,
+                        workMapDraft: result.discardWorkMapDraft ? null : state.workMapDraft,
+                        context: result.context.draft,
+                        taskRecommendationInput: result.context.draft,
+                    });
+                    return { contextKey: result.contextKey };
+                },
+
+                beginTaskRecommendationRequest: (contextKey) => {
+                    const current = get().taskRecommendation;
+                    // 이미 같은 맥락으로 요청을 **보낸** 적이 있으면 두 번째 호출을
+                    // 거절한다. React Strict Mode의 재마운트나 rerender가 중복 요청을
+                    // 만들지 못하게 하는 도메인 차원의 guard다 (TST-STATE-003).
+                    // `pending`은 "요청해야 한다"는 뜻이고 `requested`는 "실제로
+                    // 보냈다"는 뜻이라 두 값이 필요하다.
+                    if (current.requested && current.contextKey === contextKey) return false;
+                    set({ taskRecommendation: { status: 'pending', candidates: [], contextKey, requested: true } });
+                    return true;
+                },
+
+                applyTaskRecommendations: (contextKey, candidates) => {
+                    const current = get().taskRecommendation;
+                    if (isStaleRecommendationResponse(current, contextKey)) return false;
+                    set({ taskRecommendation: { status: 'ready', candidates, contextKey } });
+                    return true;
+                },
+
+                failTaskRecommendation: (contextKey, error) => {
+                    const current = get().taskRecommendation;
+                    if (isStaleRecommendationResponse(current, contextKey)) return false;
+                    // 실패는 입력을 지우지 않는다. 재시도·수정·수동 선택이 모두 가능해야 한다.
+                    set({ taskRecommendation: { status: 'error', candidates: [], contextKey, error } });
+                    return true;
+                },
+
+                cancelTaskRecommendation: () =>
+                    set((state) => ({ taskRecommendation: { ...IDLE_TASK_RECOMMENDATION, contextKey: state.taskRecommendation.contextKey } })),
+
+                confirmRecommendedTask: (taskId) => {
+                    const state = get();
+                    const found = findTaskLibraryTaskById(taskId);
+                    if (!found) return false;
+                    set({
+                        workMapDraft: workMapDraft.createWorkMapDraftFromCatalog({
+                            job: found.job,
+                            task: found.task,
+                            contextText: normalizeWorkContext(state.memberContext.confirmedText ?? state.memberContext.draft),
+                            now: new Date().toISOString(),
+                        }),
+                    });
+                    return true;
+                },
+
+                updateWorkMapTask: (patch) => applyWorkMapMutation((draft) => workMapDraft.updateWorkMapTask(draft, patch)),
+
+                updateWorkMapActivity: (activityId, patch) =>
+                    applyWorkMapMutation((draft) => workMapDraft.updateWorkMapActivity(draft, activityId, patch)),
+
+                addWorkMapActivity: (input) => {
+                    const current = get().workMapDraft;
+                    if (!current) return null;
+                    const result = workMapDraft.addWorkMapActivity(current, input);
+                    set({ workMapDraft: result.draft });
+                    return result.activityId;
+                },
+
+                deleteWorkMapActivity: (activityId) => applyWorkMapMutation((draft) => workMapDraft.deleteWorkMapActivity(draft, activityId)),
+
+                moveWorkMapActivity: (activityId, direction) =>
+                    applyWorkMapMutation((draft) => workMapDraft.moveWorkMapActivity(draft, activityId, direction)),
+
+                updateWorkMapSkill: (activityId, skillId, patch) =>
+                    applyWorkMapMutation((draft) => workMapDraft.updateWorkMapSkill(draft, activityId, skillId, patch)),
+
+                addWorkMapSkill: (activityId, input) => {
+                    const current = get().workMapDraft;
+                    if (!current) return null;
+                    const result = workMapDraft.addWorkMapSkill(current, activityId, input);
+                    set({ workMapDraft: result.draft });
+                    return result.skillId;
+                },
+
+                deleteWorkMapSkill: (activityId, skillId) =>
+                    applyWorkMapMutation((draft) => workMapDraft.deleteWorkMapSkill(draft, activityId, skillId)),
+
+                confirmWorkMap: () => {
+                    const current = get().workMapDraft;
+                    if (!current) return null;
+                    const result = workMapDraft.confirmWorkMapDraft(current);
+                    if (result.ok) set({ workMapDraft: result.draft });
+                    return result;
+                },
+
+                reopenWorkMap: () =>
+                    applyWorkMapMutation((draft) => (draft.confirmed ? { ...draft, confirmed: false } : draft)),
+
+                discardWorkMapDraft: () => set({ workMapDraft: null }),
 
                 // 구성원 Task 기반 Gate 전용 샘플이다 - 선택된 Task/Activity로부터 매번 새로
                 // Activity-Sub Action 구조를 만든다(고정 채용 콘텐츠를 다른 Task의 Activity에
@@ -627,6 +869,10 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                 // mode together with the document instead of behaving like an in-workspace edit.
                 resetStore: () =>
                     set({
+                        memberSession: { ...ANONYMOUS_MEMBER_SESSION },
+                        memberContext: { ...EMPTY_MEMBER_CONTEXT },
+                        taskRecommendation: { ...IDLE_TASK_RECOMMENDATION },
+                        workMapDraft: null,
                         memberInfo: CUSTOMER_SOP_MEMBER,
                         workLibrary: CUSTOMER_WORK_LIBRARY,
                         context: '',
@@ -645,10 +891,14 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
         },
         {
             name: SOP_DRAFT_STORAGE_KEY,
-            version: 5,
+            version: 6,
             migrate: migrateSopPrototypePersistedState,
             storage: createJSONStorage(createBrowserSopDraftStorage),
             partialize: (state) => ({
+                memberSession: state.memberSession,
+                memberContext: state.memberContext,
+                taskRecommendation: state.taskRecommendation,
+                workMapDraft: state.workMapDraft,
                 memberInfo: state.memberInfo,
                 workLibrary: state.workLibrary,
                 context: state.context,

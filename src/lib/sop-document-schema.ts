@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { FLOW_SHAPE_IDS } from './flow-shapes';
 import { SOP_DETAIL_LEVELS, SOP_BRANCH_POLICIES } from './sop-setup-validation';
 import { SopStepCommonFieldsSchema, SopEdgeCommonFieldsSchema, forbidDuplicateIds } from './sop-step-common-schema';
+import { SopAgentInstructionSpecSchema, SOP_NODE_INSTRUCTION_CONTRACT_VERSION } from './sop-node-authoring-contract';
 import type { SopDocument } from './sop-types';
 
 /**
@@ -165,6 +166,8 @@ export const SopDocumentSchema: z.ZodType<SopDocument> = z.object({
     updatedAt: z.string(),
     isSampleData: z.boolean().optional(),
     structureVersion: z.literal('activity-subaction-v1').optional(),
+    agentInstruction: SopAgentInstructionSpecSchema.optional(),
+    instructionContractVersion: z.literal(SOP_NODE_INSTRUCTION_CONTRACT_VERSION).optional(),
     sourceTemplateId: z.string().optional(),
     sourceRecordId: z.string().optional(),
     creationSource: z.enum(['task', 'colleague-template', 'own-prior']).optional(),
@@ -180,11 +183,11 @@ export const SopDocumentSchema: z.ZodType<SopDocument> = z.object({
         forbidDuplicateIds(val.steps, ctx, 'steps', '단계');
         forbidDuplicateIds(val.edges, ctx, 'edges', '연결선');
         val.steps.forEach((step) => {
-            if (step.terminalType && (step.sourceActivityIds?.length || step.subActionOrder !== undefined || step.subActionOrigin || step.subActionOriginRationale || step.agentizationSuggestion)) {
+            if (step.terminalType && (step.sourceActivityIds?.length || step.subActionOrder !== undefined || step.subActionOrigin || step.subActionOriginRationale || step.agentizationSuggestion || step.executionSpec)) {
                 ctx.addIssue({
                     code: 'custom',
                     path: ['steps'],
-                    message: `[${step.id}] 시작·종료 단계에는 Activity 매핑, Sub Action 순서·출처, Agent화 제안을 둘 수 없습니다.`,
+                    message: `[${step.id}] 시작·종료 단계에는 Activity 매핑, Sub Action 순서·출처, Agent화 제안, 실행 명세를 둘 수 없습니다.`,
                 });
             }
             if (step.subActionOrigin === 'context-derived' && !step.subActionOriginRationale?.trim()) {
