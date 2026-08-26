@@ -37,12 +37,38 @@ npm run verify:sop-customer
 4. W4-04C 복제 경로 합류
 5. 교차 검증과 시나리오 작성
 
+## 반드시 먼저 해소할 알려진 충돌 — `tests/sop-member-home.test.ts`
+
+W4-04C가 통합 요청으로 올렸고 실행 관리자가 양쪽 worktree에서 확인한 **확정된 충돌**이다.
+
+```text
+check(ownPriorNavigations.at(-1) === '/sop/workspace',
+      'A successful clone navigates to /sop/workspace');
+```
+
+이 단언은 W4-04C 트리에서 895행, W4-03B 트리에서 1046행(위에 175줄이 추가되어 밀림)에 각각
+살아 있다. W4-04C가 복제 성공 시 목적지를 `/sop/work-map/simple`로 바꿨으므로 **두 결과물을
+합치는 순간 이 단언은 실패한다.** 각 worktree에서 따로 통과한 것은 서로의 변경을 못 봤기
+때문이지 문제가 없어서가 아니다.
+
+W4-05가 해소한다(그 파일은 W4-03B 소유였고, 통합 단계에서 소유권이 넘어온다).
+
+- 이 시나리오의 원래 의도가 "복제 성공 후 이동이 일어나는가"인지 "Workspace로 가는가"인지
+  판단한다. `W4_04C_CLONE_WORKMAP_ENTRY.md` §2가 근거다 — 복제본은 이제 Work Map을 거쳐야
+  하므로 목적지 자체가 바뀐 것이 **의도된 변경**이다.
+- 단언을 `/sop/work-map/simple`로 갱신하고, 별도로 "Task를 찾을 수 없는 문서는
+  `/sop/workspace`로 fallback한다"는 단언을 남겨 두 경로를 모두 덮는다.
+- 단언을 삭제하지 마라. 삭제하면 복제 경로의 착지점 계약이 무검증 상태가 된다.
+
 ## 통합 시 확인할 교차 지점
 
 병렬 세션이 서로 못 보는 경계다. 여기가 이번 통합의 실제 위험 구간이다.
 
 1. **picker 마운트 계약** — W4-03B가 카드를 재구성하면서도 두 picker를 계약된 props로 계속
-   마운트하는지, W4-04C가 props를 바꾸지 않았는지 양쪽 diff로 대조한다.
+   마운트하는지, W4-04C가 props를 바꾸지 않았는지 양쪽 diff로 대조한다. (실행 관리자 사전
+   확인: 양쪽 모두 계약을 지켰다. W4-03B는 `SopMemberLoginGate`에 `fetchImpl?: typeof fetch`
+   prop을 새로 추가했는데 그 컴포넌트는 고정 계약 대상이 아니므로 허용 범위다 — 다만 로그인
+   게이트가 인증 시 `listMySopRecords`를 한 번 호출하게 된 점을 알고 통합하라.)
 2. **착지 판정의 단일 원천** — Home과 로그인 게이트가 같은 `resolveMemberLandingRoute`를
    쓰는지 확인한다. 한쪽이 자체 분기를 갖고 있으면 통합 단계에서 제거한다.
 3. **완료 동작 분기** — Work Map 뷰 두 개가 수정되지 않았는지(`git status`로 0건 확인),

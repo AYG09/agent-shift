@@ -91,7 +91,7 @@ Work Map 뷰 두 개를 금지 목록에 둔 것이 이번 설계의 핵심이�
 3. **Work Map 초안의 출처 필드** — W4-01이 `MemberWorkMapDraft`에 `origin`을 추가한다.
    W4-04C는 그 값을 읽기만 하고 정의하지 않는다.
 
-## 알려진 worktree 제약 — `npm run build`는 통합 worktree에서만 실행 가능
+## 알려진 worktree 제약 — `npm run build`와 `npm run dev` 모두 통합 worktree에서만 가능
 
 병렬 worktree의 `node_modules`는 메인 저장소로의 junction이다. Next 16의 기본 번들러인
 Turbopack은 이를 거부한다.
@@ -108,6 +108,12 @@ W4-02A 세션이 이 실패를 보고했고 실행 관리자가 baseline에서 �
 - 빌드 검증은 실제 `node_modules`를 가진 **메인 worktree의 W4-05 통합 단계**에서 수행한다.
 - worktree에서 굳이 빌드를 확인해야 하면 `npx next build --webpack`으로 우회할 수 있으나,
   그 경로는 아래 별도 항목의 baseline 타입 오류에 부딪힌다.
+- **`npm run dev`도 같은 이유로 죽는다** (W4-03B가 보고하고 실행 관리자가 재현). 따라서
+  브라우저 렌더 확인은 병렬 worktree에서 아예 불가능하며, 실제 `node_modules`를 가진 메인
+  worktree(W4-05) 또는 preview 배포에서만 수행할 수 있다. 병렬 세션이 브라우저 검증을
+  못 했다고 보고하는 것은 정상이며 그 세션의 결함이 아니다.
+- `.next/dev/lock`이 남아 있으면 "Unable to acquire lock"이라는 **다른** 오류가 먼저 난다.
+  진짜 원인을 가리므로 잠금을 지우고 한 번 더 확인한 뒤 판단한다.
 
 ## 사용 가능한 디자인·브라우저 능력 (2026-08-26 확인)
 
