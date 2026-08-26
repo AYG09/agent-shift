@@ -13,12 +13,14 @@ import {
     addWorkMapSkill,
     confirmWorkMapDraft,
     createWorkMapDraftFromCatalog,
+    createWorkMapDraftFromDocument,
     deleteWorkMapActivity,
     deleteWorkMapSkill,
     moveWorkMapActivity,
     selectDetailedWorkMapActivity,
     selectSimpleWorkMapRows,
     selectWorkMapActivities,
+    selectWorkMapDraftOrigin,
     selectWorkMapRelationCount,
     toWorkLibrarySelection,
     updateWorkMapActivity,
@@ -26,7 +28,9 @@ import {
     updateWorkMapTask,
     validateWorkMapDraft,
 } from '../src/lib/sop-work-map-draft';
+import { normalizeWorkContext, resolveIntakeRouteAccess, SOP_INTAKE_ROUTES } from '../src/lib/sop-member-intake';
 import { useSopPrototypeStore } from '../src/lib/sop-prototype-store';
+import type { SopDocument } from '../src/lib/sop-types';
 
 void (async () => {
 
@@ -141,6 +145,54 @@ assert.equal(scoped[0].name, '채용 요청 접수 및 요건 확정', '구성�
 assert(getScopedSkills(selection).length > 0, '파생 Skill 목록은 Activity 관계에서 계산된다.');
 assert.equal(selection.jobId, job.id, 'Job scope 식별자가 보존된다.');
 
+console.log('Clone draft: 복제 문서에서 만든 초안이 원본 workLibrary를 변형하지 않고 origin을 보존한다 (INT-CLONE-001)...');
+const cloneSourceDraft = createWorkMapDraftFromCatalog({ job, task: representativeTask, contextText: '동료가 실제로 작성한 업무 맥락', now: '2026-08-26T00:00:00.000Z' });
+const cloneSourceSelection = toWorkLibrarySelection(cloneSourceDraft);
+const cloneSourceCatalogSnapshot = JSON.stringify(cloneSourceSelection.taskCatalog);
+const colleagueDocument: SopDocument = {
+    id: 'colleague-doc-1',
+    title: '동료 SOP',
+    member: { name: '동료', jobRole: 'Talent Acquisition' },
+    workLibrary: cloneSourceSelection,
+    context: '동료가 실제로 작성한 업무 맥락',
+    steps: [],
+    edges: [],
+    reviewStatus: 'confirmed',
+    createdAt: '2026-08-26T00:00:00.000Z',
+    updatedAt: '2026-08-26T00:00:00.000Z',
+    sourceTemplateId: 'colleague-doc-origin',
+    creationSource: 'colleague-template',
+};
+const clonedDraft = createWorkMapDraftFromDocument({ document: colleagueDocument, origin: 'colleague-template', now: '2026-08-26T01:00:00.000Z' });
+assert(clonedDraft, '문서 스냅샷에 선택 Task가 있으면 초안이 만들어진다.');
+assert.equal(clonedDraft.origin, 'colleague-template', '초안의 origin이 요청한 값으로 보존된다.');
+assert.equal(selectWorkMapDraftOrigin(clonedDraft), 'colleague-template');
+assert.equal(clonedDraft.sourceTaskId, representativeTask.id);
+assert.equal(clonedDraft.contextText, colleagueDocument.context, 'contextText는 문서의 context 원문을 그대로 쓴다.');
+assert.equal(selectWorkMapActivities(clonedDraft).length, 14, '복제 초안도 원본과 같은 Activity 14개를 갖는다.');
+assert.notEqual(clonedDraft.task, colleagueDocument.workLibrary.taskCatalog[0], '초안의 task는 문서 스냅샷과 다른 인스턴스다(deep clone).');
+assert.equal(JSON.stringify(colleagueDocument.workLibrary.taskCatalog), cloneSourceCatalogSnapshot, '복제는 원본 문서의 workLibrary.taskCatalog를 변형하지 않는다.');
+
+console.log('Clone draft: origin 없는 legacy 초안은 task-recommendation으로 간주된다...');
+const { origin: _omittedOrigin, ...legacyDraft } = clonedDraft;
+void _omittedOrigin;
+assert.equal(
+    selectWorkMapDraftOrigin(legacyDraft),
+    'task-recommendation',
+    'origin 필드 자체가 없는 legacy 초안은 task-recommendation으로 읽는다 — structureVersion과 같은 마이그레이션 규칙.'
+);
+
+console.log('Clone draft: 선택 Task를 찾을 수 없는 문서는 추측하지 않고 null을 돌려준다...');
+const documentWithMissingTask: SopDocument = {
+    ...colleagueDocument,
+    workLibrary: { ...cloneSourceSelection, taskId: '존재하지-않는-task', taskCatalog: [] },
+};
+assert.equal(
+    createWorkMapDraftFromDocument({ document: documentWithMissingTask, origin: 'own-prior', now: '2026-08-26T02:00:00.000Z' }),
+    null,
+    'Task를 찾을 수 없는 문서 스냅샷에서는 null을 돌려준다.'
+);
+
 console.log('Store: 뷰 전환은 데이터도 확정 상태도 바꾸지 않는다...');
 const store = useSopPrototypeStore.getState();
 store.resetStore();
@@ -162,6 +214,43 @@ useSopPrototypeStore.getState().updateWorkMapActivity(detailedIds[1], { descript
 assert.equal(useSopPrototypeStore.getState().workMapDraft!.confirmed, false, 'Store mutation도 같은 무효화 규칙을 쓴다.');
 assert.equal(selectDetailedWorkMapActivity(useSopPrototypeStore.getState().workMapDraft!, detailedIds[1])!.activity.description, 'Store 경로로 수정');
 assert.equal(JSON.stringify(representativeTask), originalSnapshot, 'Store를 통한 편집도 원본 fixture를 바꾸지 않는다.');
+useSopPrototypeStore.getState().resetStore();
+
+console.log('Store: adoptClonedWorkMap이 route 가드를 정당하게 충족시키고 복제 원본을 변형하지 않는다 (INT-CLONE-001)...');
+useSopPrototypeStore.getState().submitMemberIdentity({ employeeId: 'E3003', name: '복제 사용자', organization: '인재확보팀', jobRole: 'Talent Acquisition' });
+const beforeAdoptSnapshot = JSON.stringify(colleagueDocument);
+assert.equal(useSopPrototypeStore.getState().adoptClonedWorkMap(colleagueDocument), true, '유효한 동료 복제 문서는 채택된다.');
+assert.equal(JSON.stringify(colleagueDocument), beforeAdoptSnapshot, 'adoptClonedWorkMap은 넘겨받은 복제 원본 문서 객체를 변형하지 않는다.');
+
+const adoptedState = useSopPrototypeStore.getState();
+assert.equal(adoptedState.workMapDraft?.origin, 'colleague-template');
+assert.equal(
+    adoptedState.memberContext.confirmedText,
+    normalizeWorkContext(colleagueDocument.context),
+    '복제 문서가 실제로 생성될 때 쓰인 업무맥락이 confirmed 원문으로 채택된다.'
+);
+const guardStateAfterAdopt = {
+    session: adoptedState.memberSession,
+    memberContext: adoptedState.memberContext,
+    recommendation: adoptedState.taskRecommendation,
+    hasWorkMapDraft: !!adoptedState.workMapDraft,
+};
+assert.equal(
+    resolveIntakeRouteAccess(SOP_INTAKE_ROUTES.workMapSimple, guardStateAfterAdopt).allowed,
+    true,
+    'adoptClonedWorkMap 이후 Work Map route 가드가 통과한다(확정 context가 채워졌기 때문) — 가드 조건식 자체는 바뀌지 않는다.'
+);
+
+useSopPrototypeStore.getState().resetStore();
+useSopPrototypeStore.getState().submitMemberIdentity({ employeeId: 'E3003', name: '복제 사용자', organization: '인재확보팀', jobRole: 'Talent Acquisition' });
+const taskOriginDocument: SopDocument = { ...colleagueDocument, id: 'task-doc-1', sourceTemplateId: undefined, creationSource: 'task' };
+assert.equal(useSopPrototypeStore.getState().adoptClonedWorkMap(taskOriginDocument), false, 'Task 출처 문서는 복제 채택 대상이 아니다.');
+assert.equal(useSopPrototypeStore.getState().workMapDraft, null);
+
+useSopPrototypeStore.getState().setCustomerReviewMode(true);
+assert.equal(useSopPrototypeStore.getState().adoptClonedWorkMap(colleagueDocument), false, '고객 검토 모드에서는 새 Work Map 초안을 채택하지 않는다(기존 read-only 가드 준수).');
+assert.equal(useSopPrototypeStore.getState().workMapDraft, null);
+useSopPrototypeStore.getState().setCustomerReviewMode(false);
 useSopPrototypeStore.getState().resetStore();
 
 console.log('✅ SOP Work Map 초안 도메인 테스트 통과.');

@@ -55,6 +55,34 @@ anonymous
 
 새 라우트 가드는 화면 redirect만 수행하는 장식이 아니라 도메인 상태를 기준으로 결정해야 한다.
 
+`/sop/work-map/*` 진입 조건에 "제출된 업무맥락"(confirmed context)이 요구되는 이유는
+장식이 아니다 — Work Map은 "이 업무맥락을 가진 구성원이 확정한 Task/Activity/Skill"
+이라는 provenance를 이후 SOP 생성·대표 표준안 계약(§6, `subaction-semantics-contract.md`
+§7)까지 끌고 가야 하며, 업무맥락 없는 Work Map은 그 provenance 사슬을 끊는다.
+
+### 2.3 착지 판정과 복제 Work Map 초안
+
+2차 재설계(`work-orders/W4_00_MASTER_PARALLEL.md`)가 추가하는 두 도메인 판정이다.
+
+- **`INT-LAND-001`** — 로그인 직후 착지점은 화면 순서가 아니라 도메인 상태로 결정한다:
+  진행 중 intake(확정 context 또는 Work Map 초안)가 있으면 그 지점으로 복귀(기존
+  `resolvePostLoginRoute`의 판단을 그대로 재사용), 없고 저장된 record가 0건이면
+  `/sop/context`(신규 구성원은 곧장 작업 시작), 없고 record가 1건 이상이면 `/sop`
+  (복귀 구성원 Home). 판정 함수 `resolveMemberLandingRoute`(`sop-member-intake.ts`)는
+  저장소를 직접 조회하지 않는다 — `hasStoredRecords`는 호출자가 넘기는 값이다.
+- **`INT-CLONE-001`** — 동료 SOP·과거 작성 복제 경로는 구성원에게 새 업무맥락 작성을
+  요구하지 않는다. 대신 복제 대상 문서가 실제 생성 당시 사용한 `context` 원문을 그대로
+  채택해 `memberContext.confirmedText`로 확정한다(`adoptClonedWorkMap`,
+  `sop-prototype-store.ts`). **이것은 §2.2의 라우트 가드 조건식을 완화하는 것이 아니다**
+  — `resolveIntakeRouteAccess`가 요구하는 "제출된 업무맥락"을, 복제 문서 자체가 이미
+  가지고 있는 실제 업무맥락으로 정당하게 충족시키는 것이다. 가드 조건식 자체는 바뀌지
+  않으므로 Task 경로 구성원은 여전히 스스로 업무맥락을 작성해야만 Work Map에 들어갈 수
+  있다.
+- **`REQ-CLONE-001`** — 확인된 고객 요구: "선택한 Work Map과 SOP를 자신의 독립 초안으로
+  복제"한 뒤 "Activity와 이후 SOP 내용을 자신의 업무에 맞게 수정"할 수 있어야 한다
+  (`final-system-scenario-contract.md` §2.3). 따라서 복제 경로는 `/sop/workspace`로
+  직행하지 않고 Work Map 편집 단계(`/sop/work-map/simple|detailed`)를 반드시 통과한다.
+
 ## 3. 화면 명세
 
 ### 3.1 로그인 게이트
@@ -258,6 +286,7 @@ type MemberWorkMapDraft = {
 | Task 후보 변경·확정 | 기존 Work Map draft | context confirmed text |
 | T/A/S 편집 | Work Map confirmation | 편집 내용과 추천 provenance |
 | simple/detailed 전환 | 없음 | 모든 Work Map 데이터와 선택 항목 |
+| 복제로 만든 Work Map 초안 이후 context 재확정 | 그 Work Map **초안**(위 "제출 후 context 재편집 확정" 행과 동일 규칙 — `origin`이 `colleague-template`/`own-prior`라고 예외를 두지 않는다) | 복제 **원본** SOP record(동료 문서·내 과거 문서) — 애초에 mutate 대상이 아니었으므로 이 규칙과 무관하게 항상 보존 |
 
 이미 편집한 Work Map을 context 변경으로 초기화할 때는 사전 경고와 명시적 확인이 필요하다. 자동 삭제하지 않는다.
 

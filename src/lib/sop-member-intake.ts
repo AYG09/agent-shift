@@ -364,3 +364,29 @@ export function resolvePostLoginRoute(state: MemberIntakeGuardState): SopIntakeR
     if (isSubmittableContext(state.memberContext.confirmedText)) return SOP_INTAKE_ROUTES.recommendation;
     return SOP_INTAKE_ROUTES.context;
 }
+
+/**
+ * 로그인 직후 착지점 판정 (`INT-LAND-001`, CONTEXT.md §4 / SPEC.md §2.3).
+ *
+ * 1차 재설계는 `/sop/context`를 항상 로그인 다음 화면으로 고정했다. 그 결과 SOP가
+ * 0건인 신규 구성원과 이미 여러 SOP를 가진 복귀 구성원이 똑같은 화면으로 떨어졌다 —
+ * 복귀 구성원에게는 현황 Home이 더 유용한데도. 이 함수는 그 결정을 화면이 아니라
+ * 도메인이 내리게 한다.
+ *
+ * 판정 순서:
+ * 1. 미인증 → 로그인 게이트.
+ * 2. 진행 중인 intake(확정 context 또는 Work Map 초안)가 있으면 `resolvePostLoginRoute`의
+ *    판단을 그대로 재사용해 그 지점으로 복귀시킨다 — 새로고침으로 진행 상태를 잃지 않는다.
+ * 3. 진행이 없으면 저장된 record 유무로 갈린다: 0건이면 신규 구성원이므로 곧장
+ *    `/sop/context`(빈 Home을 먼저 보여주지 않는다), 1건 이상이면 복귀 구성원이므로
+ *    기존 Home(`/sop`)으로 보낸다.
+ *
+ * `hasStoredRecords`는 이 모듈이 직접 조회하지 않는다 — 이 모듈은 repository·네트워크를
+ * 알지 못하므로 호출자(Store/화면)가 넘기는 boolean이다.
+ */
+export function resolveMemberLandingRoute(state: MemberIntakeGuardState & { hasStoredRecords: boolean }): SopIntakeRoute | '/sop' {
+    if (!isAuthenticated(state.session)) return SOP_INTAKE_ROUTES.login;
+    const hasIntakeProgress = state.hasWorkMapDraft || isSubmittableContext(state.memberContext.confirmedText);
+    if (hasIntakeProgress) return resolvePostLoginRoute(state);
+    return state.hasStoredRecords ? '/sop' : SOP_INTAKE_ROUTES.context;
+}

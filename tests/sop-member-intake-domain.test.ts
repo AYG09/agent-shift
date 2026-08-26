@@ -19,6 +19,7 @@ import {
     migrateMemberIntakeState,
     normalizeWorkContext,
     resolveIntakeRouteAccess,
+    resolveMemberLandingRoute,
     resolvePostLoginRoute,
     selectAuthoritativeWorkContext,
     validateMemberIdentity,
@@ -151,6 +152,33 @@ assert.equal(resolveIntakeRouteAccess(SOP_INTAKE_ROUTES.workMapDetailed, { ...su
 assert.equal(resolvePostLoginRoute(authenticatedState), SOP_INTAKE_ROUTES.context);
 assert.equal(resolvePostLoginRoute(submittedState), SOP_INTAKE_ROUTES.recommendation);
 assert.equal(resolvePostLoginRoute({ ...submittedState, hasWorkMapDraft: true }), SOP_INTAKE_ROUTES.workMapSimple);
+
+console.log('착지 판정: 진행 상태와 보유 record 유무로 로그인 직후 착지점을 정한다 (INT-LAND-001)...');
+assert.equal(
+    resolveMemberLandingRoute({ ...anonymousState, hasStoredRecords: false }),
+    SOP_INTAKE_ROUTES.login,
+    '미인증 → 로그인 게이트.'
+);
+assert.equal(
+    resolveMemberLandingRoute({ ...authenticatedState, hasStoredRecords: false }),
+    SOP_INTAKE_ROUTES.context,
+    '인증 + record 0건 + 진행 없음 → 신규 구성원은 곧장 업무맥락 작성으로 간다.'
+);
+assert.equal(
+    resolveMemberLandingRoute({ ...authenticatedState, hasStoredRecords: true }),
+    '/sop',
+    '인증 + record 1건 이상 + 진행 없음 → 복귀 구성원은 기존 Home으로 간다.'
+);
+assert.equal(
+    resolveMemberLandingRoute({ ...submittedState, hasStoredRecords: false }),
+    resolvePostLoginRoute(submittedState),
+    '확정 context가 있으면 record 유무와 무관하게 기존 resolvePostLoginRoute의 진행 지점으로 복귀한다.'
+);
+assert.equal(
+    resolveMemberLandingRoute({ ...submittedState, hasWorkMapDraft: true, hasStoredRecords: true }),
+    SOP_INTAKE_ROUTES.workMapSimple,
+    'Work Map 초안이 있으면 record가 있어도 Work Map 지점으로 복귀한다(Home으로 되돌리지 않는다).'
+);
 
 console.log('Store: 로그인 → 업무맥락 → 추천 요청 → Task 확정 전이...');
 const store = useSopPrototypeStore.getState();

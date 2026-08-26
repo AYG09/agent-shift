@@ -17,10 +17,16 @@
  * - Skill 개수를 5개로 강제하지 않는다. 5는 샘플 데이터의 사실이지 편집 규칙이 아니다.
  * - 새로 만든 항목의 ID는 draft 안에서 결정론적으로 발급한다. 타임스탬프를 식별자로
  *   쓰지 않는다.
+ * - 복제 경로(`origin: colleague-template | own-prior`)는 복제 대상 문서의
+ *   `workLibrary.taskCatalog` 스냅샷을 절대 변형하지 않는다. 선택 Task를 그 스냅샷에서
+ *   찾지 못하면 추측해서 만들지 않고 `null`을 돌려준다 (`createWorkMapDraftFromDocument`).
  */
-import type { WorkLibraryActivity, WorkLibrarySelection, WorkLibrarySkill, WorkLibraryTask } from './sop-types';
+import type { SopDocument, WorkLibraryActivity, WorkLibrarySelection, WorkLibrarySkill, WorkLibraryTask } from './sop-types';
 import type { SopTaskLibraryJob } from './sop-task-library';
-import { getScopedSkills } from './sop-task-library';
+import { getScopedSkills, getTaskLibraryTask } from './sop-task-library';
+
+/** Work Map 초안을 만든 방법. simple/detailed 두 화면 모두 이 값을 그대로 읽기만 한다. */
+export type MemberWorkMapDraftOrigin = 'task-recommendation' | 'colleague-template' | 'own-prior';
 
 export interface MemberWorkMapDraft {
     /** 복제 출처 Task ID. 편집으로 task.id가 바뀌지 않으므로 provenance로 남는다. */
@@ -34,6 +40,18 @@ export interface MemberWorkMapDraft {
     contextText: string;
     confirmed: boolean;
     createdAt: string;
+    /**
+     * 이 초안이 어떻게 만들어졌는지 (`INT-CLONE-001`). Optional인 이유는
+     * `structureVersion`과 같은 규칙 때문이다 — 이 필드가 생기기 전에 persist된 초안에는
+     * 이 키 자체가 없다. 마이그레이션이 소급해서 채우지 않으므로, 읽을 때는 항상
+     * `origin` 리터럴을 직접 보지 말고 `selectWorkMapDraftOrigin`을 거친다.
+     */
+    origin?: MemberWorkMapDraftOrigin;
+}
+
+/** `origin` 없는 legacy 초안은 `'task-recommendation'`으로 본다 (위 필드 docstring 참고). */
+export function selectWorkMapDraftOrigin(draft: MemberWorkMapDraft): MemberWorkMapDraftOrigin {
+    return draft.origin ?? 'task-recommendation';
 }
 
 /**
@@ -89,6 +107,35 @@ export function createWorkMapDraftFromCatalog(params: {
         contextText: params.contextText,
         confirmed: false,
         createdAt: params.now,
+        origin: 'task-recommendation',
+    };
+}
+
+/**
+ * 동료 SOP·과거 작성 복제 전용 초안 생성 (`INT-CLONE-001`). 카탈로그가 아니라 이미
+ * 저장된 `SopDocument`의 `workLibrary` 스냅샷에서 선택 Task를 찾아 deep clone한다 —
+ * 복제 시점의 Task Library 원본이 그 사이 바뀌었더라도 문서가 실제로 생성될 때 쓰인
+ * Task/Activity/Skill 그대로를 보존해야 하기 때문이다. 문서 스냅샷에서 Task를 찾을 수
+ * 없으면(예: 손상되거나 예상 밖의 스냅샷) 추측해서 만들지 않고 `null`을 돌려준다.
+ */
+export function createWorkMapDraftFromDocument(params: {
+    document: Pick<SopDocument, 'workLibrary' | 'context'>;
+    origin: Exclude<MemberWorkMapDraftOrigin, 'task-recommendation'>;
+    now: string;
+}): MemberWorkMapDraft | null {
+    const { workLibrary } = params.document;
+    const task = getTaskLibraryTask(workLibrary);
+    if (!task) return null;
+    return {
+        sourceTaskId: task.id,
+        jobId: workLibrary.jobId,
+        sourceJobId: workLibrary.sourceJobId,
+        jobName: workLibrary.jobName,
+        task: cloneWorkLibraryTask(task),
+        contextText: params.document.context,
+        confirmed: false,
+        createdAt: params.now,
+        origin: params.origin,
     };
 }
 

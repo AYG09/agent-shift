@@ -11,6 +11,7 @@ import {
     SopRequiredSkill,
     SopAgentizationScope,
     SopAiApplicationMode,
+    resolveCreationSource,
 } from './sop-types';
 import { CUSTOMER_SOP_MEMBER, CUSTOMER_WORK_LIBRARY, buildTaskGateSampleDocument } from './sop-sample-data';
 import { createTaskLibrarySelectionForRole, findTaskLibraryTaskById, getScopedSkills, withCatalogActivityOrders } from './sop-task-library';
@@ -144,6 +145,13 @@ interface SopPrototypeState {
     cancelTaskRecommendation: () => void;
     /** 추천 성공이 아니라 이 명시적 확정만이 Work Map을 만든다 (REQ-REC-004). */
     confirmRecommendedTask: (taskId: string) => boolean;
+    /**
+     * 동료 SOP·과거 작성 복제본에서 Work Map 초안을 채택한다 (`INT-CLONE-001`).
+     * `resolveCreationSource(document)`로 origin을 판정하므로 호출자가 origin을 따로
+     * 넘기지 않는다. Task 출처 문서이거나 문서 스냅샷에서 선택 Task를 찾을 수 없으면
+     * `false`를 돌려주고 아무 상태도 바꾸지 않는다.
+     */
+    adoptClonedWorkMap: (document: SopDocument) => boolean;
 
     // Actions - Work Map 초안 (simple/detailed 공용)
     updateWorkMapTask: (patch: { name?: string; description?: string }) => void;
@@ -498,6 +506,29 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                             now: new Date().toISOString(),
                         }),
                     });
+                    return true;
+                },
+
+                // 왜 memberContext까지 함께 채우는가: Work Map route 가드
+                // (resolveIntakeRouteAccess)는 "제출된 업무맥락"을 요구한다. 복제본의
+                // 업무맥락은 이미 그 문서가 실제로 생성될 때 쓰인 원문이므로, 이 대입은
+                // 가드를 우회하는 것이 아니라 그 조건을 정당하게 충족시키는 것이다 —
+                // resolveIntakeRouteAccess의 조건식 자체는 바꾸지 않는다 (SPEC.md §2.3
+                // INT-CLONE-001). Task 경로 구성원은 여전히 스스로 업무맥락을 제출해야만
+                // Work Map에 들어갈 수 있다.
+                adoptClonedWorkMap: (document) => {
+                    if (isCustomerReviewLocked()) return false;
+                    const origin = resolveCreationSource(document);
+                    if (origin === 'task') return false;
+                    const draft = workMapDraft.createWorkMapDraftFromDocument({ document, origin, now: new Date().toISOString() });
+                    if (!draft) return false;
+                    const confirmedText = normalizeWorkContext(document.context);
+                    set((state) => ({
+                        workMapDraft: draft,
+                        memberContext: { ...state.memberContext, draft: confirmedText, confirmedText, confirmedAt: draft.createdAt },
+                        context: confirmedText,
+                        taskRecommendationInput: confirmedText,
+                    }));
                     return true;
                 },
 
