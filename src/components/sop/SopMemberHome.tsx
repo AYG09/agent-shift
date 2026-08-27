@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     AlertCircle,
@@ -18,7 +18,7 @@ import { useSopStoreHydrated } from './SopMemberRouteGuard';
 import { listMySopRecords, requestSopApproval } from '@/lib/sop-record-client';
 import { buildSopStatusRows, computeSopStatusCounts, computeMemberTaskActivitySkillCounts, type SopStatusCounts } from '@/lib/sop-member-home';
 import { SOP_LIFECYCLE_STATUS_META, SOP_MEMBER_SUMMARY_BUCKET_META, type SopMemberSummaryBucket } from '@/lib/sop-lifecycle';
-import { SOP_INTAKE_ROUTES, isAuthenticated, resolvePostLoginRoute } from '@/lib/sop-member-intake';
+import { SOP_INTAKE_ROUTES, isAuthenticated, resolveMemberLandingRoute, resolvePostLoginRoute } from '@/lib/sop-member-intake';
 import type { SopRecord } from '@/lib/sop-record-schema';
 import { SopColleagueTemplatePicker } from './SopColleagueTemplatePicker';
 import { SopOwnPriorPicker } from './SopOwnPriorPicker';
@@ -68,10 +68,44 @@ export function SopMemberHomeView({ navigate, fetchImpl }: { navigate: (href: st
         });
     };
 
+    // W4-05가 브라우저 검증에서 발견한 회귀: hydration 이전에는 memberInfo가 아직
+    // 초기/샘플 값(CUSTOMER_SOP_MEMBER)이다. 이 effect가 hydrated를 기다리지 않으면
+    // 그 샘플 신원으로 먼저 한 번 조회해 records를 채우고(대개 그 신원엔 record가 없어
+    // "[]"), 뒤이어 실제(복원된) memberInfo로 다시 조회해 올바른 값으로 덮어쓴다 —
+    // 조회 자체는 최종적으로 맞더라도, 아래 INT-LAND-001 착지 판정의
+    // `landingCheckedRef`는 "records !== null"이 되는 첫 순간(그 잘못된 빈 결과)에
+    // 이미 한 번만 판정하고 잠긴다. 그 결과 record를 실제로 가진 복귀 구성원도 매번
+    // "record 0건"으로 잘못 판정되어 Home 대신 /sop/context로 튕겨나간다.
+    // hydrated를 기다리면 첫 조회 자체가 항상 복원된(올바른) 신원으로 일어난다.
     useEffect(() => {
+        if (!hydrated) return;
         loadRecords();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [memberInfo.id, memberInfo.employeeId]);
+    }, [hydrated, memberInfo.id, memberInfo.employeeId]);
+
+    // INT-LAND-001: Home이 자신의 착지 여부를 스스로 판정한다 — 판정 로직 자체는
+    // W4-01의 resolveMemberLandingRoute 하나뿐이고, 이 effect는 "언제 판정해도 되는지"
+    // (hydration 완료 + 최초 record 조회 완료)와 "판정 결과가 /sop가 아니면 이동한다"만
+    // 담당한다(SopMemberRouteGuard와 동일한 책임 분리). ref 가드가 있는 이유: 이 판정은
+    // "명시적 진입 시점"에 정확히 한 번만 일어나야 한다 — 가드가 없으면 승인 요청·반려
+    // 편집 같은 이후의 모든 상태 갱신마다 재판정이 돌아, Home에 머무르던 구성원이
+    // 도중에 튕겨나가는 무한 리다이렉트류 버그가 된다. 구성원이 /sop로 새로 진입(재마운트)
+    // 할 때마다는 다시 판정한다 — "record가 생긴 뒤부터 /sop가 정상 착지점이 된다"는 규칙이
+    // 실제로 성립하는 지점이 바로 그 재마운트다. hasStoredRecords는 Home이 이미 조회하는
+    // records 목록에서만 파생하며 별도 API를 두지 않는다.
+    const landingCheckedRef = useRef(false);
+    useEffect(() => {
+        if (landingCheckedRef.current || !hydrated || records === null) return;
+        landingCheckedRef.current = true;
+        const landingTarget = resolveMemberLandingRoute({
+            session: memberSession,
+            memberContext,
+            recommendation: taskRecommendation,
+            hasWorkMapDraft,
+            hasStoredRecords: records.length > 0,
+        });
+        if (landingTarget !== '/sop') navigate(landingTarget);
+    }, [hydrated, records, memberSession, memberContext, taskRecommendation, hasWorkMapDraft, navigate]);
 
     // A single row list drives BOTH the numeric buckets and the enumerated list below them —
     // computeSopStatusCounts derives its numbers from the exact same rows, so the count a
@@ -269,40 +303,46 @@ export function SopMemberHomeView({ navigate, fetchImpl }: { navigate: (href: st
                     </section>
                 </div>
 
-                {/* SOP 생성 경로 */}
+                {/* 시작점 선택 — 세 활성 경로는 서로 다른 화면이 아니라 Work Map 초안을 만드는
+                    방법만 다른 하나의 파이프라인이다(CONTEXT.md §4). "이후 단계는 동일하다"는
+                    사실은 카드마다 반복하지 않고 이 그룹 캡션 한 곳에서만 안내한다. */}
                 <section>
-                    <h2 className="mb-3 text-sm font-bold text-zinc-900">SOP 생성 경로</h2>
+                    <h2 className="mb-1 text-sm font-bold text-zinc-900">Work Map 시작점 선택</h2>
+                    <p className="mb-3 text-[11px] text-zinc-500">
+                        선택한 시작점으로 Work Map 초안을 만들면, 이후 검토와 SOP 생성은 동일한 흐름으로 이어집니다.
+                    </p>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <button
                             type="button"
                             onClick={handleTaskBasedCreation}
-                            className="flex flex-col items-start gap-2 rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
+                            className="flex flex-col items-start gap-2 rounded-2xl border border-indigo-300 bg-white p-5 text-left shadow-sm transition-colors hover:border-indigo-400 hover:bg-indigo-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
                         >
+                            <span className="inline-flex items-center rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white">권장 시작점</span>
                             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white"><Sparkles className="h-5 w-5" /></div>
-                            <h3 className="text-sm font-bold text-zinc-900">Task 기반 생성</h3>
-                            <p className="text-xs leading-5 text-zinc-500">나의 업무를 직접 선택하여 SOP를 생성합니다. 자연어로 업무를 설명하면 Task Library에서 AI가 최적 Task를 추천합니다.</p>
+                            <h3 className="text-sm font-bold text-zinc-900">Task 기반</h3>
+                            <p className="text-xs leading-5 text-zinc-500"><span className="font-semibold text-zinc-700">시작점:</span> 업무맥락을 쓰고 AI 추천을 받습니다.</p>
                             <span className="mt-auto inline-flex items-center gap-1 text-xs font-bold text-indigo-600">시작하기 →</span>
                         </button>
 
                         <button
                             type="button"
                             onClick={() => setShowTemplatePicker(true)}
-                            className="flex flex-col items-start gap-2 rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
+                            className="flex flex-col items-start gap-2 rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
                         >
                             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white"><Users className="h-5 w-5" /></div>
-                            <h3 className="text-sm font-bold text-zinc-900">동료 SOP 기반 생성</h3>
-                            <p className="text-xs leading-5 text-zinc-500">유사 직무 동료의 승인된 SOP를 템플릿으로 활용해 나만의 새 독립 초안을 만듭니다. 원본은 수정되지 않습니다.</p>
+                            <h3 className="text-sm font-bold text-zinc-900">동료 SOP 기반</h3>
+                            <p className="text-xs leading-5 text-zinc-500"><span className="font-semibold text-zinc-700">시작점:</span> 승인된 동료 SOP를 복제합니다.</p>
                             <span className="mt-auto inline-flex items-center gap-1 text-xs font-bold text-emerald-600">템플릿 찾아보기 →</span>
                         </button>
 
                         <button
                             type="button"
                             onClick={() => setShowOwnPriorPicker(true)}
-                            className="flex flex-col items-start gap-2 rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
+                            className="flex flex-col items-start gap-2 rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-amber-300 hover:bg-amber-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500"
                         >
                             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white"><FileClock className="h-5 w-5" /></div>
-                            <h3 className="text-sm font-bold text-zinc-900">기존 내가 작성한 내용 기반 생성</h3>
-                            <p className="text-xs leading-5 text-zinc-500">내가 과거에 작성한 Work Map과 SOP를 새 독립 초안으로 불러옵니다. 원본은 보존되고 승인·검토 상태는 초기화됩니다.</p>
+                            <h3 className="text-sm font-bold text-zinc-900">기존 작성 기반</h3>
+                            <p className="text-xs leading-5 text-zinc-500"><span className="font-semibold text-zinc-700">시작점:</span> 내 과거 기록을 복제합니다.</p>
                             <span className="mt-auto inline-flex items-center gap-1 text-xs font-bold text-amber-600">내 기록 보기 →</span>
                         </button>
 
@@ -310,12 +350,13 @@ export function SopMemberHomeView({ navigate, fetchImpl }: { navigate: (href: st
                             type="button"
                             aria-disabled="true"
                             aria-describedby="work-material-disabled-note"
+                            title="향후 제공 예정 — 파일 업로드·영상 캡처 기반 시작점은 아직 지원하지 않습니다."
                             onClick={(event) => event.preventDefault()}
                             className="flex cursor-not-allowed flex-col items-start gap-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-5 text-left opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-zinc-400"
                         >
                             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-300 text-white"><FileUp className="h-5 w-5" /></div>
-                            <h3 className="text-sm font-bold text-zinc-700">실무 자료 기반 생성</h3>
-                            <p id="work-material-disabled-note" className="text-xs leading-5 text-zinc-500">파일 업로드 또는 영상 캡처를 기반으로 SOP를 생성합니다.</p>
+                            <h3 className="text-sm font-bold text-zinc-700">실무 자료 기반</h3>
+                            <p id="work-material-disabled-note" className="text-xs leading-5 text-zinc-500"><span className="font-semibold text-zinc-600">시작점:</span> 파일 업로드 또는 영상 캡처 (준비 중).</p>
                             <span className="mt-auto inline-flex items-center rounded-md bg-zinc-200 px-2 py-1 text-[10px] font-bold text-zinc-600">향후 제공 (TBD)</span>
                         </button>
                     </div>

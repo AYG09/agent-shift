@@ -1,7 +1,7 @@
 import { buildSopGenerationRequestBody, type SopGenerationRequestBodyParams } from './sop-ai-request';
 import { generateSopViaApi, type GenerateSopViaApiParams, type GenerateSopViaApiResult } from './sop-ai-generation';
 import { withTaskScope } from './sop-task-library';
-import { toWorkLibrarySelection, type ConfirmWorkMapResult } from './sop-work-map-draft';
+import { toWorkLibrarySelection, selectWorkMapDraftOrigin, type ConfirmWorkMapResult } from './sop-work-map-draft';
 import type { SopDocument, WorkLibrarySelection } from './sop-types';
 
 type Navigate = (href: string) => void;
@@ -60,6 +60,15 @@ export function enterTaskCreationPath(params: {
  * — a future change to "what happens after Work Map confirmation" could land in
  * one projection and silently miss the other (see sop-work-map-draft.ts's module
  * docstring on why simple/detailed must never fork behavior on the shared draft).
+ *
+ * W4-04C: a clone-family draft (`colleague-template` | `own-prior`) already carries
+ * an already-generated SOP — routing it through `/sop/setup` would regenerate and
+ * discard that content. Only `task-recommendation` (and legacy drafts with no
+ * `origin`, which `selectWorkMapDraftOrigin` also reads as `task-recommendation`)
+ * takes the generation seam; clone-family drafts go straight to Workspace where
+ * their existing SOP already lives. `setWorkLibrary` still runs for every origin so
+ * downstream generation-scope reads (`workLibrary.sourceType`) stay consistent even
+ * though clone-family origins never call the generation API from here.
  */
 export function confirmWorkMapAndProceed(params: {
     confirmWorkMap: () => ConfirmWorkMapResult | null;
@@ -69,7 +78,8 @@ export function confirmWorkMapAndProceed(params: {
     const result = params.confirmWorkMap();
     if (result?.ok) {
         params.setWorkLibrary(toWorkLibrarySelection(result.draft));
-        params.navigate('/sop/setup');
+        const origin = selectWorkMapDraftOrigin(result.draft);
+        params.navigate(origin === 'task-recommendation' ? '/sop/setup' : '/sop/workspace');
     }
     return result;
 }

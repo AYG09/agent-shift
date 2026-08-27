@@ -246,7 +246,12 @@ export async function cloneSopTemplate(params: { member: SopMember; templateId: 
         const res = await (params.fetchImpl ?? fetch)(`/api/sop/templates/${encodeURIComponent(params.templateId)}/clone`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...buildSopActorHeaders(params.member) },
-            body: JSON.stringify({ member: params.member }),
+            // The route requires `member.id` specifically (not the employeeId fallback) as a
+            // second, independent identity check against the actor header — a login-form
+            // member has no `.id` (the form never collects one), so send the same resolved
+            // identifier the actor header already carries rather than the raw, possibly
+            // id-less member object.
+            body: JSON.stringify({ member: { ...params.member, id: memberId(params.member) } }),
         });
         if (!res.ok) return { success: false, error: await readErrorMessage(res, '동료 SOP 템플릿 복제에 실패했습니다.') };
         const parsed = SopDocumentSchema.safeParse((await res.json()).document);

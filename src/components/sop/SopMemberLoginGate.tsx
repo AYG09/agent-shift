@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldCheck, LogIn, ArrowRight } from 'lucide-react';
 import { useSopPrototypeStore } from '@/lib/sop-prototype-store';
@@ -9,10 +9,11 @@ import {
     REQUIRED_MEMBER_IDENTITY_FIELDS,
     SOP_INTAKE_ROUTES,
     isAuthenticated,
-    resolvePostLoginRoute,
+    resolveMemberLandingRoute,
     type MemberIdentityValidation,
     type RequiredMemberIdentityField,
 } from '@/lib/sop-member-intake';
+import { listMySopRecords } from '@/lib/sop-record-client';
 import type { SopMember } from '@/lib/sop-types';
 
 /**
@@ -45,7 +46,7 @@ export function SopMemberLoginGate() {
     );
 }
 
-export function SopMemberLoginGateView({ navigate }: { navigate: (href: string) => void }) {
+export function SopMemberLoginGateView({ navigate, fetchImpl }: { navigate: (href: string) => void; fetchImpl?: typeof fetch }) {
     const memberSession = useSopPrototypeStore((state) => state.memberSession);
     const memberContext = useSopPrototypeStore((state) => state.memberContext);
     const taskRecommendation = useSopPrototypeStore((state) => state.taskRecommendation);
@@ -57,12 +58,32 @@ export function SopMemberLoginGateView({ navigate }: { navigate: (href: string) 
     const [fieldErrors, setFieldErrors] = useState<Partial<Record<RequiredMemberIdentityField, string>>>({});
     const fieldRefs = useRef<Partial<Record<RequiredMemberIdentityField, HTMLInputElement | null>>>({});
 
+    // INT-LAND-001: "계속 진행"이 Home의 착지 판정과 같은 함수(resolveMemberLandingRoute)를
+    // 쓰게 맞춘다 — 그렇지 않으면 "로그인 직후 위치"와 "Home 재방문 위치"가 어긋난다
+    // (예: record가 있는 복귀 구성원이 로그인 화면에 다시 들어와 "계속 진행"을 누르면
+    // /sop/context로 보내지만, 같은 구성원이 새로 /sop에 들어가면 Home에 머문다). 이
+    // 화면은 Home처럼 record 목록을 이미 갖고 있지 않으므로 Home과 같은 client
+    // (`listMySopRecords`)로 한 번 조회한다 — 새 API를 추가하지 않는다. 조회가 아직
+    // 끝나지 않았거나 실패해도 안전하다: hasStoredRecords의 기본값 false가 만드는
+    // 목적지(/sop/context)는 인증된 구성원에게 항상 유효한 착지점이기 때문이다.
+    const [hasStoredRecords, setHasStoredRecords] = useState(false);
+    useEffect(() => {
+        if (!isAuthenticated(memberSession)) return;
+        let cancelled = false;
+        listMySopRecords({ member: memberSession.member as SopMember, fetchImpl }).then((result) => {
+            if (!cancelled && result.success) setHasStoredRecords(result.data.length > 0);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [memberSession, fetchImpl]);
+
     // REQ-AUTH-001: 이미 로그인한 구성원이 /sop/login에 다시 들어와도 접근 자체는
     // 막지 않는다(로그아웃 후 다른 구성원으로 들어오는 경로이기도 하다) — 대신 화면이
     // 안내와 다음 행동을 제공한다 (SPEC §2.2, sop-member-intake.ts 주석 참고).
     if (isAuthenticated(memberSession)) {
         const member = memberSession.member as SopMember;
-        const continueRoute = resolvePostLoginRoute({ session: memberSession, memberContext, recommendation: taskRecommendation, hasWorkMapDraft });
+        const continueRoute = resolveMemberLandingRoute({ session: memberSession, memberContext, recommendation: taskRecommendation, hasWorkMapDraft, hasStoredRecords });
         return (
             <div style={{ minHeight: '100%' }} className="flex min-h-[calc(100vh-0px)] items-center justify-center bg-slate-50 p-8">
                 <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm">

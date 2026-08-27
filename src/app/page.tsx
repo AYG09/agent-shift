@@ -102,7 +102,9 @@ export default function Home() {
 
                     <div className="flex justify-center gap-3">
                         <button
-                            onClick={() => router.push('/sop/setup')}
+                            // '/sop/setup'이 아니라 '/sop'로 보낸다: Home이 세션 상태로 착지점을 판정하므로,
+                            // 여기서 목적지를 다시 하드코딩하면 같은 종류의 진입 결함을 재생산한다.
+                            onClick={() => router.push('/sop')}
                             className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold rounded-xl text-xs sm:text-sm transition-all shadow-md shadow-indigo-500/20"
                         >
                             <Sparkles className="w-4 h-4 text-amber-300" />

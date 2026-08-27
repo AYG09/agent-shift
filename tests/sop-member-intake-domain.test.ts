@@ -192,6 +192,15 @@ assert.equal(useSopPrototypeStore.getState().memberSession.status, 'anonymous', 
 const accepted = useSopPrototypeStore.getState().submitMemberIdentity({ employeeId: 'E1001', name: '김구성', organization: '인재확보팀', jobRole: 'Talent Acquisition' });
 assert.equal(accepted.ok, true);
 assert.equal(useSopPrototypeStore.getState().memberSession.status, 'authenticated');
+// W4-05가 브라우저 검증에서 발견한 회귀: submitMemberIdentity가 memberInfo를 병합
+// (`{...old, ...new}`)하면, resetStore가 심어 둔 샘플 memberInfo(CUSTOMER_SOP_MEMBER,
+// id: 'member-001')의 `id`가 로그인 폼이 채우지 않는 필드라서 새 로그인 뒤에도 남는다.
+// listMySopRecords 등 record 조회는 `member.id || member.employeeId` 순으로 식별자를
+// 고르므로, 남은 `id`가 실제 로그인한 구성원의 employeeId보다 우선해 계속 다른(샘플)
+// 구성원의 record를 조회하게 되어 INT-LAND-001의 착지 판정이 항상 "record 0건"으로
+// 나오는 방식으로 깨진다 — 완전 대체여야 한다.
+assert.equal(useSopPrototypeStore.getState().memberInfo.id, undefined, 'memberInfo는 이전 샘플의 id를 물려받지 않는다(완전 대체, 병합 아님).');
+assert.equal(useSopPrototypeStore.getState().memberInfo.employeeId, 'E1001', 'memberInfo.employeeId는 실제 로그인한 구성원의 값이다.');
 
 assert.equal(useSopPrototypeStore.getState().submitMemberContext(), null, '공백 맥락은 어떤 상태도 만들지 않는다.');
 assert.equal(useSopPrototypeStore.getState().taskRecommendation.status, 'idle');

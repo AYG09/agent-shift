@@ -38,6 +38,7 @@ export function SopOwnPriorPicker({
 }) {
     const memberInfo = useSopPrototypeStore((state) => state.memberInfo);
     const setDocument = useSopPrototypeStore((state) => state.setDocument);
+    const adoptClonedWorkMap = useSopPrototypeStore((state) => state.adoptClonedWorkMap);
     const customerReviewMode = useSopPrototypeStore((state) => state.customerReviewMode);
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -67,7 +68,11 @@ export function SopOwnPriorPicker({
             return;
         }
         onClose();
-        navigate('/sop/workspace');
+        // §2.4: 과거 작성 복제본도 공통 편집 흐름을 타야 하므로 Work Map 편집 단계를
+        // 거친다. workLibrary 스냅샷에서 선택 Task를 찾을 수 없는 legacy 문서 등으로
+        // 초안 채택이 실패하면(false) 복제 자체는 실패시키지 않고 기존대로 Workspace로
+        // 보낸다.
+        navigate(adoptClonedWorkMap(result.data) ? '/sop/work-map/simple' : '/sop/workspace');
     };
 
     return (

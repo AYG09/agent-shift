@@ -24,6 +24,7 @@ import type { SopTemplateSummary } from '@/lib/sop-template';
 export function SopColleagueTemplatePicker({ onClose, navigate, fetchImpl }: { onClose: () => void; navigate: (href: string) => void; fetchImpl?: typeof fetch }) {
     const memberInfo = useSopPrototypeStore((state) => state.memberInfo);
     const setDocument = useSopPrototypeStore((state) => state.setDocument);
+    const adoptClonedWorkMap = useSopPrototypeStore((state) => state.adoptClonedWorkMap);
     const customerReviewMode = useSopPrototypeStore((state) => state.customerReviewMode);
 
     const [templates, setTemplates] = useState<SopTemplateSummary[] | null>(null);
@@ -79,7 +80,11 @@ export function SopColleagueTemplatePicker({ onClose, navigate, fetchImpl }: { o
             return;
         }
         onClose();
-        navigate('/sop/workspace');
+        // §2.3: 동료 SOP 복제본도 Activity 이후 내용을 편집할 수 있어야 하므로 Work Map
+        // 편집 단계를 거친다. workLibrary 스냅샷에서 선택 Task를 찾을 수 없는 legacy
+        // 문서 등으로 초안 채택이 실패하면(false) 복제 자체는 실패시키지 않고 기존대로
+        // Workspace로 보낸다.
+        navigate(adoptClonedWorkMap(result.data) ? '/sop/work-map/simple' : '/sop/workspace');
     };
 
     return (

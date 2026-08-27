@@ -37,15 +37,23 @@ function findJobForTask(taskId: string) {
  * Why this is safe in production does NOT depend on whether Next.js passes a
  * second argument — it does pass a route context (`{ params }`) to every
  * handler, dynamic segments or not. It is safe because that context object
- * carries no `generate` property, so `testOnly?.generate` is undefined for
+ * carries no `generate` property, so `testOnly.generate` is undefined for
  * every real request and generateStandardDraftDocument falls back to its real
  * implementation exactly as before. An HTTP request cannot supply a function,
  * so there is no way to reach the seam from outside the process. `params` is
  * carried along (never read) only so this stays structurally compatible with
  * the `{ params: Promise<{}> }` shape Next's generated route-type validator
- * expects.
+ * expects — both the second parameter itself and its `params` field must be
+ * genuinely required (no `?`, no default value anywhere in the chain).
+ * Next 16's webpack route-type checker infers a `| undefined` union the
+ * moment any of these is optional (default values included — TypeScript's
+ * own `Parameters<>` extraction treats a defaulted parameter as optional
+ * too), and that union is incompatible with `RouteContext`. Every test call
+ * site must now pass this argument explicitly, `params` included; real
+ * Next.js requests are unaffected since Next always supplies a route
+ * context regardless of dynamic segments.
  */
-export async function POST(request: NextRequest, testOnly?: { params?: Promise<Record<string, never>>; generate?: SopStandardDraftGenerate }) {
+export async function POST(request: NextRequest, testOnly: { params: Promise<Record<string, never>>; generate?: SopStandardDraftGenerate }) {
     const actorResult = readSopActorContext(request);
     if (!actorResult.ok) return actorResult.response;
     const { actor } = actorResult;

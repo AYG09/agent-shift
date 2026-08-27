@@ -11,7 +11,8 @@ import { WorkLibrarySelector } from '../src/components/sop/WorkLibrarySelector';
 import { SAMPLE_SOP_DOCUMENT, CUSTOMER_WORK_LIBRARY, buildTaskGateSampleDocument } from '../src/lib/sop-sample-data';
 import { withTaskScope, getScopedActivities } from '../src/lib/sop-task-library';
 import { enterTaskCreationPath } from '../src/lib/sop-setup-actions';
-import { SOP_INTAKE_ROUTES } from '../src/lib/sop-member-intake';
+import { SOP_INTAKE_ROUTES, authenticateMemberSession } from '../src/lib/sop-member-intake';
+import { createWorkMapDraftFromCatalog } from '../src/lib/sop-work-map-draft';
 import { lookupExistingSopRecord, saveSopDocumentToServer } from '../src/lib/sop-server-save';
 import { computeSubActionCapacity } from '../src/lib/sop-subaction-capacity';
 import { POST as sopApiCreate } from '../src/app/api/sop/route';
@@ -306,35 +307,256 @@ async function run() {
     check(renderedHomeText.includes('"0"'), 'record가 없을 때 상태 위젯에 0이 표시됨 (가짜 건수를 만들지 않음)');
 
     const allButtons = homeRenderer.root.findAllByType('button');
-    const taskCardButton = allButtons.find((b) => extractText(b.props.children).includes('Task 기반 생성'));
-    const colleagueCardButton = allButtons.find((b) => extractText(b.props.children).includes('동료 SOP 기반 생성'));
-    const tbdCardButton = allButtons.find((b) => extractText(b.props.children).includes('실무 자료 기반 생성'));
-    check(Boolean(taskCardButton && colleagueCardButton && tbdCardButton), '세 개의 SOP 생성 경로 카드(Task/동료/실무 자료)가 모두 렌더링됨');
+    const taskCardButton = allButtons.find((b) => extractText(b.props.children).includes('Task 기반'));
+    const colleagueCardButton = allButtons.find((b) => extractText(b.props.children).includes('동료 SOP 기반'));
+    const tbdCardButton = allButtons.find((b) => extractText(b.props.children).includes('실무 자료 기반'));
+    check(Boolean(taskCardButton && colleagueCardButton && tbdCardButton), '세 개의 시작점 카드(Task/동료/실무 자료)가 모두 렌더링됨');
+    check(extractText(taskCardButton!.props.children).includes('권장 시작점'), 'Task 기반 카드에만 "권장 시작점" 배지가 붙어 시각적 primary임을 나타냄');
+    check(!extractText(colleagueCardButton!.props.children).includes('권장 시작점'), '동료 SOP 기반 카드에는 "권장 시작점" 배지가 없음 (부차적 기능처럼 보이지 않되 primary도 아님)');
 
+    // 마운트 시점에 INT-LAND-001 착지 판정이 이미 한 번 돈다 (이 렌더는 anonymous
+    // 기본 상태이므로 그 판정 결과는 /sop/login) — 아래 카드 클릭 검증은 그 이후에
+    // "추가로" 발생하는 navigate 호출만 델타로 비교한다.
+    const navigationCountAfterMount = navigations.length;
     act(() => {
         taskCardButton!.props.onClick({ preventDefault: () => {} });
     });
-    // 08 §통합 지시 1·2: Task 기반 생성의 새 진입점은 /sop/setup의 혼합 화면이 아니라
+    // 08 §통합 지시 1·2: Task 기반의 새 진입점은 /sop/setup의 혼합 화면이 아니라
     // 새 순차 흐름이다. 이 테스트는 anonymous 기본 상태에서 시작하므로 /sop/login으로
     // 이동한다 — 이미 로그인한 구성원의 resolvePostLoginRoute 분기는
     // tests/sop-member-login-context.test.tsx가 별도로 증명한다.
-    check(navigations.at(-1) === SOP_INTAKE_ROUTES.login, 'Task 기반 생성 카드를 클릭하면(비로그인) /sop/login으로 이동함');
+    check(navigations.at(-1) === SOP_INTAKE_ROUTES.login, 'Task 기반 카드를 클릭하면(비로그인) /sop/login으로 이동함');
 
     const allInputs = homeRenderer.root.findAllByType('input');
-    check(!allInputs.some((i) => i.props.type === 'file'), 'TBD(실무 자료 기반 생성) 카드에는 파일 input이 전혀 없음');
+    check(!allInputs.some((i) => i.props.type === 'file'), 'TBD(실무 자료 기반) 카드에는 파일 input이 전혀 없음');
     check(tbdCardButton!.props['aria-disabled'] === 'true', 'TBD 카드는 aria-disabled로 명시적으로 비활성 상태를 표시함');
+    check(typeof tbdCardButton!.props.title === 'string' && tbdCardButton!.props.title.length > 0, 'TBD 카드는 비활성 이유를 title로 제공함 (디자인 수용 기준)');
 
     const fetchCallCountBeforeTbdClick = fetchCalls.length;
+    const navigationCountBeforeTbdClick = navigations.length;
     act(() => {
         tbdCardButton!.props.onClick({ preventDefault: () => {} });
     });
     await flushEffects();
     check(fetchCalls.length === fetchCallCountBeforeTbdClick, 'TBD 카드를 클릭해도 네트워크(API) 호출이 전혀 발생하지 않음');
-    check(navigations.length === 1, 'TBD 카드를 클릭해도 아무 곳으로도 이동하지 않음 (여전히 /sop/login 1건만 기록됨)');
+    check(navigations.length === navigationCountBeforeTbdClick, 'TBD 카드를 클릭해도 추가 이동이 전혀 발생하지 않음');
+    check(navigationCountAfterMount >= 1, 'INT-LAND-001: anonymous 상태로 마운트하면 착지 판정이 즉시 한 번 돌아 /sop/login으로 이동함 (아래 별도 섹션에서 hydration·인증·record 분기를 전부 증명함)');
 
     act(() => {
         homeRenderer.unmount();
     });
+
+    // ---------------------------------------------------------
+    // Component: INT-LAND-001 — Home wires W4-01's resolveMemberLandingRoute directly on
+    // mount (no re-derived judgment logic in the component). Truth table exercised here:
+    //   hydrated=false                                  -> no navigation at all
+    //   authenticated, records=0,  no progress           -> /sop/context
+    //   authenticated, records>=1, no progress           -> /sop (stays, no navigation)
+    //   authenticated, confirmed context (progress)      -> /sop/recommendation (resume)
+    //   authenticated, Work Map draft (further progress) -> /sop/work-map/simple (resume)
+    // ---------------------------------------------------------
+    console.log('Component: INT-LAND-001 landing determination on Home mount...');
+
+    const landingMember: SopMember = { id: 'landing-member', employeeId: 'EMP-LAND', name: '착지 테스트', jobRole: '채용담당자', organization: 'Org' };
+
+    function landingFetch(records: SopRecord[]): typeof fetch {
+        return (async (input: RequestInfo | URL) => {
+            const url = typeof input === 'string' ? input : input.toString();
+            if (url.endsWith('/api/sop')) return jsonResponse({ records });
+            if (url.endsWith('/api/sop/templates')) return jsonResponse({ templates: [] });
+            return jsonResponse({ error: 'unhandled test route' }, 404);
+        }) as unknown as typeof fetch;
+    }
+
+    // Branch: hydration not yet finished -> no navigation at all, even though every other
+    // signal (authenticated, 0 records, no progress) would otherwise redirect to /sop/context.
+    // 복원 전 memberSession 기본값(anonymous)은 신뢰할 수 없다는 규칙과 별개로, 이 분기는
+    // "복원이 끝나기 전에는 이동 판정 자체를 하지 않는다"는 게이트를 직접 증명한다.
+    {
+        useSopPrototypeStore.getState().resetStore();
+        useSopPrototypeStore.setState({
+            memberInfo: landingMember,
+            memberSession: authenticateMemberSession(landingMember, new Date().toISOString()),
+            document: null,
+        });
+        const originalHasHydrated = useSopPrototypeStore.persist.hasHydrated;
+        useSopPrototypeStore.persist.hasHydrated = () => false;
+        const navs: string[] = [];
+        const renderer = renderComponent(
+            React.createElement(SopMemberHomeView, { navigate: (href: string) => navs.push(href), fetchImpl: landingFetch([]) })
+        );
+        await flushEffects();
+        check(navs.length === 0, 'INT-LAND-001: hydration이 끝나기 전에는 (인증 + record 0건이라도) 어떤 이동도 발생하지 않는다');
+        useSopPrototypeStore.persist.hasHydrated = originalHasHydrated;
+        act(() => {
+            renderer.unmount();
+        });
+    }
+
+    // Regression (W4-05 browser finding): the record-fetch effect must not run on the
+    // pre-hydration default memberInfo. Before the fix, this effect depended only on
+    // `[memberInfo.id, memberInfo.employeeId]` — since resetStore() leaves memberInfo at the
+    // default sample identity (CUSTOMER_SOP_MEMBER) until persist hydration actually replaces
+    // it, the effect fired once immediately with that WRONG identity (getting back an empty
+    // record list for a member who isn't really "logged in" yet), then fired again once
+    // hydration corrected memberInfo. The second fetch got the right answer, but
+    // INT-LAND-001's `landingCheckedRef` locks in a decision the first time `records !== null`
+    // — which was already the wrong, empty result. A returning member with real records was
+    // therefore bounced to /sop/context every time. This test reproduces the exact sequence
+    // (hydrated=false + default memberInfo at mount, then both flip together, mirroring how
+    // zustand-persist replaces the whole rehydrated slice atomically) and asserts there is
+    // exactly one fetch, using the POST-hydration identity, never the pre-hydration default.
+    {
+        useSopPrototypeStore.getState().resetStore();
+        const originalHasHydrated = useSopPrototypeStore.persist.hasHydrated;
+        useSopPrototypeStore.persist.hasHydrated = () => false;
+
+        const defaultActorId = buildSopActorHeaders(useSopPrototypeStore.getState().memberInfo)['x-sop-actor-id'];
+        const realActorId = buildSopActorHeaders(landingMember)['x-sop-actor-id'];
+        const requestedActorIds: string[] = [];
+        const raceFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = typeof input === 'string' ? input : input.toString();
+            const actorId = new Headers(init?.headers as HeadersInit | undefined).get('x-sop-actor-id') ?? '';
+            if (url.endsWith('/api/sop')) {
+                requestedActorIds.push(actorId);
+                const body = {
+                    records: actorId === realActorId
+                        ? [makeRecord({
+                              id: 'race-record', memberId: landingMember.id, lifecycleStatus: 'draft',
+                              taskId: SAMPLE_SOP_DOCUMENT.workLibrary.taskId, taskName: SAMPLE_SOP_DOCUMENT.workLibrary.taskName,
+                              document: documentFor('race-record', { id: landingMember.id }),
+                          })]
+                        : [],
+                };
+                return jsonResponse(body);
+            }
+            if (url.endsWith('/api/sop/templates')) return jsonResponse({ templates: [] });
+            return jsonResponse({ error: 'unhandled test route' }, 404);
+        }) as unknown as typeof fetch;
+
+        const navs: string[] = [];
+        const renderer = renderComponent(
+            React.createElement(SopMemberHomeView, { navigate: (href: string) => navs.push(href), fetchImpl: raceFetch })
+        );
+        await flushEffects();
+        check(requestedActorIds.length === 0, 'hydration이 끝나기 전에는 (기본 memberInfo로도) record 조회 자체가 발생하지 않는다');
+
+        // Hydration finishing replaces the relevant slice atomically — hasHydrated flips to
+        // true in the same act() as memberSession/memberInfo updating to the real values.
+        act(() => {
+            useSopPrototypeStore.persist.hasHydrated = () => true;
+            useSopPrototypeStore.setState({
+                memberInfo: landingMember,
+                memberSession: authenticateMemberSession(landingMember, new Date().toISOString()),
+                document: null,
+            });
+        });
+        await flushEffects();
+        await flushEffects();
+
+        check(requestedActorIds.length === 1, `hydration 완료 후 record 조회는 정확히 한 번만 발생한다 (실제: ${requestedActorIds.length}회)`);
+        check(requestedActorIds[0] === realActorId && requestedActorIds[0] !== defaultActorId, `그 한 번의 조회는 복원된 실제 신원(${realActorId})으로 나가고, 초기 샘플 신원(${defaultActorId})으로는 나가지 않는다`);
+        check(navs.length === 0, 'record가 있는 신원으로 정상 조회됐으므로 /sop에 머문다(이동 없음) — 착지 판정이 올바른 데이터로 내려졌다는 증거');
+
+        useSopPrototypeStore.persist.hasHydrated = originalHasHydrated;
+        act(() => {
+            renderer.unmount();
+        });
+    }
+
+    // Branch: authenticated + 0 stored records + no in-progress intake -> /sop/context
+    // (a brand-new member never sees an empty dashboard first).
+    {
+        useSopPrototypeStore.getState().resetStore();
+        useSopPrototypeStore.setState({
+            memberInfo: landingMember,
+            memberSession: authenticateMemberSession(landingMember, new Date().toISOString()),
+            document: null,
+        });
+        const navs: string[] = [];
+        const renderer = renderComponent(
+            React.createElement(SopMemberHomeView, { navigate: (href: string) => navs.push(href), fetchImpl: landingFetch([]) })
+        );
+        await flushEffects();
+        check(navs.length === 1 && navs[0] === SOP_INTAKE_ROUTES.context, 'INT-LAND-001: 인증 + record 0건 + 진행 없음 -> /sop/context로 즉시 이동');
+        act(() => {
+            renderer.unmount();
+        });
+    }
+
+    // Branch: authenticated + 1+ stored records + no in-progress intake -> stays on /sop
+    // (no navigation at all) — a returning member with real history lands on Home.
+    {
+        useSopPrototypeStore.getState().resetStore();
+        useSopPrototypeStore.setState({
+            memberInfo: landingMember,
+            memberSession: authenticateMemberSession(landingMember, new Date().toISOString()),
+            document: null,
+        });
+        const returningRecord = makeRecord({
+            id: 'landing-returning', memberId: landingMember.id, lifecycleStatus: 'draft',
+            taskId: SAMPLE_SOP_DOCUMENT.workLibrary.taskId, taskName: SAMPLE_SOP_DOCUMENT.workLibrary.taskName,
+            document: documentFor('landing-returning', { id: landingMember.id }),
+        });
+        const navs: string[] = [];
+        const renderer = renderComponent(
+            React.createElement(SopMemberHomeView, { navigate: (href: string) => navs.push(href), fetchImpl: landingFetch([returningRecord]) })
+        );
+        await flushEffects();
+        check(navs.length === 0, 'INT-LAND-001: 인증 + record 1건 이상 + 진행 없음 -> /sop에 머문다 (이동 없음)');
+        act(() => {
+            renderer.unmount();
+        });
+    }
+
+    // Branch: authenticated + a confirmed work context (in-progress intake, no Work Map
+    // draft yet) -> resumes at the recommendation step, regardless of stored-record count.
+    {
+        useSopPrototypeStore.getState().resetStore();
+        useSopPrototypeStore.setState({
+            memberInfo: landingMember,
+            memberSession: authenticateMemberSession(landingMember, new Date().toISOString()),
+            memberContext: { draft: '진행 중 업무맥락', confirmedText: '진행 중 업무맥락', confirmedAt: new Date().toISOString() },
+            document: null,
+        });
+        const navs: string[] = [];
+        const renderer = renderComponent(
+            React.createElement(SopMemberHomeView, { navigate: (href: string) => navs.push(href), fetchImpl: landingFetch([]) })
+        );
+        await flushEffects();
+        check(
+            navs.length === 1 && navs[0] === SOP_INTAKE_ROUTES.recommendation,
+            'INT-LAND-001: 확정 업무맥락(진행 중 intake)이 있으면 record 유무와 무관하게 그 진행 지점(추천)으로 복귀한다'
+        );
+        act(() => {
+            renderer.unmount();
+        });
+    }
+
+    // Branch: authenticated + an existing Work Map draft (further-along in-progress
+    // intake) -> resumes directly at the Work Map simple view.
+    {
+        useSopPrototypeStore.getState().resetStore();
+        const draft = createWorkMapDraftFromCatalog({ task: CUSTOMER_WORK_LIBRARY.taskCatalog[0], contextText: '초안 업무맥락', now: new Date().toISOString() });
+        useSopPrototypeStore.setState({
+            memberInfo: landingMember,
+            memberSession: authenticateMemberSession(landingMember, new Date().toISOString()),
+            workMapDraft: draft,
+            document: null,
+        });
+        const navs: string[] = [];
+        const renderer = renderComponent(
+            React.createElement(SopMemberHomeView, { navigate: (href: string) => navs.push(href), fetchImpl: landingFetch([]) })
+        );
+        await flushEffects();
+        check(
+            navs.length === 1 && navs[0] === SOP_INTAKE_ROUTES.workMapSimple,
+            'INT-LAND-001: 진행 중인 Work Map 초안이 있으면 그 지점(work-map/simple)으로 복귀한다'
+        );
+        act(() => {
+            renderer.unmount();
+        });
+    }
 
     // ---------------------------------------------------------
     // Component: colleague-template card opens the picker, which never calls fetch
@@ -892,7 +1114,12 @@ async function run() {
         await Promise.resolve();
         await Promise.resolve();
     });
-    check(ownPriorNavigations.at(-1) === '/sop/workspace', 'A successful clone navigates to /sop/workspace');
+    // W4-04C moved the clone landing point from Workspace to the Work Map editing step
+    // (adoptClonedWorkMap succeeds because documentFor's workLibrary snapshot resolves the
+    // source Task) so Activity/SOP content stays editable per §2.3/§2.4 — see
+    // W4_05_INTEGRATION.md's "반드시 먼저 해소할 알려진 충돌" for why this assertion moved
+    // rather than being deleted.
+    check(ownPriorNavigations.at(-1) === '/sop/work-map/simple', 'A successful clone navigates to the Work Map editing step (/sop/work-map/simple), not straight to Workspace');
     const clonedDocumentAfterPicker = useSopPrototypeStore.getState().document;
     check(Boolean(clonedDocumentAfterPicker) && clonedDocumentAfterPicker!.id !== 'own-prior-source', 'The cloned document loaded into the Store has a brand-new id, distinct from the source');
     check(clonedDocumentAfterPicker?.sourceRecordId === 'own-prior-source', 'The cloned document records sourceRecordId provenance pointing at the source');
@@ -900,6 +1127,40 @@ async function run() {
 
     const sourceStillIntact = await sopRepository.getById('own-prior-source');
     check(sourceStillIntact?.document.title === SAMPLE_SOP_DOCUMENT.title, 'Cloning never mutates the original source record');
+
+    // The Work Map landing point above is conditional on adoptClonedWorkMap finding the
+    // source Task in the cloned document's workLibrary snapshot. A document whose Task can no
+    // longer be resolved (e.g. a legacy record) must not strand the member — it still falls
+    // back to Workspace, exactly like before W4-04C. adoptClonedWorkMap's own null-return
+    // contract is proven directly in tests/sop-work-map-domain.test.ts; this only proves the
+    // picker's fallback wiring, so the Store action is stubbed rather than constructing an
+    // actual unresolvable document (the real clone API's schema validation rejects a taskId
+    // absent from its own taskCatalog before the picker ever sees it).
+    const originalAdoptClonedWorkMapForFallback = useSopPrototypeStore.getState().adoptClonedWorkMap;
+    useSopPrototypeStore.setState({ adoptClonedWorkMap: () => false });
+    const fallbackMember: SopMember = { id: 'own-prior-fallback-owner', name: '레거시 구성원', jobRole: '채용담당자', organization: 'Org' };
+    useSopPrototypeStore.setState({ memberInfo: fallbackMember, document: null });
+    const fallbackRecord = makeRecord({
+        id: 'own-prior-fallback-source', memberId: fallbackMember.id, lifecycleStatus: 'draft', taskId: 'task-recruitment-ops', taskName: '채용 운영',
+        document: documentFor('own-prior-fallback-source', { id: fallbackMember.id }), updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    await sopRepository.create({ memberId: fallbackMember.id!, organizationId: 'org-own-prior-test', document: fallbackRecord.document });
+    const fallbackNavigations: string[] = [];
+    const fallbackRenderer = renderComponent(
+        React.createElement(SopOwnPriorPicker, { records: [fallbackRecord], onClose: () => {}, navigate: (href: string) => fallbackNavigations.push(href), fetchImpl: ownPriorFetch })
+    );
+    await flushEffects();
+    const fallbackCard = fallbackRenderer.root.findAllByType('button').find((b) => extractText(b.props.children).includes(SAMPLE_SOP_DOCUMENT.title));
+    act(() => { fallbackCard!.props.onClick(); });
+    const fallbackCloneButton = fallbackRenderer.root.findAllByType('button').find((b) => extractText(b.props.children).includes('새 초안 만들기'));
+    await act(async () => {
+        fallbackCloneButton!.props.onClick();
+        await Promise.resolve();
+        await Promise.resolve();
+    });
+    check(fallbackNavigations.at(-1) === '/sop/workspace', 'A document whose Task cannot be resolved into a Work Map draft still falls back to /sop/workspace instead of stranding the clone');
+    act(() => { fallbackRenderer.unmount(); });
+    useSopPrototypeStore.setState({ adoptClonedWorkMap: originalAdoptClonedWorkMapForFallback });
 
     act(() => {
         ownPriorRenderer.unmount();
@@ -946,8 +1207,8 @@ async function run() {
     await flushEffects();
 
     const rowsAllButtons = rowsRenderer.root.findAllByType('button');
-    const ownPriorCardButton = rowsAllButtons.find((b) => extractText(b.props.children).includes('기존 내가 작성한 내용 기반 생성'));
-    check(Boolean(ownPriorCardButton), 'Home renders a 4th, active "기존 내가 작성한 내용 기반 생성" creation-path card');
+    const ownPriorCardButton = rowsAllButtons.find((b) => extractText(b.props.children).includes('기존 작성 기반'));
+    check(Boolean(ownPriorCardButton), 'Home renders a 4th, active "기존 작성 기반" start-point card');
 
     const rowsText = JSON.stringify(rowsRenderer.toJSON());
     check(rowsText.includes('구체화해 주세요'), "A rejected row's rejection feedback is visible on the member Home");

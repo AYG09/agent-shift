@@ -210,26 +210,32 @@ async function run() {
     function standardDraftRequest(headers: Record<string, string>, body: unknown) {
         return { headers: new Headers(headers), json: async () => body } as unknown as Parameters<typeof sopApiStandardDrafts>[0];
     }
+    // The route's second (`testOnly`) parameter is a required DI seam — see the route's own
+    // docstring for why it can't be optional/defaulted. Real requests never carry a `generate`
+    // override; tests that don't need one still must supply this empty shape.
+    const noTestOverride: Parameters<typeof sopApiStandardDrafts>[1] = { params: Promise.resolve({}) };
 
-    const nonHrDraftAttempt = await sopApiStandardDrafts(standardDraftRequest(memberHeaders('some-member'), { taskId: 't', sourceRecordIds: ['x'] }));
+    const nonHrDraftAttempt = await sopApiStandardDrafts(standardDraftRequest(memberHeaders('some-member'), { taskId: 't', sourceRecordIds: ['x'] }), noTestOverride);
     check(nonHrDraftAttempt.status === 403, `A non-HR actor cannot request a standard draft, got ${nonHrDraftAttempt.status}`);
 
-    const malformedDraftAttempt = await sopApiStandardDrafts(standardDraftRequest(hrHeaders(), { taskId: '', sourceRecordIds: [] }));
+    const malformedDraftAttempt = await sopApiStandardDrafts(standardDraftRequest(hrHeaders(), { taskId: '', sourceRecordIds: [] }), noTestOverride);
     check(malformedDraftAttempt.status === 400, `An empty taskId/sourceRecordIds request is rejected at the schema layer, got ${malformedDraftAttempt.status}`);
 
-    const missingSourceDraftAttempt = await sopApiStandardDrafts(standardDraftRequest(hrHeaders(), { taskId: SAMPLE_SOP_DOCUMENT.workLibrary.taskId, sourceRecordIds: ['does-not-exist'] }));
+    const missingSourceDraftAttempt = await sopApiStandardDrafts(standardDraftRequest(hrHeaders(), { taskId: SAMPLE_SOP_DOCUMENT.workLibrary.taskId, sourceRecordIds: ['does-not-exist'] }), noTestOverride);
     check(missingSourceDraftAttempt.status === 400, `A nonexistent source record id is rejected before any AI call, got ${missingSourceDraftAttempt.status}`);
 
     const notApprovedDoc = await buildConfirmedDocument('hr-fixture-not-approved', 'hr-fixture-member-3');
     await sopApiCreate(apiRequest(memberHeaders('hr-fixture-member-3', 'org-hr-test'), { memberId: 'hr-fixture-member-3', organizationId: 'org-hr-test', document: notApprovedDoc }));
 
     const crossTaskAttempt = await sopApiStandardDrafts(
-        standardDraftRequest(hrHeaders(), { taskId: 'a-completely-different-task-id', sourceRecordIds: ['hr-fixture-approved-1'] })
+        standardDraftRequest(hrHeaders(), { taskId: 'a-completely-different-task-id', sourceRecordIds: ['hr-fixture-approved-1'] }),
+        noTestOverride
     );
     check(crossTaskAttempt.status === 400, `A sourceRecordId whose taskId does not match the requested taskId is rejected, got ${crossTaskAttempt.status}`);
 
     const notApprovedSourceAttempt = await sopApiStandardDrafts(
-        standardDraftRequest(hrHeaders(), { taskId: SAMPLE_SOP_DOCUMENT.workLibrary.taskId, sourceRecordIds: ['hr-fixture-not-approved'] })
+        standardDraftRequest(hrHeaders(), { taskId: SAMPLE_SOP_DOCUMENT.workLibrary.taskId, sourceRecordIds: ['hr-fixture-not-approved'] }),
+        noTestOverride
     );
     check(notApprovedSourceAttempt.status === 400, `A non-approved (draft) sourceRecordId is rejected — standard drafts only ever use approved sources, got ${notApprovedSourceAttempt.status}`);
 
@@ -297,6 +303,7 @@ async function run() {
         // combined condition — approval state or taskId — actually caused it).
         standardDraftRequest(hrHeaders(), { taskId: CUSTOMER_WORK_LIBRARY.taskId, sourceRecordIds: ['hr-fixture-approved-1', 'hr-fixture-approved-2'] }),
         {
+            params: Promise.resolve({}),
             generate: async () => {
                 fakeGenerateCalls += 1;
                 return compliantStandardDraftObject;

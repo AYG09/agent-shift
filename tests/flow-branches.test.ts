@@ -24,7 +24,7 @@ import {
     getDrilldownPromptAsIs,
     getDrilldownPromptToBe,
     getNodeSplitPrompt,
-} from '../src/app/api/ai/route';
+} from '../src/server/flow/flow-prompts';
 
 let passCount = 0;
 let failCount = 0;

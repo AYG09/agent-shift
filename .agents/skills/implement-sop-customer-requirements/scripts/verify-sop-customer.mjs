@@ -41,7 +41,6 @@ try {
 
 const forbiddenPrefixes = ['src/app/flow/', 'src/components/flow/'];
 const forbiddenFiles = new Set([
-  'tests/flow-branches.test.ts',
   'tests/flow-shapes.test.ts',
   'tests/terminal-node.test.tsx',
 ]);
@@ -49,11 +48,20 @@ const forbidden = changedFiles.filter((file) => forbiddenPrefixes.some((prefix) 
 forbidden.push(...changedFiles.filter((file) => forbiddenFiles.has(file)));
 if (forbidden.length > 0) failures.push(`/flow 보호 경로가 변경되었습니다: ${forbidden.join(', ')}`);
 
+// tests/flow-branches.test.ts는 W4-05 통합 지시(W4_00_MASTER_PARALLEL.md)가 명시적으로 승인한
+// 예외를 하나 갖는다: src/app/api/ai/route.ts의 비-route export를
+// src/server/flow/flow-prompts.ts로 무동작변경 이동하면서 이 테스트의 import 경로만 갱신하는
+// 것. 그 외의 어떤 변경(assertion·prompt 문자열·동작 로직)도 승인 대상이 아니다. 그래서 이
+// 파일은 여전히 하드 FAIL이 아니라 사람이 diff를 검토하는 sensitiveFiles(WARN) 쪽에 둔다 —
+// api/ai/route.ts와 같은 취급이다. 소급 허용이 아니라 이번 라운드의 실제 필요 때문에 갱신한
+// 것이며, npm run test:flow-branches / npm run test:shapes(무회귀 증명)가 항상 함께 통과해야
+// 한다.
 const sensitiveFiles = new Set([
   'src/app/api/ai/route.ts',
   'src/lib/graph-validation.ts',
   'src/lib/flow-shapes.ts',
   'src/lib/store.ts',
+  'tests/flow-branches.test.ts',
 ]);
 const sensitive = changedFiles.filter((file) => sensitiveFiles.has(file));
 if (sensitive.length > 0) warnings.push(`공유 고위험 파일 변경을 수동 검토하십시오: ${sensitive.join(', ')}`);

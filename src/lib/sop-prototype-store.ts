@@ -435,7 +435,16 @@ export const useSopPrototypeStore = create<SopPrototypeState>()(
                     set({
                         ...reset,
                         memberSession: authenticateMemberSession(validation.member, new Date().toISOString()),
-                        memberInfo: { ...get().memberInfo, ...validation.member },
+                        // 병합(`{...old, ...new}`)이 아니라 완전 대체다: 로그인 폼은 `id`를
+                        // 입력받지 않으므로, 병합했다면 초기/샘플 memberInfo(CUSTOMER_SOP_MEMBER,
+                        // id: 'member-001')의 `id`가 실제로 로그인한 구성원 뒤에 영영 남는다.
+                        // listMySopRecords 등 record 조회는 `member.id || member.employeeId`
+                        // 순으로 식별자를 고르므로, 그 남은 `id`가 실제 로그인한 구성원의
+                        // employeeId보다 우선해 다른 구성원(샘플)의 record를 계속 조회하게
+                        // 만든다 — INT-LAND-001의 착지 판정(record 유무)이 항상 "0건"으로
+                        // 나오는 방식으로 깨진다. validation.member를 그대로 쓰면 이전
+                        // memberInfo의 잔여 필드가 새 로그인에 새지 않는다.
+                        memberInfo: validation.member,
                     });
                     return validation;
                 },
