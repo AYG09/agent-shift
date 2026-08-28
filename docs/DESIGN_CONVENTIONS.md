@@ -1,21 +1,21 @@
 # 프론트엔드 디자인 컨벤션
 
-SOP 프로토타입 화면(`src/components/sop/**`, `src/app/sop/**`)의 디자인 규격.
-새 화면·컴포넌트는 이 표를 따르고, 여기서 벗어나야 하면 이 문서를 먼저 갱신한다.
-반복 요소의 실제 클래스 문자열은 코드의 meta/토큰 모듈이 원천이다
-(이 문서는 "무엇을 어디에 쓰는가", 코드는 "정확한 클래스"를 담당).
+`src/**`의 화면·컴포넌트가 따르는 디자인 규격. 새 화면·컴포넌트는 이 표를 따르고,
+여기서 벗어나야 하면 이 문서를 먼저 갱신한다. 반복 요소의 실제 클래스 문자열은
+코드의 meta/토큰 모듈이 원천이다(이 문서는 "무엇을 어디에 쓰는가", 코드는
+"정확한 클래스"를 담당).
 
 ## 1. 색상 의미 체계
 
-| 색 | 의미 | 대표 사용처 |
-|---|---|---|
-| `indigo` | 주요 액션 · 선택 상태 · 구성원 역할 | 기본 버튼, 선택된 카드/노드, Step 배지 |
-| `emerald` | 승인 · 완료 · 시작(start) | 확정 배지, 검토 완료, 시작 칩, 일괄 검토 |
-| `rose` | 삭제 · 반려 · 오류 · 종료(end) | 삭제 버튼, 검증 오류 배너, 종료 칩 |
-| `amber` | 주의 · 미완료 · AI 실패 안내 | 초안 배지, 설정 경고, AI 오류 카드 |
-| `violet` | Activity · Agent화 제안 · HR | Activity 칩/그룹 컨테이너, HR 대시보드 |
-| `zinc` | 중립 텍스트 · 테두리 · 배경 | 본문, 카드 테두리, 비활성 |
-| `blue` | 단계 '검토됨' 상태 | 단계 검토 배지 |
+| 색 | 의미 |
+|---|---|
+| `indigo` | 주요 액션 · 선택 상태 |
+| `emerald` | 승인 · 완료 · 시작(start) |
+| `rose` | 삭제 · 반려 · 오류 · 종료(end) |
+| `amber` | 주의 · 미완료 · 실패 안내 |
+| `violet` | 강조 보조 색 |
+| `zinc` | 중립 텍스트 · 테두리 · 배경 |
+| `blue` | 정보 · 진행 중 상태 |
 
 같은 의미에 다른 색을 쓰지 않는다 (예: 삭제 버튼에 amber 금지).
 
@@ -42,33 +42,19 @@ SOP 프로토타입 화면(`src/components/sop/**`, `src/app/sop/**`)의 디자�
 
 ## 4. 밀도 원칙 (아코디언)
 
-- **읽기 전용 정보·선택 기능은 기본 접힘**, 핵심 요약은 접힌 헤더에 상시 표시한다
-  (Gate의 구성원 정보/AI 추천, 확정된 Task Library 요약, 워크플로우 설정).
-- 인스펙터류 패널은 `SopInspectorSection`을 사용한다: 제목 + 현재 값 요약 칩 +
-  `aria-expanded`, 접힘 상태에서도 children은 마운트 유지(CSS `hidden`).
-- **조치가 필요한 상태는 자동 펼침 + attention 톤**(amber)으로 숨김을 금지한다
-  (미지정 terminal, 검증 오류가 있는 설정 카드).
-- 목록이 10행을 넘으면 그룹핑(+접기)을 검토한다 — 단계 목록은 Activity 그룹이 기준.
+- **읽기 전용 정보·선택 기능은 기본 접힘**, 핵심 요약은 접힌 헤더에 상시 표시한다.
+- 인스펙터류 패널은 제목 + 현재 값 요약 칩 + `aria-expanded`를 갖추고, 접힘
+  상태에서도 children은 마운트 유지(CSS `hidden`)한다.
+- **조치가 필요한 상태는 자동 펼침 + attention 톤**(amber)으로 숨김을 금지한다.
+- 목록이 10행을 넘으면 그룹핑(+접기)을 검토한다.
 
 ## 5. 반복 요소는 원천 모듈로만
 
-| 요소 | 원천 |
-|---|---|
-| 문서 검토 상태 배지 | `SOP_REVIEW_STATUS_BADGE_CLASS` (sop-review-status-meta.ts) |
-| 단계 검토 상태 배지(라벨+클래스) | `SOP_STEP_REVIEW_STATUS_META` (sop-review-status-meta.ts) |
-| 캔버스 시작/종료 노드 | 어두운 필(`#27272a`) + 흰색 볼드 텍스트, 라벨은 `formatTerminalNodeLabel`("시작: 프로세스명") — 단계 번호·칩 태그 없음 (고객사 목업 형식) |
-| 사이드바 시작/종료 칩 | `SOP_TERMINAL_CHIP_META` (sop-review-status-meta.ts) |
-| Activity 코드(`A01`)·단계 번호(`01`) | `formatActivityCode` / `formatStepNumber` (sop-format.ts) |
-| Agent화 제안·적용 방식 배지 | `AGENTIZATION_SUGGESTION_META` / `AI_APPLICATION_MODES` (sop-agentization.ts) |
-| 라이프사이클 상태 | `SOP_LIFECYCLE_STATUS_META` (sop-lifecycle.ts) |
-| 역할 화면 이동 | `SopRoleNav` (compact 변형 포함) |
-
-화면 코드에서 위 요소의 클래스 문자열·라벨을 다시 조립하는 것은 금지이며,
-`npm run verify:quality`가 대표 패턴을 검사한다.
+반복 UI 요소(상태 배지, 칩, 코드/번호 포맷 등)의 클래스 문자열·라벨은 화면마다
+다시 조립하지 않고 `src/lib`의 meta/토큰 모듈에서 가져와 쓴다.
 
 ## 6. 상호작용 규칙
 
-- 비활성화된 액션에는 이유를 `title`로 제공한다 (예: "고객 검토 모드에서는 …").
-- 파괴적 액션(삭제)은 rose 톤 + 보호 조건(시작·종료 노드 등)을 UI에서 설명한다.
-- 고객 검토 모드는 모든 편집 진입점을 `disabled`로 막고 Store 수준 가드가 이중으로 존재해야 한다.
+- 비활성화된 액션에는 이유를 `title`로 제공한다.
+- 파괴적 액션(삭제)은 rose 톤 + 보호 조건을 UI에서 설명한다.
 - 토글류는 `aria-expanded`/`aria-pressed`/`aria-current`를 제공한다.

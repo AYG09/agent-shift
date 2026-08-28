@@ -54,35 +54,6 @@ const RULES = [
         pattern: /thinkingConfig/,
         allow: ['src/server/ai/model-factory.ts', 'src/lib/gemini-models.ts'],
     },
-    {
-        id: 'suggestion-enum-literal',
-        message: "Agent화 제안 타입 리터럴 재나열 금지 — SOP_AGENTIZATION_SUGGESTION_TYPES(sop-step-common-schema.ts)에서 파생하세요 (축 2: 타입 단일성).",
-        // 쉼표로 나열된 코드상의 enum/배열 리터럴만 잡는다 — 프롬프트의 자연어
-        // 안내문("type은 'agent-candidate'(…), 'ai-assist'(…)")은 모델에게 값을
-        // 설명하는 정당한 사용이므로 제외된다.
-        pattern: /'agent-candidate',\s*'ai-assist'/,
-        allow: ['src/lib/sop-step-common-schema.ts'],
-    },
-    {
-        id: 'inline-pad-format',
-        message: '컴포넌트 내 인라인 padStart 포맷 금지 — formatActivityCode/formatStepNumber/formatClockTime(sop-format.ts)을 사용하세요 (축 3: SSOT).',
-        pattern: /\.padStart\(/,
-        scope: 'src/components/',
-        allow: [],
-    },
-    {
-        id: 'document-status-label',
-        message: "문서 검토 상태 라벨 재정의 금지 — SOP_DOCUMENT_REVIEW_STATUS_LABEL(sop-review-status-meta.ts)을 사용하세요.",
-        pattern: /'SOP 확정 완료'|'전체 검토 완료'|'AI 초안 검토 중'/,
-        allow: ['src/lib/sop-review-status-meta.ts'],
-    },
-    {
-        id: 'step-status-label',
-        message: "단계 검토 상태 배지 라벨('검토됨'/'초안') 재정의 금지 — SOP_STEP_REVIEW_STATUS_META를 사용하세요.",
-        pattern: /'검토됨'|'초안'/,
-        scope: 'src/components/',
-        allow: [],
-    },
 ];
 
 let violationCount = 0;

@@ -9,6 +9,10 @@ Agent Shift는 조직의 현행 업무 프로세스를 분석하고, AI 에이�
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-06B6D4?logo=tailwindcss)
 
+> 이 저장소가 한때 함께 담고 있던 SOP 작성·승인 프로토타입은 독립 저장소
+> `sop-platform`으로 분리됐다. 분리 경위는
+> [docs/sop-standalone-extraction/](docs/sop-standalone-extraction/)를 참고한다.
+
 ---
 
 ## ✨ 주요 기능
