@@ -9,7 +9,6 @@ import {
     AgentDrilldownResponseSchema,
     NodeSplitResponseSchema,
 } from '@/lib/ai-schemas';
-import { SopGenerationWireSchema, SopSuggestionPatchSchema } from '@/lib/sop-schemas';
 import { sanitizeModelId, sanitizeReasoningLevel } from '@/lib/gemini-models';
 import { resolveGenerationApiKey, resolveGenerationModel, buildReasoningProviderOptions } from '@/server/ai/model-factory';
 import { normalizeFlowShape } from '@/lib/flow-shapes';
@@ -23,11 +22,6 @@ import {
     type ValidatableNode,
     type ValidatableEdge,
 } from '@/lib/graph-validation';
-import { getSopPrompt } from '@/server/sop/sop-prompt';
-import { parseSopGenerationRequest } from '@/server/sop/sop-request';
-import type { SopGenerationRequest } from '@/lib/sop-ai-request';
-import { runSopGenerationPostProcessing } from '@/server/sop/sop-generation-runner';
-import { computeSubActionCapacity } from '@/lib/sop-subaction-capacity';
 
 // AI 응답의 숫자 필드를 정규화 (부동소수점 오버플로우 방지)
 function normalizeMetrics(obj: unknown): unknown {
@@ -214,11 +208,7 @@ export async function POST(request: NextRequest) {
         let prompt: string | undefined;
         // 생성 결과에 그래프 수준 의미 검증(+ 최대 1회 repair)을 적용할지 여부.
         // 'flow'는 nodes/edges 전체 그래프, 'drilldown'은 subSteps/subEdges를 검사한다.
-        let graphKind: 'flow' | 'drilldown' | 'sop' | 'none' = 'none';
-        // Set only inside the 'generateSop' case below. The post-processing pipeline
-        // (graphKind === 'sop') reads this validated value instead of re-deriving
-        // constraints from the raw, untyped `body` a second time.
-        let sopRequest: SopGenerationRequest | undefined;
+        let graphKind: 'flow' | 'drilldown' | 'none' = 'none';
 
         switch (action) {
             case 'generateAsIsFlow':
@@ -282,72 +272,6 @@ export async function POST(request: NextRequest) {
                 prompt = getNodeSplitPrompt(context, node, flowType);
                 break;
 
-            case 'generateSop': {
-                // 서버는 클라이언트 검증을 신뢰하지 않는다 - 요청 전체를 client/server 공용
-                // 스키마(SopGenerationRequestSchema, src/server/sop/sop-request.ts)로 즉시
-                // 파싱하고, 실패하면 필드별 issue를 포함한 400으로 막는다. apiKey/detailLevel/
-                // branchPolicy가 잘못된 타입이어도 여기서 400으로 끝나며 이후 로직에서 500을
-                // 만들지 않는다.
-                const parsedSopRequest = parseSopGenerationRequest(body);
-                if (!parsedSopRequest.ok) return parsedSopRequest.response;
-                // Assigns the outer `sopRequest` (declared above the switch) rather than
-                // shadowing it — the post-processing pipeline below reads this same
-                // validated value instead of re-parsing/casting raw `body` fields.
-                sopRequest = parsedSopRequest.request;
-
-                // The server re-applies the SAME Sub Action capacity floor the Gate
-                // computes client-side (computeSubActionCapacity) — a stale or
-                // hand-crafted client must never shrink minSteps below the
-                // per-Activity decomposition floor (기본 2~3 Sub Action/Activity),
-                // or the prompt and the post-processing validator would both be
-                // built from numbers that force 1:1 Activity-copy nodes. The
-                // adjusted values feed BOTH the prompt below and the
-                // runSopGenerationPostProcessing constraints (same object).
-                if (sopRequest.structureVersion === 'activity-subaction-v1' && sopRequest.activities.length > 0) {
-                    const capacity = computeSubActionCapacity({
-                        activityCount: sopRequest.activities.length,
-                        minSteps: sopRequest.minSteps,
-                        maxSteps: sopRequest.maxSteps,
-                        maxTotalNodes: sopRequest.maxTotalNodes,
-                        detailLevel: sopRequest.detailLevel,
-                    });
-                    sopRequest = { ...sopRequest, minSteps: capacity.minSteps, maxSteps: capacity.maxSteps, maxTotalNodes: capacity.maxTotalNodes };
-                }
-
-                // 와이어 스키마는 게이트(SopGenerationResponseSchema)보다 의도적으로
-                // 관대하다 — Gemini가 강제하지 못하는 superRefine/min-length 위반이
-                // generateObject 파싱 시점에 응답 전체를 죽이면(NoObjectGeneratedError)
-                // repair 루프에 영영 도달하지 못하기 때문이다. 기계적 위반은 파이프라인
-                // 진입 정규화가, 품질 결함은 repair 루프가, 최종 이중 방어는 클라이언트
-                // 문서 게이트가 처리한다. sop-schemas.ts의 SopGenerationWireSchema 참고.
-                schema = SopGenerationWireSchema;
-                prompt = getSopPrompt({
-                    memberRole: sopRequest.memberRole,
-                    sourceJobId: sopRequest.sourceJobId,
-                    jobName: sopRequest.jobName,
-                    taskId: sopRequest.taskId,
-                    taskName: sopRequest.taskName,
-                    taskDefinition: sopRequest.taskDefinition,
-                    sourceType: sopRequest.sourceType,
-                    structureVersion: sopRequest.structureVersion,
-                    activityName: sopRequest.activityName,
-                    activities: sopRequest.activities,
-                    skills: sopRequest.skills,
-                    context: sopRequest.context,
-                    detailLevel: sopRequest.detailLevel,
-                    minSteps: sopRequest.minSteps,
-                    maxSteps: sopRequest.maxSteps,
-                    maxTotalNodes: sopRequest.maxTotalNodes,
-                    branchPolicy: sopRequest.branchPolicy,
-                    maxBranches: sopRequest.maxBranches,
-                    allowRework: sopRequest.allowRework,
-                    maxLoops: sopRequest.maxLoops,
-                    splitComplexSteps: sopRequest.splitComplexSteps,
-                });
-                graphKind = 'sop';
-                break;
-            }
-
             default:
                 return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
         }
@@ -360,109 +284,19 @@ export async function POST(request: NextRequest) {
         const resolvedSchema = schema;
         const resolvedPrompt = prompt;
 
-        // /flow류 그래프(~15노드)는 16384로 충분하지만("실제 필요량 6,000 + 여유분"),
-        // Activity–Sub Action Task 전체 SOP는 한국어 리치 필드를 가진 28~42+ 노드를
-        // 반환해야 하므로 같은 상한을 쓰면 JSON이 중간에 잘려 NoObjectGeneratedError
-        // ("AI 응답이 스키마와 일치하지 않습니다")로 끝난다. SOP 생성만 별도 상한을 쓴다.
-        const generationMaxOutputTokens = graphKind === 'sop' ? 65536 : 16384;
+        const generationMaxOutputTokens = 16384; // 실제 필요량 6,000 + 여유분
 
-        // SOP 1차 생성도 repair와 동일하게 1회 재시도한다 — 퇴행 반복 루프(자유 문자열
-        // 필드 안에서 같은 구절을 토큰 한도까지 반복 → JSON 절단 → NoObjectGeneratedError)는
-        // 확률적 실패라 같은 프롬프트의 두 번째 추첨이 대부분 성공한다. repair 경로는
-        // generateSopRepairWithRetry가 이미 방어하지만, 1차 생성이 즉사하면 그 방어에
-        // 도달하지도 못한 채 사용자에게 500이 나간다. /flow류는 기존 동작을 유지한다.
-        const generateFirstObject = async () =>
-            (
-                await generateObject({
-                    model,
-                    schema: resolvedSchema,
-                    prompt: resolvedPrompt,
-                    maxOutputTokens: generationMaxOutputTokens,
-                    ...(providerOptions ? { providerOptions } : {}),
-                })
-            ).object;
-        let firstObject: unknown;
-        try {
-            firstObject = await generateFirstObject();
-        } catch (firstError) {
-            if (graphKind !== 'sop') throw firstError;
-            console.error(
-                '[API Route] SOP 1차 생성 실패, 1회 재시도:',
-                firstError instanceof Error ? firstError.message : String(firstError)
-            );
-            firstObject = await generateFirstObject();
-        }
+        const { object: firstObject } = await generateObject({
+            model,
+            schema: resolvedSchema,
+            prompt: resolvedPrompt,
+            maxOutputTokens: generationMaxOutputTokens,
+            ...(providerOptions ? { providerOptions } : {}),
+        });
 
         let object: unknown = firstObject;
         let graphWarnings: string[] = [];
-        const graphKindType: 'flow' | 'drilldown' | 'sop' | 'none' = graphKind;
-
-        if (graphKindType === 'sop') {
-            if (!sopRequest) {
-                // graphKind is only ever set to 'sop' in the same 'generateSop' case block
-                // that assigns sopRequest, so this narrows rather than asserts past it —
-                // unreachable in practice, but never trusted with a cast either.
-                return NextResponse.json({ error: 'SOP 요청이 올바르게 파싱되지 않았습니다.' }, { status: 500 });
-            }
-            // SOP-specific generate -> validate -> repair -> fallback -> revalidate pipeline,
-            // extracted to src/server/sop/sop-generation-runner.ts. `sopRequest` is the same
-            // schema-validated value the prompt above was built from — no re-parsing/casting
-            // of the raw request body a second time.
-            const sopResult = await runSopGenerationPostProcessing({
-                object,
-                prompt: resolvedPrompt,
-                sopRequest,
-                generateRepair: async (repairPrompt) => {
-                    const { object: repaired } = await generateObject({
-                        model,
-                        schema: resolvedSchema,
-                        prompt: repairPrompt,
-                        // repair도 전체 SOP 그래프를 다시 반환하므로 본 생성과 동일한 상한이 필요하다.
-                        maxOutputTokens: generationMaxOutputTokens,
-                        ...(providerOptions ? { providerOptions } : {}),
-                    });
-                    return repaired;
-                },
-                // 누락된 Agent화 제안만 채우는 소형 호출 — 33노드 전체 재생성 대신
-                // 수천 토큰짜리 제안 목록만 받는다. 확률적 실패에 대비해 1회 재시도.
-                generateSuggestionPatch: async (missingSteps) => {
-                    const stepList = missingSteps
-                        .map((step) => `- [${step.id}] ${step.title || '제목 없음'}: ${step.definition || '정의 없음'}`)
-                        .join('\n');
-                    const patchPrompt = `당신은 업무 프로세스의 AI 적용 가능성을 판단하는 전문가입니다.
-"${sopRequest!.taskName || '업무'}" SOP의 아래 업무 단계마다 Agent화 제안을 정확히 1개씩 생성하세요.
-- type: 'agent-candidate'(정해진 규칙 안에서 AI가 주도 가능) | 'ai-assist'(사람이 수행하고 AI가 초안·검색·분석을 지원) | 'not-recommended'(사람 판단·대면 소통·예외 처리 등으로 AI 적용 비권장)
-- rationale: 왜 그렇게 판단했는지 1문장의 구체적 근거. 빈 문자열 금지.
-- stepId는 아래 목록의 ID를 그대로 사용하고, 모든 ID에 대해 빠짐없이 반환하세요. 확률/신뢰도 수치는 만들지 마세요.
-
-## 단계 목록
-${stepList}`;
-                    const callPatch = async () =>
-                        (
-                            await generateObject({
-                                model,
-                                schema: SopSuggestionPatchSchema,
-                                prompt: patchPrompt,
-                                maxOutputTokens: 8192,
-                                ...(providerOptions ? { providerOptions } : {}),
-                            })
-                        ).object;
-                    try {
-                        return await callPatch();
-                    } catch (patchError) {
-                        console.error(
-                            '[API Route] Agent화 제안 패치 1차 실패, 1회 재시도:',
-                            patchError instanceof Error ? patchError.message : String(patchError)
-                        );
-                        return callPatch();
-                    }
-                },
-            });
-
-            if (!sopResult.ok) return sopResult.response;
-            object = sopResult.object;
-            graphWarnings = sopResult.warnings;
-        }
+        const graphKindType: 'flow' | 'drilldown' | 'none' = graphKind;
 
         if (graphKindType === 'flow') {
             const rec = object as { nodes?: ValidatableNode[]; edges?: ValidatableEdge[] };
